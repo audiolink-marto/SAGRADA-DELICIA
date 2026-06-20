@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sagrada Delicia — Framework de Operaciones</title>
+    <style>
+        /* ==========================================================================
+           PALETA DE COLORES Y VARIABLES RE-CONCEPTUALIZADAS (Oscuro-Azulado & Pasteles)
+           ========================================================================== */
+        :root {
+            --bg-principal: #0b111e;       /* Azul marino profundo espacial */
+            --bg-card: #151f32;            /* Azul de control medianamente oscuro */
+            --bg-input: #1e293b;           /* Slate oscuro para entradas de datos */
+            --border-color: #2e3d56;       /* Bordes sutiles de baja intensidad */
+            
+            --color-texto: #cbd5e1;        /* Gris claro de alta legibilidad */
+            --color-titulos: #f8fafc;      /* Blanco titanio para jerarquía alta */
+            --color-subtitulos: #94a3b8;   /* Gris azulado para etiquetas */
+
+            /* Acentos Pasteles y Modernos */
+            --accent-primario: #7dd3fc;    /* Azul pastel / Cielo brillante */
+            --accent-secundario: #c084fc;  /* Lavanda pastel conceptual */
+            --accent-admin: #fde047;       /* Amarillo pastel / Soft Amber */
+            --accent-hover: #38bdf8;       /* Estado interactivo enfocado */
+            
+            /* Semáforo Operativo Pastel */
+            --color-alerta-critica: #fca5a5; /* Rojo pastel */
+            --color-alerta-media: #fde047;    /* Amarillo pastel */
+            --color-alerta-ok: #86efac;       /* Verde menta pastel */
+        }
+
+        /* ==========================================================================
+           ESTILOS BASE Y TIPOGRAFÍA MINIMALISTA
+           ========================================================================== */
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+        }
+
+        body {
+            background-color: var(--bg-principal);
+            color: var(--color-texto);
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        header {
+            width: 100%;
+            max-width: 1240px;
+            margin-bottom: 30px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 { 
+            color: var(--color-titulos); 
+            font-size: 1.5rem; 
+            font-weight: 700; 
+            letter-spacing: 1.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .controles-superiores { display: flex; gap: 12px; }
+
+        /* Botones Conceptuales */
+        .btn {
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primario { 
+            background-color: var(--accent-primario); 
+            color: #0b111e; 
+        }
+        .btn-primario:hover { 
+            background-color: var(--accent-hover);
+            box-shadow: 0 0 15px rgba(125, 211, 252, 0.3);
+        }
+        
+        .btn-admin { 
+            background-color: transparent; 
+            color: var(--accent-admin); 
+            border: 1px solid var(--accent-admin); 
+        }
+        .btn-admin:hover { 
+            background-color: var(--accent-admin); 
+            color: #0b111e; 
+        }
+        
+        .btn-danger { 
+            background-color: rgba(252, 165, 165, 0.1); 
+            color: var(--color-alerta-critica); 
+            border: 1px solid var(--color-alerta-critica);
+            padding: 5px 10px; 
+            font-size: 0.75rem; 
+        }
+        .btn-danger:hover {
+            background-color: var(--color-alerta-critica);
+            color: #0b111e;
+        }
+
+        /* ==========================================================================
+           DISTRIBUCIÓN DEL ESPACIO DE TRABAJO (GRID)
+           ========================================================================== */
+        .contenedor-principal {
+            width: 100%;
+            max-width: 1240px;
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 30px;
+        }
+
+        @media (max-width: 1024px) { 
+            .contenedor-principal { grid-template-columns: 1fr; } 
+        }
+
+        /* Paneles Modernos */
+        .panel { 
+            background-color: var(--bg-card); 
+            border: 1px solid var(--border-color); 
+            border-radius: 12px; 
+            padding: 30px; 
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+            transition: border-color 0.3s;
+        }
+        
+        h2 { 
+            color: var(--color-titulos); 
+            font-size: 1.15rem; 
+            font-weight: 600;
+            margin-bottom: 25px; 
+            border-bottom: 1px solid var(--border-color); 
+            padding-bottom: 12px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+
+        /* Componentes de Formulario */
+        .grupo-formulario { margin-bottom: 20px; }
+        
+        .grid-metadatos { 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 12px; 
+            margin-bottom: 20px; 
+        }
+        
+        @media (max-width: 600px) { .grid-metadatos { grid-template-columns: 1fr; } }
+
+        label { 
+            display: block; 
+            font-size: 0.75rem; 
+            color: var(--color-subtitulos); 
+            margin-bottom: 8px; 
+            font-weight: 600; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px;
+        }
+        
+        select, input, textarea { 
+            width: 100%; 
+            background-color: var(--bg-input); 
+            border: 1px solid var(--border-color); 
+            color: var(--color-texto); 
+            padding: 12px; 
+            border-radius: 8px; 
+            font-size: 0.9rem; 
+            outline: none; 
+            transition: all 0.2s ease;
+        }
+        
+        select:focus, input:focus, textarea:focus { 
+            border-color: var(--accent-primario); 
+            box-shadow: 0 0 0 3px rgba(125, 211, 252, 0.1);
+        }
+
+        /* Bloques Operativos Internos */
+        .seccion-bloque { 
+            background-color: rgba(30, 41, 59, 0.4); 
+            border: 1px solid var(--border-color); 
+            border-radius: 10px; 
+            padding: 20px; 
+            margin-bottom: 20px; 
+        }
+        
+        .seccion-titulo { 
+            font-size: 0.8rem; 
+            color: var(--accent-primario); 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            margin-bottom: 15px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            letter-spacing: 0.5px;
+        }
+
+        .grid-inputs { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); 
+            gap: 15px; 
+        }
+        
+        .row-item { 
+            display: flex; 
+            align-items: center; 
+            gap: 12px; 
+            margin-bottom: 10px; 
+        }
+
+        .grupo-botones-print { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 12px; 
+            margin-top: 25px; 
+        }
+
+        /* Estado de Ventanas de Tiempo (Badges) */
+        .badge-tiempo { 
+            padding: 8px 14px; 
+            border-radius: 6px; 
+            font-size: 0.8rem; 
+            font-weight: 600; 
+            display: inline-block; 
+            margin-top: 8px; 
+            line-height: 1.2;
+        }
+        .tiempo-ok { 
+            background-color: rgba(134, 239, 172, 0.1); 
+            color: var(--color-alerta-ok); 
+            border: 1px solid rgba(134, 239, 172, 0.3); 
+        }
+        .tiempo-alerta { 
+            background-color: rgba(253, 224, 71, 0.1); 
+            color: var(--color-alerta-media); 
+            border: 1px solid rgba(253, 224, 71, 0.3); 
+        }
+        .tiempo-critico { 
+            background-color: rgba(252, 165, 165, 0.1); 
+            color: var(--color-alerta-critica); 
+            border: 1px solid rgba(252, 165, 165, 0.3); 
+        }
+
+        /* Vistas Especiales Conmutables */
+        #panel-administrador { display: none; background-color: #0f1624; border-color: var(--accent-admin); }
+        .admin-activo #panel-administrador { display: block; }
+        .admin-activo #panel-cotizador { display: none; }
+
+        /* Hoja de Costos / Resultados Semánticos */
+        .bloque-resultado { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            padding: 12px 0; 
+            border-bottom: 1px solid var(--border-color); 
+            font-size: 0.9rem; 
+        }
+        .bloque-resultado span { color: var(--color-texto); }
+        .bloque-resultado strong { color: var(--color-titulos); font-weight: 600; }
+        
+        .total-destacado { 
+            border-bottom: none; 
+            margin-top: 20px; 
+            padding: 20px; 
+            background: linear-gradient(135deg, rgba(125, 211, 252, 0.1) 0%, rgba(192, 132, 252, 0.1) 100%);
+            border-radius: 10px; 
+            border: 1px solid var(--accent-primario); 
+        }
+        .total-destacado span { font-size: 1.05rem; font-weight: 700; color: var(--accent-primario); letter-spacing: 0.5px; }
+        .total-destacado strong { font-size: 1.4rem; font-weight: 800; color: var(--accent-primario); }
+
+        /* Elementos Ocultos en Pantalla Base */
+        #print-encabezado-dinamico, #print-descripcion-container, #print-bloque-firmas { display: none; }
+
+        /* ==========================================================================
+           REGLAS DE IMPRESIÓN (PRO) - BLINDADO CONTRA RUIDO VISUAL
+           ========================================================================== */
+        @media print {
+            body { background: #ffffff; color: #000000; padding: 0; min-height: auto; }
+            .panel-control, .controles-superiores, .btn, label, .seccion-titulo button, .grupo-botones-print, input, textarea, select, .evitar-print { display: none !important; }
+            .contenedor-principal { grid-template-columns: 1fr; }
+            .panel { border: none; box-shadow: none; background: transparent; padding: 0; }
+            .bloque-resultado { border-bottom: 1px solid #e2e8f0; color: #000000; padding: 10px 0; font-size: 0.85rem; }
+            .bloque-resultado span { color: #334155; }
+            .bloque-resultado strong { color: #000000; }
+            
+            #print-encabezado-dinamico { display: block !important; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 2px solid #0f172a; }
+            #print-descripcion-container { display: block !important; border-top: 1px dashed #94a3b8; margin-top: 20px; padding-top: 15px; }
+            
+            .bloque-resultado.total-destacado { background-color: #f8fafc !important; border: 2px solid #0f172a !important; margin-top: 30px; padding: 15px; background: none; }
+            .bloque-resultado.total-destacado span { color: #0f172a !important; font-size: 1rem; font-weight: bold; }
+            .bloque-resultado.total-destacado strong { color: #0f172a !important; font-size: 1.3rem; }
+            h2 { display: none !important; }
+            
+            body.print-version-cliente .solo-interno { display: none !important; }
+            body.doc-entorno-pedido #print-bloque-firmas { display: block !important; margin-top: 60px; }
+            body.doc-entorno-cotizacion .total-destacado { border: 2px dashed #64748b !important; }
+            .badge-tiempo { border: 1px solid #0f172a !important; color: #0f172a !important; background: transparent !important; padding: 4px 8px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Input Oculto de Control Operativo -->
+    <input type="file" id="input-importar-json" style="display:none;" accept=".json" onchange="importarSnapshotsJSON(event)">
+
+    <header>
+        <h1>🧁 SAGRADA DELICIA</h1>
+        <div class="controles-superiores">
+            <button class="btn btn-admin" onclick="conmutarModo()">⚙️ Configurar Catálogo</button>
+        </div>
+    </header>
+
+    <main class="contenedor-principal" id="wrapper-app">
+        
+        <!-- PANEL DE ACCIÓN COMERCIAL (COTIZADOR) -->
+        <section class="panel panel-control" id="panel-cotizador">
+            <h2>✨ Panel de Cotización 
+                <select id="selector-producto" style="width: auto; padding: 6px 14px; font-size: 0.85rem;" onchange="cambiarEntorno()">
+                    <option value="torta">🎂 TORTAS</option>
+                    <option value="cupcake">🧁 CUPCAKES</option>
+                    <option value="desayuno">☀️ DESAYUNOS SORPRESA</option>
+                    <option value="ancheta">🧺 ANCHETAS ESPECIALES</option>
+                </select>
+            </h2>
+
+            <div id="dinamico-cotizador">
+                <!-- Inyección Automática del Motor -->
+            </div>
+        </section>
+
+        <!-- PANEL DE CONFIGURACIÓN DE PARÁMETROS BASE -->
+        <section class="panel panel-control" id="panel-administrador">
+            <h2>⚙️ Parámetros de Costo Base
+                <button class="btn btn-primario" onclick="guardarConfiguracionEnLocal()">💾 Guardar Cambios</button>
+            </h2>
+            <div id="dinamico-administrador">
+                <!-- Inyección Automática del Motor -->
+            </div>
+        </section>
+
+        <!-- RESUMEN EN TIEMPO REAL Y ARCHIVO DE SALIDA -->
+        <section class="panel panel-resumen">
+            
+            <!-- ENCABEZADO EXCLUSIVO PARA IMPRESIÓN/PDF -->
+            <div id="print-encabezado-dinamico">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <h1 id="print-titulo-documento" style="color: #0f172a; font-size: 1.6rem; font-weight: 800; margin-bottom: 5px;">COTIZACIÓN DE ORDEN</h1>
+                        <p style="font-size: 0.85rem; color: #64748b;" id="print-subtitulo-documento">Documento operativo sujeto a especificaciones de diseño</p>
+                    </div>
+                    <div style="text-align: right; font-size: 0.85rem; color: #0f172a; line-height: 1.4;">
+                        <div><strong>Emisión:</strong> <span id="print-meta-fecha">-</span></div>
+                        <div><strong>Entrega:</strong> <span id="print-meta-fecha-entrega">-</span></div>
+                        <div><strong>Cliente:</strong> <span id="print-meta-cliente">-</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <h2>📊 Hoja de Costos & Resultados</h2>
+
+            <!-- CONTROL DE VERSIONES (SNAP-SYSTEM) -->
+            <div class="seccion-bloque evitar-print" style="background-color: rgba(192, 132, 252, 0.03); border-color: rgba(192, 132, 252, 0.2);">
+                <div class="seccion-titulo" style="color: var(--accent-secundario); font-size: 0.75rem; margin-bottom: 10px;">💾 Capturas de Historial de Trabajo (Snapshots)</div>
+                <div id="container-snapshots-ui">
+                    <!-- Inyección del Módulo de Respaldo -->
+                </div>
+            </div>
+            
+            <!-- ENTRADAS METADATA GENERALES -->
+            <div class="grid-metadatos">
+                <div>
+                    <label for="global-cliente">👤 Cliente</label>
+                    <input type="text" id="global-cliente" placeholder="Nombre completo" oninput="calcularCostosMecanicos()">
+                </div>
+                <div>
+                    <label for="global-fecha">📅 Emisión</label>
+                    <input type="date" id="global-fecha" onchange="calcularCostosMecanicos()">
+                </div>
+                <div>
+                    <label for="global-fecha-entrega">🚀 Entrega</label>
+                    <input type="date" id="global-fecha-entrega" onchange="calcularCostosMecanicos()">
+                </div>
+            </div>
+
+            <div class="grupo-formulario">
+                <label for="global-tipo-documento">🔀 Tipo de Documentación de Salida</label>
+                <select id="global-tipo-documento" onchange="calcularCostosMecanicos()">
+                    <option value="cotizacion">📄 COTIZACIÓN COMERCIAL (Preliminar)</option>
+                    <option value="pedido">🏭 PEDIDO FORMAL (Envío Directo a Taller)</option>
+                </select>
+            </div>
+
+            <!-- TABLA DINÁMICA DE CONTRALORÍA DE COSTOS -->
+            <div id="salida-resumen-dinamico">
+                <!-- Datos Calculados en Vivo -->
+            </div>
+            
+            <!-- CONTENEDOR ESPECÍFICO PARA NOTAS DE TARJETA / DISEÑO -->
+            <div id="print-descripcion-container">
+                <strong style="font-size: 0.8rem; text-transform: uppercase; color: #475569;">📝 Notas Especiales de Personalización:</strong>
+                <p id="print-descripcion-texto" style="margin-top: 6px; font-size: 0.88rem; font-style: italic; white-space: pre-wrap; color: #000000;"></p>
+            </div>
+
+            <div class="grupo-formulario" style="margin-top: 20px;">
+                <label for="global-margen">📈 Margen de Utilidad Requerido (%)</label>
+                <input type="number" id="global-margen" value="45" oninput="calcularCostosMecanicos()">
+            </div>
+            
+            <!-- BLOQUE DE CIERRE COMERCIAL -->
+            <div id="totales-calculados">
+                <!-- Inyección de Totalizadores -->
+            </div>
+
+            <!-- CUADRO DE FIRMAS PARA FLUJO DE LOGÍSTICA -->
+            <div id="print-bloque-firmas">
+                <div style="display: flex; justify-content: space-between; margin-top: 60px; font-size: 0.8rem; color: #000;">
+                    <div style="width: 42%; border-top: 1px solid #000; text-align: center; padding-top: 8px;"><strong>Firma de Conformidad</strong><br>Cliente</div>
+                    <div style="width: 42%; border-top: 1px solid #000; text-align: center; padding-top: 8px;"><strong>Operaciones y Producción</strong><br>Sagrada Delicia</div>
+                </div>
+            </div>
+            
+            <div class="grupo-botones-print">
+                <button class="btn btn-primario" style="padding: 14px; justify-content: center;" onclick="ejecutarImpresionFlujo('cliente')">🤝 Exportar PDF de Cara al Cliente</button>
+                <button class="btn btn-admin" style="padding: 14px; justify-content: center;" onclick="ejecutarImpresionFlujo('interno')">📊 Exportar Hoja de Costos Interna</button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ==========================================================================
+       ZONA DE PROTECCIÓN ABSOLUTA: MOTOR DE LÓGICA Y CÁLCULO (NO TOCAR)
+       ========================================================================== */ -->
+    <script>
+        const LISTA_SABORES_MASTER = ["Vanilla", "Choco-Vanilla", "Chocolate", "Maracuyá", "Red Velvet", "Envinada Clásica"];
+        const LLAVE_STORAGE = 'sagrada_delicia_framework_v9'; 
+        const LLAVE_SNAPSHOTS = 'sagrada_delicia_snapshots_v1';
+
+        const CATALOGO_RESPALDO = {
+            torta: {
+                sabores: [...LISTA_SABORES_MASTER],
+                usaCantidadInput: false,
+                escalas: [
+                    { valor: 0.25, label: "1/4 de Libra" },
+                    { valor: 0.5, label: "1/2 Libra" },
+                    { valor: 1.0, label: "1 Libra (Unidad Base)" },
+                    { valor: 2.0, label: "2 Libras" },
+                    { valor: 3.0, label: "3 Libras" },
+                    { valor: 4.0, label: "4 Libras" },
+                    { valor: 5.0, label: "5 Libras" }
+                ],
+                compras_insumos: [
+                    { id: "harina", label: "Harina Base", valor: 15000, determinarEscalamiento: true },
+                    { id: "mantequilla", label: "Mantequilla", valor: 10000, determinarEscalamiento: true }
+                ],
+                compras_toppers: [
+                    { id: "top1", label: "Topper Tipo 1", valor: 4000, determinarEscalamiento: false },
+                    { id: "top2", label: "Topper Tipo 2", valor: 4000, determinarEscalamiento: false }
+                ],
+                transporte_compras: [
+                    { id: "domicilio_ins", label: "Transporte Abastecimiento Base", valor: 5000, determinarEscalamiento: false }
+                ],
+                preparacion_operacion: [
+                    { id: "hornos", label: "Hornos/Neveras (Infraestructura)", valor: 3000, determinarEscalamiento: false },
+                    { id: "utensilios", label: "Utensilios de Cocina", valor: 2000, determinarEscalamiento: false },
+                    { id: "mo_preparacion", label: "Mano Obra: Preparación Torta", valor: 15000, determinarEscalamiento: false },
+                    { id: "mo_diseno", label: "Mano Obra: Diseño Exterior", valor: 18000, determinarEscalamiento: false }
+                ],
+                presentacion: [
+                    { id: "caja_madera", label: "Cajita de Madera Decorada", valor: 33000, determinarEscalamiento: false }
+                ],
+                tematica_visual: [
+                    { id: "montaje", label: "Mano de Obra Montaje", valor: 10000, determinarEscalamiento: false },
+                    { id: "materiales", label: "Materiales Proveedor", valor: 12000, determinarEscalamiento: false },
+                    { id: "alquiler", label: "Alquiler Elementos Visuales", valor: 15000, determinarEscalamiento: false }
+                ],
+                entrega_cliente: [
+                    { id: "domicilio_prov", label: "Despacho Entrega Cliente", valor: 7000, determinarEscalamiento: false }
+                ]
+            },
+            cupcake: { 
+                sabores: [...LISTA_SABORES_MASTER], 
+                usaCantidadInput: true,
+                compras_insumos: [
+                    { id: "cup_insumo_base", label: "Insumo Receta (Por Unidad)", valor: 2200, determinarEscalamiento: true },
+                    { id: "cup_capacillo", label: "Capacillo e Insumo Visual", valor: 600, determinarEscalamiento: true }
+                ], 
+                compras_toppers: [
+                    { id: "cup_top_std", label: "Mini Toppers Decorativos", valor: 1000, determinarEscalamiento: false }
+                ], 
+                transporte_compras: [
+                    { id: "cup_dom_ins", label: "Transporte Abastecimiento Base", valor: 5000, determinarEscalamiento: false }
+                ], 
+                preparacion_operacion: [
+                    { id: "cup_horno", label: "Uso de Hornos e Infraestructura", valor: 2000, determinarEscalamiento: false },
+                    { id: "cup_mo_armado", label: "Mano de Obra (Horneado y Armado)", valor: 8000, determinarEscalamiento: false }
+                ], 
+                presentacion: [
+                    { id: "cup_empaque", label: "Caja de Presentación Colectiva", valor: 6000, determinarEscalamiento: false }
+                ], 
+                tematica_visual: [
+                    { id: "cup_tematica", label: "Detalles Temáticos Solicitados", valor: 4000, determinarEscalamiento: false }
+                ], 
+                entrega_cliente: [
+                    { id: "cup_dom_cliente", label: "Despacho Entrega Cliente", valor: 7000, determinarEscalamiento: false }
+                ] 
+            },
+            desayuno: { 
+                sabores: ["Tradicional", "Premium", "Fit"], 
+                usaCantidadInput: true, 
+                compras_insumos: [
+                    { id: "des_insumo_base", label: "Alimentos y Bebidas Base Menu", valor: 18000, determinarEscalamiento: true }
+                ], 
+                compras_toppers: [
+                    { id: "des_tarjeta", label: "Tarjeta / Globo Decorativo", valor: 3000, determinarEscalamiento: false }
+                ], 
+                transporte_compras: [
+                    { id: "des_trans", label: "Transporte Abastecimiento Base", valor: 5000, determinarEscalamiento: false }
+                ], 
+                preparacion_operacion: [
+                    { id: "des_mo_armado", label: "Mano de Obra (Cocina y Montaje)", valor: 7000, determinarEscalamiento: false }
+                ], 
+                presentacion: [
+                    { id: "des_empaque", label: "Caja Decorada y Mantel", valor: 12000, determinarEscalamiento: false }
+                ], 
+                tematica_visual: [], 
+                entrega_cliente: [
+                    { id: "des_dom", label: "Despacho Entrega Cliente", valor: 7000, determinarEscalamiento: false }
+                ] 
+            },
+            ancheta: { 
+                sabores: ["Corporativa", "Cumpleaños", "Aniversario"], 
+                usaCantidadInput: true, 
+                compras_insumos: [
+                    { id: "anch_insumo_base", label: "Licores / Dulces / Contenido Base", valor: 35000, determinarEscalamiento: true }
+                ], 
+                compras_toppers: [
+                    { id: "anch_topper", label: "Lazo / Moño / Tarjeta Exclusiva", valor: 4000, determinarEscalamiento: false }
+                ], 
+                transporte_compras: [
+                    { id: "anch_trans", label: "Transporte Abastecimiento Base", valor: 5000, determinarEscalamiento: false }
+                ], 
+                preparacion_operacion: [
+                    { id: "anch_mo_armado", label: "Mano de Obra (Arreglo y Decoración)", valor: 8000, determinarEscalamiento: false }
+                ], 
+                presentacion: [
+                    { id: "anch_canasto", label: "Canasto de Mimbre / Base Madera", valor: 22000, determinarEscalamiento: false }
+                ], 
+                tematica_visual: [], 
+                entrega_cliente: [
+                    { id: "anch_dom", label: "Despacho Entrega Cliente", valor: 7000, determinarEscalamiento: false }
+                ] 
+            }
+        };
+
+        let CATALOGO_ACTIVO = {};
+
+        function cargarEstructuraMaestra() {
+            const copiaLocal = localStorage.getItem(LLAVE_STORAGE);
+            if (copiaLocal) {
+                CATALOGO_ACTIVO = JSON.parse(copiaLocal);
+            } else {
+                CATALOGO_ACTIVO = JSON.parse(JSON.stringify(CATALOGO_RESPALDO));
+                localStorage.setItem(LLAVE_STORAGE, JSON.stringify(CATALOGO_ACTIVO));
+            }
+            
+            const hoy = new Date().toISOString().split('T')[0];
+            document.getElementById('global-fecha').value = hoy;
+            actualizarSelectorSnapshots();
+        }
+
+        function conmutarModo() {
+            document.getElementById('wrapper-app').classList.toggle('admin-activo');
+        }
+
+        function renderizarFormularioCotizador() {
+            const prod = document.getElementById('selector-producto').value;
+            const data = CATALOGO_ACTIVO[prod];
+            const contenedor = document.getElementById('dinamico-cotizador');
+            
+            let html = '';
+
+            if (data.sabores && data.sabores.length > 0) {
+                html += `<div class="grupo-formulario"><label>🎨 Variante o Sabor</label><select id="cot-sabor" onchange="calcularCostosMecanicos()">`;
+                data.sabores.forEach(s => html += `<option value="${s}">${s}</option>`);
+                html += `</select></div>`;
+            }
+
+            if (data.usaCantidadInput) {
+                let textoLabel = "Cantidad de Unidades a Fabricar";
+                if (prod === 'cupcake') textoLabel = "Cantidad de Cupcakes a Fabricar";
+                if (prod === 'desayuno') textoLabel = "Cantidad de Desayunos Sorpresa a Fabricar";
+                if (prod === 'ancheta') textoLabel = "Cantidad de Anchetas Especiales a Fabricar";
+
+                html += `<div class="grupo-formulario">
+                    <label>🔢 ${textoLabel}</label>
+                    <input type="number" id="cot-cantidad" value="1" min="1" oninput="calcularCostosMecanicos()">
+                </div>`;
+            } else if (data.escalas && data.escalas.length > 0) {
+                html += `<div class="grupo-formulario"><label>⚖️ Tamaño / Escala de Producción</label><select id="cot-escala" onchange="calcularCostosMecanicos()">`;
+                data.escalas.forEach(e => html += `<option value="${e.valor}">${e.label} (Factor: x${e.valor})</option>`);
+                html += `</select></div>`;
+            }
+
+            const bloquesMapeados = [
+                { id: 'compras_insumos', label: '🍎 Insumos Base Receta / Contenido' },
+                { id: 'compras_toppers', label: '🎀 Toppers, Tarjetas y Accesorios' },
+                { id: 'transporte_compras', label: '🚚 Transporte de Abastecimiento (Variable)' },
+                { id: 'preparacion_operacion', label: '🥣 Operación & Mano de Obra' },
+                { id: 'presentacion', label: '📦 Presentación Final / Empaque' },
+                { id: 'tematica_visual', label: '🎨 Temática Visual / Infraestructura Especial' },
+                { id: 'entrega_cliente', label: '🛵 Despacho & Logística Entrega (Variable)' }
+            ];
+
+            bloquesMapeados.forEach(b => {
+                const items = data[b.id];
+                if (!items || items.length === 0) return;
+
+                html += `<div class="seccion-bloque"><div class="seccion-titulo">${b.label}</div><div class="grid-inputs">`;
+                
+                items.forEach(it => {
+                    html += `<div>
+                        <label>${it.label} ${it.determinarEscalamiento ? '(Escalable)' : '(Fijo)'}</label>
+                        <input type="number" class="input-dinamico-calculo" data-bloque="${b.id}" data-itemid="${it.id}" data-escalar="${it.determinarEscalamiento}" value="${it.valor}" oninput="calcularCostosMecanicos()">
+                    </div>`;
+                });
+                
+                html += `</div></div>`;
+            });
+
+            if (prod === 'torta' || prod === 'desayuno' || prod === 'ancheta') {
+                html += `<div class="grupo-formulario">
+                    <label>📝 Notas y Mensajes de Personalización (Tarjeta/Diseño)</label>
+                    <textarea id="cot-descripcion" rows="3" placeholder="Escribe aquí los textos de las tarjetas, dedicatorias o especificaciones clave del diseño..." oninput="sincronizarNotasImpresion()"></textarea>
+                </div>`;
+            }
+
+            contenedor.innerHTML = html;
+            sincronizarNotasImpresion();
+            calcularCostosMecanicos();
+        }
+
+        function renderizarFormularioAdministrador() {
+            const prod = document.getElementById('selector-producto').value;
+            const data = CATALOGO_ACTIVO[prod];
+            const contenedor = document.getElementById('dinamico-administrador');
+            
+            let html = '';
+
+            html += `<div class="seccion-bloque" data-adminsabores="true">
+                <div class="seccion-titulo">Variantes o Sabores Disponibles
+                    <button class="btn btn-primario" style="padding:4px 8px; font-size:0.75rem;" onclick="agregarSaborCatalogo('${prod}')">+ Añadir Sabor</button>
+                </div>
+                <div id="campos-sabores">`;
+            
+            if(data.sabores && data.sabores.length > 0) {
+                data.sabores.forEach((sabor, idx) => {
+                    html += `<div class="row-item" style="margin-bottom: 6px;">
+                        <input type="text" value="${sabor}" placeholder="Nombre de la variante" class="admin-sabor-input" style="width: 85%;">
+                        <button class="btn btn-danger" onclick="eliminarSaborCatalogo('${prod}', ${idx})">✕</button>
+                    </div>`;
+                });
+            } else {
+                html += `<p style="font-size:0.8rem; color:#64748b; font-style:italic;">No hay variantes definidas para este producto.</p>`;
+            }
+            html += `</div></div>`;
+
+            const bloquesEdicion = [
+                { id: 'compras_insumos', label: 'Insumos Base Receta / Contenido', puedeAgregar: true },
+                { id: 'compras_toppers', label: 'Toppers, Tarjetas y Accesorios', puedeAgregar: true },
+                { id: 'transporte_compras', label: 'Transporte de Abastecimiento', puedeAgregar: true },
+                { id: 'preparacion_operacion', label: 'Operación & Mano de Obra', puedeAgregar: true },
+                { id: 'presentacion', label: 'Presentación Final / Empaque', puedeAgregar: false },
+                { id: 'tematica_visual', label: 'Temática Visual', puedeAgregar: true },
+                { id: 'entrega_cliente', label: 'Despacho & Logística Entrega', puedeAgregar: false }
+            ];
+
+            bloquesEdicion.forEach(b => {
+                const items = data[b.id];
+                if (!items) return;
+
+                html += `<div class="seccion-bloque" data-adminbloque="${b.id}">
+                    <div class="seccion-titulo">${b.label} 
+                        ${b.puedeAgregar ? `<button class="btn btn-primario" style="padding:4px 8px; font-size:0.75rem;" onclick="agregarFilaCatalogo('${prod}', '${b.id}')">+ Añadir Campo</button>` : ''}
+                    </div>
+                    <div id="campos-${b.id}">`;
+
+                items.forEach((it, index) => {
+                    html += `<div class="row-item" data-index="${index}">
+                        <input type="text" value="${it.label}" placeholder="Nombre" class="admin-label" style="width: 60%;">
+                        <input type="number" value="${it.valor}" placeholder="Costo" class="admin-valor" style="width: 30%;">
+                        ${b.puedeAgregar ? `<button class="btn btn-danger" onclick="eliminarFilaCatalogo('${prod}', '${b.id}', ${index})">✕</button>` : ''}
+                    </div>`;
+                });
+
+                html += `</div></div>`;
+            });
+
+            contenedor.innerHTML = html;
+        }
+
+        function agregarSaborCatalogo(prod) {
+            if(!CATALOGO_ACTIVO[prod].sabores) CATALOGO_ACTIVO[prod].sabores = [];
+            CATALOGO_ACTIVO[prod].sabores.push("Nueva Variante");
+            renderizarFormularioAdministrador();
+        }
+
+        function eliminarSaborCatalogo(prod, index) {
+            CATALOGO_ACTIVO[prod].sabores.splice(index, 1);
+            renderizarFormularioAdministrador();
+        }
+
+        function agregarFilaCatalogo(prod, blockId) {
+            const nuevoId = "dinamico_" + Date.now();
+            CATALOGO_ACTIVO[prod][blockId].push({
+                id: nuevoId,
+                label: "Nuevo Concepto",
+                valor: 0,
+                determinarEscalamiento: (blockId === 'compras_insumos')
+            });
+            renderizarFormularioAdministrador();
+        }
+
+        function eliminarFilaCatalogo(prod, blockId, index) {
+            CATALOGO_ACTIVO[prod][blockId].splice(index, 1);
+            renderizarFormularioAdministrador();
+        }
+
+        function guardarConfiguracionEnLocal() {
+            const prod = document.getElementById('selector-producto').value;
+            
+            const contenedorSabores = document.querySelector('[data-adminsabores="true"]');
+            if (contenedorSabores) {
+                const inputsSabores = contenedorSabores.querySelectorAll('.admin-sabor-input');
+                CATALOGO_ACTIVO[prod].sabores = [];
+                inputsSabores.forEach(inp => {
+                    const textoVal = inp.value.trim();
+                    if(textoVal !== "") CATALOGO_ACTIVO[prod].sabores.push(textoVal);
+                });
+            }
+
+            const bloques = ['compras_insumos', 'compras_toppers', 'transporte_compras', 'preparacion_operacion', 'presentacion', 'tematica_visual', 'entrega_cliente'];
+            
+            bloques.forEach(bId => {
+                const contenedorBloque = document.querySelector(`[data-adminbloque="${bId}"]`);
+                if (!contenedorBloque) return;
+
+                const filas = contenedorBloque.querySelectorAll('.row-item');
+                CATALOGO_ACTIVO[prod][bId] = [];
+
+                filas.forEach(f => {
+                    const label = f.querySelector('.admin-label').value;
+                    const valor = parseFloat(f.querySelector('.admin-valor').value) || 0;
+                    CATALOGO_ACTIVO[prod][bId].push({
+                        id: "it_" + Math.random().toString(36).substring(2, 7),
+                        label: label,
+                        valor: valor,
+                        determinarEscalamiento: (bId === 'compras_insumos')
+                    });
+                });
+            });
+
+            localStorage.setItem(LLAVE_STORAGE, JSON.stringify(CATALOGO_ACTIVO));
+            conmutarModo();
+            renderizarFormularioCotizador();
+        }
+
+        function sincronizarNotasImpresion() {
+            const descArea = document.getElementById('cot-descripcion');
+            const targetContainer = document.getElementById('print-descripcion-container');
+            const targetText = document.getElementById('print-descripcion-texto');
+            
+            if (descArea && descArea.value.trim() !== "") {
+                targetText.innerText = descArea.value;
+                targetContainer.style.display = "block";
+            } else {
+                targetContainer.style.display = "none";
+            }
+        }
+
+        function guardarSnapshotActual() {
+            const prod = document.getElementById('selector-producto').value;
+            const cliente = document.getElementById('global-cliente').value || "Cliente General";
+            const fechaDoc = document.getElementById('global-fecha').value;
+            const fechaEnt = document.getElementById('global-fecha-entrega').value;
+            const tipoDoc = document.getElementById('global-tipo-documento').value;
+            const margen = document.getElementById('global-margen').value;
+
+            const saborEle = document.getElementById('cot-sabor');
+            const cantEle = document.getElementById('cot-cantidad');
+            const escEle = document.getElementById('cot-escala');
+            const descEle = document.getElementById('cot-descripcion');
+
+            const sabor = saborEle ? saborEle.value : null;
+            const cantidad = cantEle ? cantEle.value : null;
+            const escala = escEle ? escEle.value : null;
+            const descripcion = descEle ? descEle.value : null;
+
+            const inputsDinamicos = [];
+            document.querySelectorAll('.input-dinamico-calculo').forEach(inp => {
+                inputsDinamicos.push({
+                    bloque: inp.getAttribute('data-bloque'),
+                    itemId: inp.getAttribute('data-itemid'),
+                    valor: inp.value
+                });
+            });
+
+            const promptNombre = prompt("Nombre descriptivo para este snapshot:", `${cliente} - ${prod.toUpperCase()}`);
+            if (promptNombre === null) return; 
+            const nombreFinal = promptNombre.trim() !== "" ? promptNombre.trim() : `Revisión: ${prod.toUpperCase()} (${cliente})`;
+
+            const snapObj = {
+                id: "snap_" + Date.now(),
+                nombre: nombreFinal,
+                prod, cliente, fechaDoc, fechaEnt, tipoDoc, margen,
+                sabor, cantidad, escala, descripcion, inputsDinamicos
+            };
+
+            let arregloSnapshots = JSON.parse(localStorage.getItem(LLAVE_SNAPSHOTS)) || [];
+            arregloSnapshots.push(snapObj);
+            localStorage.setItem(LLAVE_SNAPSHOTS, JSON.stringify(arregloSnapshots));
+
+            actualizarSelectorSnapshots();
+        }
+
+        function actualizarSelectorSnapshots() {
+            const container = document.getElementById('container-snapshots-ui');
+            if(!container) return;
+
+            const snapshots = JSON.parse(localStorage.getItem(LLAVE_SNAPSHOTS)) || [];
+
+            let UI_Controles_Base = '';
+
+            if(snapshots.length === 0) {
+                UI_Controles_Base = `
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn" style="border-color: var(--accent-secundario); color: var(--accent-secundario); width: 100%; padding: 8px; font-size:0.8rem; background: transparent;" onclick="guardarSnapshotActual()">📸 Guardar Estado Actual en Navegador</button>
+                    </div>
+                `;
+            } else {
+                let options = '<option value="">-- Cargar Snapshot Guardado --</option>';
+                snapshots.forEach(s => {
+                    options += `<option value="${s.id}">${s.nombre}</option>`;
+                });
+
+                UI_Controles_Base = `
+                    <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 8px;">
+                        <select id="selector-snapshots-lista" style="padding: 8px; font-size: 0.85rem; background-color: var(--bg-input);">
+                            ${options}
+                        </select>
+                        <button class="btn btn-primario" style="padding: 6px 12px; font-size: 0.8rem;" onclick="cargarSnapshotSeleccionado()">Cargar</button>
+                        <button class="btn btn-danger" style="padding: 6px 12px; font-size: 0.8rem;" onclick="eliminarSnapshotSeleccionado()">✕</button>
+                    </div>
+                    <button class="btn" style="border-color: var(--accent-secundario); color: var(--accent-secundario); width: 100%; padding: 6px; margin-top: 8px; font-size: 0.8rem; background:transparent;" onclick="guardarSnapshotActual()">📸 Crear Nueva Captura de Estado</button>
+                `;
+            }
+
+            let UI_Mecanica_Disco_Duro = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
+                    <button class="btn" style="background-color: #1e293b; color: #94a3b8; font-size: 0.72rem; padding: 6px; justify-content:center;" onclick="exportarHistorialADiscoDuro()">📥 Exp. Backup (.json)</button>
+                    <button class="btn" style="background-color: #1e293b; color: #94a3b8; font-size: 0.72rem; padding: 6px; justify-content:center;" onclick="dispararInputImportacion()">📤 Imp. Backup (.json)</button>
+                </div>
+            `;
+
+            container.innerHTML = UI_Controles_Base + UI_Mecanica_Disco_Duro;
+        }
+
+        function cargarSnapshotSeleccionado() {
+            const id = document.getElementById('selector-snapshots-lista').value;
+            if(!id) return;
+
+            const snapshots = JSON.parse(localStorage.getItem(LLAVE_SNAPSHOTS)) || [];
+            const snap = snapshots.find(s => s.id === id);
+            if(!snap) return;
+
+            document.getElementById('selector-producto').value = snap.prod;
+
+            renderizarFormularioCotizador();
+            renderizarFormularioAdministrador();
+
+            document.getElementById('global-cliente').value = snap.cliente;
+            document.getElementById('global-fecha').value = snap.fechaDoc;
+            document.getElementById('global-fecha-entrega').value = snap.fechaEnt;
+            document.getElementById('global-tipo-documento').value = snap.tipoDoc;
+            document.getElementById('global-margen').value = snap.margen;
+
+            if (snap.sabor) {
+                const el = document.getElementById('cot-sabor');
+                if (el) el.value = snap.sabor;
+            }
+            if (snap.cantidad) {
+                const el = document.getElementById('cot-cantidad');
+                if (el) el.value = snap.cantidad;
+            }
+            if (snap.escala) {
+                const el = document.getElementById('cot-escala');
+                if (el) el.value = snap.escala;
+            }
+            if (snap.descripcion) {
+                const el = document.getElementById('cot-descripcion');
+                if (el) el.value = snap.descripcion;
+            }
+
+            snap.inputsDinamicos.forEach(savedInp => {
+                const target = document.querySelector(`.input-dinamico-calculo[data-bloque="${savedInp.bloque}"][data-itemid="${savedInp.itemId}"]`);
+                if (target) target.value = savedInp.valor;
+            });
+
+            sincronizarNotasImpresion();
+            calcularCostosMecanicos();
+        }
+
+        function eliminarSnapshotSeleccionado() {
+            const id = document.getElementById('selector-snapshots-lista').value;
+            if(!id) return;
+
+            if(!confirm("¿Desea borrar permanentemente este snapshot de trabajo?")) return;
+
+            let snapshots = JSON.parse(localStorage.getItem(LLAVE_SNAPSHOTS)) || [];
+            snapshots = snapshots.filter(s => s.id !== id);
+            localStorage.setItem(LLAVE_SNAPSHOTS, JSON.stringify(snapshots));
+
+            actualizarSelectorSnapshots();
+        }
+
+        function exportarHistorialADiscoDuro() {
+            const data = localStorage.getItem(LLAVE_SNAPSHOTS);
+            if (!data || data === '[]') {
+                alert("No existen datos en el historial actual para ser exportados.");
+                return;
+            }
+            
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const linkDescarga = document.createElement('a');
+            const timestamp = new Date().toISOString().split('T')[0];
+            
+            linkDescarga.href = url;
+            linkDescarga.download = `BACKUP_SNAPSHOTS_DELICIA_${timestamp}.json`;
+            document.body.appendChild(linkDescarga);
+            linkDescarga.click();
+            document.body.removeChild(linkDescarga);
+            URL.revokeObjectURL(url);
+        }
+
+        function dispararInputImportacion() {
+            document.getElementById('input-importar-json').click();
+        }
+
+        function importarSnapshotsJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const lector = new FileReader();
+            lector.onload = function(e) {
+                try {
+                    const dataParseada = JSON.parse(e.target.result);
+                    if (!Array.isArray(dataParseada)) {
+                        throw new Error("Formato interno incorrecto.");
+                    }
+                    
+                    if (confirm(`Se han detectado ${dataParseada.length} snapshots.\n\n¿Desea sobrescribir el historial actual con esta copia de seguridad?`)) {
+                        localStorage.setItem(LLAVE_SNAPSHOTS, JSON.stringify(dataParseada));
+                        actualizarSelectorSnapshots();
+                    }
+                } catch (err) {
+                    alert("Error crítico: El archivo seleccionado no contiene una estructura válida.");
+                }
+            };
+            lector.readAsText(file);
+            event.target.value = ''; 
+        }
+
+        function calcularCostosMecanicos() {
+            const prod = document.getElementById('selector-producto').value;
+            const escalaSelect = document.getElementById('cot-escala');
+            const cantidadInput = document.getElementById('cot-cantidad');
+            const saborSelect = document.getElementById('cot-sabor');
+            
+            const valCliente = document.getElementById('global-cliente').value || "Cliente General";
+            const inputFechaDoc = document.getElementById('global-fecha').value;
+            const inputFechaEntrega = document.getElementById('global-fecha-entrega').value;
+            const tipoDoc = document.getElementById('global-tipo-documento').value;
+
+            const valFechaDoc = inputFechaDoc ? formatearFechaVisual(inputFechaDoc) : "-";
+            const valFechaEntrega = inputFechaEntrega ? formatearFechaVisual(inputFechaEntrega) : "No definida";
+
+            document.getElementById('print-meta-cliente').innerText = valCliente;
+            document.getElementById('print-meta-fecha').innerText = valFechaDoc;
+            document.getElementById('print-meta-fecha-entrega').innerText = valFechaEntrega;
+
+            if (tipoDoc === 'cotizacion') {
+                document.getElementById('print-titulo-documento').innerText = "COTIZACIÓN DE ORDEN";
+                document.getElementById('print-subtitulo-documento').innerText = "Documento provisional sujeto a modificaciones de diseño";
+            } else {
+                document.getElementById('print-titulo-documento').innerText = "PEDIDO FORMAL DE PRODUCCIÓN";
+                document.getElementById('print-subtitulo-documento').innerText = "Confirmación oficial - Registro interno de operaciones";
+            }
+            
+            let factor = 1.0;
+            let textoEscala = "";
+
+            if (cantidadInput) {
+                factor = parseFloat(cantidadInput.value) || 1.0;
+                let tipoUnidad = "Unidades";
+                if (prod === 'cupcake') tipoUnidad = "Cupcakes";
+                if (prod === 'desayuno') tipoUnidad = "Desayunos Sorpresa";
+                if (prod === 'ancheta') tipoUnidad = "Anchetas Especiales";
+                textoEscala = factor + " " + tipoUnidad;
+            } else if (escalaSelect) {
+                factor = parseFloat(escalaSelect.value);
+                textoEscala = escalaSelect.options[escalaSelect.selectedIndex].text;
+            } else {
+                textoEscala = "Unidad Estándar";
+            }
+
+            let textoSabor = saborSelect ? saborSelect.value : "No Aplica";
+            const margen = parseFloat(document.getElementById('global-margen').value) || 0;
+
+            let factorMargen = 1.0;
+            if (margen < 100 && margen >= 0) {
+                factorMargen = 1 / (1 - (margen / 100));
+            }
+
+            const nombresBloques = {
+                'compras_insumos': 'Insumos Base Receta / Contenido',
+                'compras_toppers': 'Toppers, Tarjetas y Accesorios',
+                'transporte_compras': 'Transporte de Abastecimiento',
+                'preparacion_operacion': 'Operación & Mano de Obra',
+                'presentacion': 'Presentación Final / Empaque',
+                'tematica_visual': 'Temática Visual / Infraestructura Especial',
+                'entrega_cliente': 'Despacho & Logística Entrega'
+            };
+
+            let subtotalesPorBloque = {
+                'compras_insumos': 0,
+                'compras_toppers': 0,
+                'transporte_compras': 0,
+                'preparacion_operacion': 0,
+                'presentacion': 0,
+                'tematica_visual': 0,
+                'entrega_cliente': 0
+            };
+
+            const inputs = document.querySelectorAll('.input-dinamico-calculo');
+            inputs.forEach(input => {
+                const valor = parseFloat(input.value) || 0;
+                const debeEscalar = input.getAttribute('data-escalar') === 'true';
+                const bloqueId = input.getAttribute('data-bloque');
+                
+                if (bloqueId in subtotalesPorBloque) {
+                    subtotalesPorBloque[bloqueId] += debeEscalar ? (valor * factor) : valor;
+                }
+            });
+
+            let costoTotalProduccion = 0;
+            for (const bId in subtotalesPorBloque) {
+                costoTotalProduccion += subtotalesPorBloque[bId];
+            }
+
+            let costoProductoClienteBase = costoTotalProduccion - subtotalesPorBloque['tematica_visual'] - subtotalesPorBloque['entrega_cliente'];
+            
+            let costoProductoClienteConMargen = costoProductoClienteBase * factorMargen;
+            let tematicaConMargen = subtotalesPorBloque['tematica_visual'] * factorMargen;
+            let entregaConMargen = subtotalesPorBloque['entrega_cliente'] * factorMargen;
+
+            let htmlBadgeTiempo = "";
+            if (inputFechaDoc && inputFechaEntrega) {
+                const fDoc = new Date(inputFechaDoc + 'T00:00:00');
+                const fEnt = new Date(inputFechaEntrega + 'T00:00:00');
+                const diferenciaMs = fEnt - fDoc;
+                const diasDisponibles = Math.ceil(diferenciaMs / (1000 * 60 * 60 * 24));
+
+                if (diasDisponibles < 0) {
+                    htmlBadgeTiempo = `<div class="badge-tiempo tiempo-critico">⚠️ ERROR: Fecha de entrega inconsistente</div>`;
+                } else if (diasDisponibles === 0) {
+                    htmlBadgeTiempo = `<div class="badge-tiempo tiempo-critico">⚡ ENTREGA INMEDIATA: Despacho el mismo día</div>`;
+                } else if (diasDisponibles <= 2) {
+                    htmlBadgeTiempo = `<div class="badge-tiempo tiempo-alerta">⏳ PRODUCCIÓN CRÍTICA: Solo ${diasDisponibles} días disponibles</div>`;
+                } else {
+                    htmlBadgeTiempo = `<div class="badge-tiempo tiempo-ok">✅ Taller con tiempo óptimo: ${diasDisponibles} días útiles</div>`;
+                }
+            } else {
+                htmlBadgeTiempo = `<div class="badge-tiempo" style="background-color:rgba(255,255,255,0.02); color:#64748b; border:1px dashed var(--border-color);">Defina las fechas del documento</div>`;
+            }
+
+            let desgloseHtml = `
+                <div class="bloque-resultado"><span>Línea Activa:</span><strong style="text-transform:uppercase;">${prod}</strong></div>
+                <div class="bloque-resultado"><span>Volumen Ordenado:</span><strong>${textoEscala}</strong></div>
+                <div class="bloque-resultado"><span>Ventana Operativa:</span><strong>${htmlBadgeTiempo}</strong></div>
+                <div class="bloque-resultado solo-interno"><span>Variante / Sabor Seleccionado:</span><strong>${textoSabor}</strong></div>
+                <div class="bloque-resultado solo-interno"><span>Margen Real Aplicado:</span><strong>${margen}%</strong></div>
+                
+                <div class="bloque-resultado" style="border-bottom: 2px solid var(--accent-primario); padding-bottom: 12px; margin-bottom: 10px;">
+                    <span>Costo Base con Margen:</span>
+                    <strong>${formatearMoneda(costoProductoClienteConMargen)}</strong>
+                </div>
+            `;
+
+            for (const [bId, bLabel] of Object.entries(nombresBloques)) {
+                const subtotalActual = subtotalesPorBloque[bId];
+                if (!CATALOGO_ACTIVO[prod][bId] || CATALOGO_ACTIVO[prod][bId].length === 0) continue;
+
+                if (bId === 'tematica_visual') {
+                    desgloseHtml += `
+                        <div class="bloque-resultado" style="font-weight: 600;">
+                            <span>Subtotal ${bLabel}:</span>
+                            <strong>${formatearMoneda(tematicaConMargen)}</strong>
+                        </div>
+                    `;
+                } else if (bId === 'entrega_cliente') {
+                    desgloseHtml += `
+                        <div class="bloque-resultado" style="font-weight: 600;">
+                            <span>Subtotal ${bLabel}:</span>
+                            <strong>${formatearMoneda(entregaConMargen)}</strong>
+                        </div>
+                    `;
+                } else {
+                    desgloseHtml += `
+                        <div class="bloque-resultado solo-interno" style="font-weight: 600;">
+                            <span>Subtotal Base ${bLabel}:</span>
+                            <span>${formatearMoneda(subtotalActual)}</span>
+                        </div>
+                    `;
+                }
+
+                const inputsEspecificos = document.querySelectorAll(`.input-dinamico-calculo[data-bloque="${bId}"]`);
+                inputsEspecificos.forEach(inp => {
+                    const valInp = parseFloat(inp.value) || 0;
+                    if (valInp > 0) {
+                        const labelElem = inp.previousElementSibling;
+                        let labelTexto = labelElem ? labelElem.innerText : 'Concepto';
+                        labelTexto = labelTexto.replace('(Escalable)', '').replace('(Fijo)', '').trim();
+                        
+                        const debeEscalar = inp.getAttribute('data-escalar') === 'true';
+                        const valorCalculadoFinal = debeEscalar ? (valInp * factor) : valInp;
+
+                        desgloseHtml += `
+                            <div class="bloque-resultado solo-interno" style="padding-left: 20px; font-size: 0.82rem; border-bottom: none; opacity: 0.65; padding-top: 2px; padding-bottom: 2px;">
+                                <span style="font-style: italic;">└─ ${labelTexto}:</span>
+                                <span style="font-style: italic;">${formatearMoneda(valorCalculadoFinal)}</span>
+                            </div>
+                        `;
+                    }
+                });
+            }
+
+            let precioVentaSugerido = costoTotalProduccion * factorMargen;
+
+            document.getElementById('salida-resumen-dinamico').innerHTML = desgloseHtml;
+
+            document.getElementById('totales-calculados').innerHTML = `
+                <div class="bloque-resultado solo-interno"><span>Costo Bruto de Producción (Fábrica):</span><strong>${formatearMoneda(costoTotalProduccion)}</strong></div>
+                <div class="bloque-resultado total-destacado"><span id="label-total-dinamico">VALOR TOTAL DE LA COTIZACIÓN:</span><strong>${formatearMoneda(precioVentaSugerido)}</strong></div>
+            `;
+        }
+
+        function ejecutarImpresionFlujo(tipo) {
+            const body = document.body;
+            const tipoDoc = document.getElementById('global-tipo-documento').value;
+            const labelTotal = document.getElementById('label-total-dinamico');
+
+            body.classList.remove('doc-entorno-cotizacion', 'doc-entorno-pedido');
+            if (tipoDoc === 'cotizacion') {
+                body.classList.add('doc-entorno-cotizacion');
+            } else {
+                body.classList.add('doc-entorno-pedido');
+            }
+
+            if (tipo === 'cliente') {
+                body.classList.add('print-version-cliente');
+                if (labelTotal) labelTotal.innerHTML = "VALOR TOTAL A PAGAR:";
+            } else {
+                body.classList.remove('print-version-cliente');
+                if (labelTotal) labelTotal.innerHTML = "PRECIO FINAL VENTA CON MARGEN:";
+            }
+
+            setTimeout(() => {
+                window.print();
+                body.classList.remove('print-version-cliente', 'doc-entorno-cotizacion', 'doc-entorno-pedido');
+                if (labelTotal) labelTotal.innerHTML = "VALOR TOTAL DE LA COTIZACIÓN:";
+            }, 50);
+        }
+
+        function formatearMoneda(valor) {
+            return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(valor);
+        }
+
+        function formatearFechaVisual(fechaString) {
+            const partes = fechaString.split('-');
+            if(partes.length !== 3) return fechaString;
+            return `${partes[2]}/${partes[1]}/${partes[0]}`;
+        }
+
+        function cambiarEntorno() {
+            renderizarFormularioCotizador();
+            renderizarFormularioAdministrador();
+        }
+
+        window.onload = function() {
+            cargarEstructuraMaestra();
+            renderizarFormularioCotizador();
+            renderizarFormularioAdministrador();
+        };
+    </script>
+</body>
+</html>
