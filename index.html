@@ -322,7 +322,6 @@
 </head>
 <body>
 
-    <!-- Input Oculto de Control Operativo -->
     <input type="file" id="input-importar-json" style="display:none;" accept=".json" onchange="importarSnapshotsJSON(event)">
 
     <header>
@@ -334,7 +333,6 @@
 
     <main class="contenedor-principal" id="wrapper-app">
         
-        <!-- PANEL DE ACCIÓN COMERCIAL (COTIZADOR) -->
         <section class="panel panel-control" id="panel-cotizador">
             <h2>✨ Panel de Cotización 
                 <select id="selector-producto" style="width: auto; padding: 6px 14px; font-size: 0.85rem;" onchange="cambiarEntorno()">
@@ -346,24 +344,19 @@
             </h2>
 
             <div id="dinamico-cotizador">
-                <!-- Inyección Automática del Motor -->
-            </div>
+                </div>
         </section>
 
-        <!-- PANEL DE CONFIGURACIÓN DE PARÁMETROS BASE -->
         <section class="panel panel-control" id="panel-administrador">
             <h2>⚙️ Parámetros de Costo Base
                 <button class="btn btn-primario" onclick="guardarConfiguracionEnLocal()">💾 Guardar Cambios</button>
             </h2>
             <div id="dinamico-administrador">
-                <!-- Inyección Automática del Motor -->
-            </div>
+                </div>
         </section>
 
-        <!-- RESUMEN EN TIEMPO REAL Y ARCHIVO DE SALIDA -->
         <section class="panel panel-resumen">
             
-            <!-- ENCABEZADO EXCLUSIVO PARA IMPRESIÓN/PDF -->
             <div id="print-encabezado-dinamico">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <div>
@@ -380,15 +373,12 @@
 
             <h2>📊 Hoja de Costos & Resultados</h2>
 
-            <!-- CONTROL DE VERSIONES (SNAP-SYSTEM) -->
             <div class="seccion-bloque evitar-print" style="background-color: rgba(192, 132, 252, 0.03); border-color: rgba(192, 132, 252, 0.2);">
                 <div class="seccion-titulo" style="color: var(--accent-secundario); font-size: 0.75rem; margin-bottom: 10px;">💾 Capturas de Historial de Trabajo (Snapshots)</div>
                 <div id="container-snapshots-ui">
-                    <!-- Inyección del Módulo de Respaldo -->
-                </div>
+                    </div>
             </div>
             
-            <!-- ENTRADAS METADATA GENERALES -->
             <div class="grid-metadatos">
                 <div>
                     <label for="global-cliente">👤 Cliente</label>
@@ -412,12 +402,9 @@
                 </select>
             </div>
 
-            <!-- TABLA DINÁMICA DE CONTRALORÍA DE COSTOS -->
             <div id="salida-resumen-dinamico">
-                <!-- Datos Calculados en Vivo -->
-            </div>
+                </div>
             
-            <!-- CONTENEDOR ESPECÍFICO PARA NOTAS DE TARJETA / DISEÑO -->
             <div id="print-descripcion-container">
                 <strong style="font-size: 0.8rem; text-transform: uppercase; color: #475569;">📝 Notas Especiales de Personalización:</strong>
                 <p id="print-descripcion-texto" style="margin-top: 6px; font-size: 0.88rem; font-style: italic; white-space: pre-wrap; color: #000000;"></p>
@@ -428,12 +415,9 @@
                 <input type="number" id="global-margen" value="45" oninput="calcularCostosMecanicos()">
             </div>
             
-            <!-- BLOQUE DE CIERRE COMERCIAL -->
             <div id="totales-calculados">
-                <!-- Inyección de Totalizadores -->
-            </div>
+                </div>
 
-            <!-- CUADRO DE FIRMAS PARA FLUJO DE LOGÍSTICA -->
             <div id="print-bloque-firmas">
                 <div style="display: flex; justify-content: space-between; margin-top: 60px; font-size: 0.8rem; color: #000;">
                     <div style="width: 42%; border-top: 1px solid #000; text-align: center; padding-top: 8px;"><strong>Firma de Conformidad</strong><br>Cliente</div>
@@ -449,9 +433,6 @@
 
     </main>
 
-    <!-- ==========================================================================
-       ZONA DE PROTECCIÓN ABSOLUTA: MOTOR DE LÓGICA Y CÁLCULO (NO TOCAR)
-       ========================================================================== */ -->
     <script>
         const LISTA_SABORES_MASTER = ["Vanilla", "Choco-Vanilla", "Chocolate", "Maracuyá", "Red Velvet", "Envinada Clásica"];
         const LLAVE_STORAGE = 'sagrada_delicia_framework_v9'; 
@@ -575,6 +556,41 @@
         };
 
         let CATALOGO_ACTIVO = {};
+        // Variable de control global para definir el flujo seleccionado antes de ejecutar la impresión
+        let flujoImpresionActivo = 'cliente';
+
+        /* ==========================================================================
+           ESCUCHADORES DE EVENTOS DE IMPRESIÓN (BLINDAJE ABSOLUTO MÓVIL)
+           ========================================================================== */
+        window.addEventListener('beforeprint', () => {
+            const body = document.body;
+            const tipoDoc = document.getElementById('global-tipo-documento').value;
+            const labelTotal = document.getElementById('label-total-dinamico');
+
+            body.classList.remove('doc-entorno-cotizacion', 'doc-entorno-pedido');
+            if (tipoDoc === 'cotizacion') {
+                body.classList.add('doc-entorno-cotizacion');
+            } else {
+                body.classList.add('doc-entorno-pedido');
+            }
+
+            if (flujoImpresionActivo === 'cliente') {
+                body.classList.add('print-version-cliente');
+                if (labelTotal) labelTotal.innerHTML = "VALOR TOTAL A PAGAR:";
+            } else {
+                body.classList.remove('print-version-cliente');
+                if (labelTotal) labelTotal.innerHTML = "PRECIO FINAL VENTA CON MARGEN:";
+            }
+        });
+
+        window.addEventListener('afterprint', () => {
+            const body = document.body;
+            const labelTotal = document.getElementById('label-total-dinamico');
+            
+            // Restaura la UI original al cerrar o terminar la ventana de impresión
+            body.classList.remove('print-version-cliente', 'doc-entorno-cotizacion', 'doc-entorno-pedido');
+            if (labelTotal) labelTotal.innerHTML = "VALOR TOTAL DE LA COTIZACIÓN:";
+        });
 
         function cargarEstructuraMaestra() {
             const copiaLocal = localStorage.getItem(LLAVE_STORAGE);
@@ -1177,29 +1193,12 @@
         }
 
         function ejecutarImpresionFlujo(tipo) {
-            const body = document.body;
-            const tipoDoc = document.getElementById('global-tipo-documento').value;
-            const labelTotal = document.getElementById('label-total-dinamico');
-
-            body.classList.remove('doc-entorno-cotizacion', 'doc-entorno-pedido');
-            if (tipoDoc === 'cotizacion') {
-                body.classList.add('doc-entorno-cotizacion');
-            } else {
-                body.classList.add('doc-entorno-pedido');
-            }
-
-            if (tipo === 'cliente') {
-                body.classList.add('print-version-cliente');
-                if (labelTotal) labelTotal.innerHTML = "VALOR TOTAL A PAGAR:";
-            } else {
-                body.classList.remove('print-version-cliente');
-                if (labelTotal) labelTotal.innerHTML = "PRECIO FINAL VENTA CON MARGEN:";
-            }
-
+            // Guardamos el tipo de flujo de manera global antes de llamar al disparador nativo
+            flujoImpresionActivo = tipo;
+            
+            // Le damos 50ms para que la UI asimile la variable y llamamos a la impresión nativa
             setTimeout(() => {
                 window.print();
-                body.classList.remove('print-version-cliente', 'doc-entorno-cotizacion', 'doc-entorno-pedido');
-                if (labelTotal) labelTotal.innerHTML = "VALOR TOTAL DE LA COTIZACIÓN:";
             }, 50);
         }
 
