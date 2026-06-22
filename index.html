@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sagrada Delicia — Control de Operaciones V14.4 by Marto</title>
+    <title>Sagrada Delicia — Control de Operaciones V14.5 by Marto</title>
     <style>
         /* ==========================================================================
            PALETA DE COLORES Y VARIABLES RE-CONCEPTUALIZADAS
@@ -190,9 +190,10 @@
     <!-- Inputs Ocultos para Importación de JSONs -->
     <input type="file" id="input-importar-json" style="display:none;" accept=".json" onchange="importarSnapshotsJSON(event)">
     <input type="file" id="input-importar-recetas-json" style="display:none;" accept=".json" onchange="importarRecetasJSON(event)">
+    <input type="file" id="input-importar-insumos-json" style="display:none;" accept=".json" onchange="importarInsumosJSON(event)">
 
     <header>
-        <h1>🧁 SAGRADA DELICIA</h1>Control de Operaciones V.14.4
+        <h1>🧁 SAGRADA DELICIA</h1>Control de Operaciones V.14.5
         <div class="controles-superiores">
             <button class="btn btn-primario" onclick="navegarA('cotizar')">📊 Cotizador Comercial</button>
             <button class="btn btn-secundario" onclick="navegarA('recetas')">🍳 Recetas Relacionales</button>
@@ -208,7 +209,7 @@
                     <option value="torta">🎂 TORTAS</option>
                     <option value="cupcake">🧁 CUPCAKES</option>
                     <option value="desayuno">☀️ DESAYUNOS SORPRESA</option>
-                    <option value="ancheta">🎁 ANCHETAS ESPECIALES</option>
+                    <option value="ancheta">🧺 ANCHETAS ESPECIALES</option>
                 </select>
             </h2>
             <div id="dinamico-cotizador"></div>
@@ -293,7 +294,15 @@
             </h2>
             
             <div class="seccion-bloque">
-                <div class="seccion-titulo"><span>🍎 1. Catálogo Maestro de Insumos</span><button class="btn btn-primario" style="padding: 4px 10px; font-size: 0.72rem;" onclick="agregarNuevoInsumoCatalogoDefinicion()">➕ Nuevo Insumo</button></div>
+                <div class="seccion-titulo">
+                    <span>🍎 1. Catálogo Maestro de Insumos</span>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn btn-primario" style="padding:4px 10px; font-size:0.72rem;" onclick="agregarNuevoInsumoCatalogoDefinicion()">➕ Nuevo</button>
+                        <button class="btn btn-secundario" style="padding:4px 8px; font-size:0.72rem;" onclick="exportarInsumosADiscoDuro()">📥 Exportar</button>
+                        <button class="btn btn-secundario" style="padding:4px 8px; font-size:0.72rem;" onclick="dispararImportacionInsumos()">📤 Importar</button>
+                        <button class="btn btn-admin" style="padding:4px 8px; font-size:0.72rem;" onclick="imprimirPDFInsumos()">🖨️ PDF</button>
+                    </div>
+                </div>
                 <div id="dinamico-insumos-base"></div>
             </div>
 
@@ -785,6 +794,71 @@
             document.getElementById('dinamico-insumos-base').innerHTML = html + `</div>`;
         }
         function agregarNuevoInsumoCatalogoDefinicion() { DB_INSUMOS.push({id:'ins_'+Date.now(), nombre:"Nuevo Insumo", costo:0, unidad:"und"}); renderizarSeccionConfiguracionInsumos(); }
+
+        function exportarInsumosADiscoDuro() {
+            const dl = document.createElement('a');
+            dl.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(DB_INSUMOS, null, 2));
+            dl.download = `sd_insumos_${Date.now()}.json`;
+            document.body.appendChild(dl); dl.click(); dl.remove();
+        }
+        function dispararImportacionInsumos() { document.getElementById('input-importar-insumos-json').click(); }
+        function importarInsumosJSON(e) {
+            const lector = new FileReader();
+            lector.onload = ev => {
+                try {
+                    const parsed = JSON.parse(ev.target.result);
+                    if (!Array.isArray(parsed)) return alert("Archivo inválido: se esperaba un array de insumos.");
+                    DB_INSUMOS = parsed;
+                    localStorage.setItem(LLAVE_INSUMOS, JSON.stringify(DB_INSUMOS));
+                    renderizarSeccionConfiguracionInsumos();
+                    alert(`✅ ${DB_INSUMOS.length} insumos importados correctamente.`);
+                } catch(err) { alert("Error al leer el archivo JSON de Insumos."); }
+            };
+            lector.readAsText(e.target.files[0]);
+            e.target.value = '';
+        }
+        function imprimirPDFInsumos() {
+            const fecha = new Date().toLocaleDateString('es-CO', { year:'numeric', month:'long', day:'numeric' });
+            let filas = '';
+            DB_INSUMOS.forEach((ins, i) => {
+                filas += `<tr style="background:${i%2===0?'#f8fafc':'#fff'};">
+                    <td style="padding:12px 14px; border-bottom:1px solid #e2e8f0;">${ins.nombre}</td>
+                    <td style="padding:12px 14px; border-bottom:1px solid #e2e8f0; text-align:right; font-weight:700;">${formatearMoneda(ins.costo)}</td>
+                    <td style="padding:12px 14px; border-bottom:1px solid #e2e8f0; text-align:center; color:#64748b;">/ ${ins.unidad}</td>
+                </tr>`;
+            });
+            const html = `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>Catálogo de Insumos — Sagrada Delicia</title>
+<style>
+    body { font-family:'Helvetica Neue', Arial, sans-serif; padding:40px; max-width:800px; margin:0 auto; color:#0f172a; line-height:1.6; }
+    @media print { .no-print { display:none !important; } @page { margin:10mm; } body{padding:0;} }
+    .header { border-bottom:4px solid #f59e0b; padding-bottom:18px; margin-bottom:28px; display:flex; justify-content:space-between; align-items:flex-end; }
+    h1 { margin:0; font-size:1.8rem; font-weight:900; letter-spacing:-0.5px; }
+    .sub { font-size:0.85rem; color:#64748b; margin-top:4px; text-transform:uppercase; letter-spacing:1px; }
+    .meta { text-align:right; font-size:0.85rem; color:#64748b; }
+    table { width:100%; border-collapse:collapse; }
+    th { background:#f59e0b; color:#fff; padding:12px 14px; text-align:left; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.5px; }
+    th.right { text-align:right; }
+    th.center { text-align:center; }
+    .footer { margin-top:30px; font-size:0.8rem; color:#94a3b8; text-align:center; border-top:1px dashed #cbd5e1; padding-top:16px; }
+</style></head><body>
+    <button class="no-print" onclick="window.print()" style="padding:10px 22px; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer; margin-bottom:24px; font-weight:bold;">🖨️ Imprimir PDF</button>
+    <div class="header">
+        <div>
+            <h1>SAGRADA DELICIA</h1>
+            <div class="sub">Catálogo Maestro de Insumos</div>
+        </div>
+        <div class="meta"><strong>Fecha:</strong> ${fecha}<br><strong>Total insumos:</strong> ${DB_INSUMOS.length}</div>
+    </div>
+    <table>
+        <thead><tr><th>Insumo</th><th class="right">Costo Unitario</th><th class="center">Unidad</th></tr></thead>
+        <tbody>${filas}</tbody>
+    </table>
+    <div class="footer">SAGRADA DELICIA — Documento Interno de Costos de Insumos<br>Diseñado por: Marto 🧠 martowave@gmail.com</div>
+</body></html>`;
+            const win = window.open('', '_blank', 'width=860,height=700');
+            win.document.write(html); win.document.close();
+        }
         function renderizarFormularioAdministrador() {
             const prod = document.getElementById('selector-producto').value; const data = CATALOGO_ACTIVO[prod]; let html = '';
             const blks = [{id:'compras_insumos',label:'Insumos'},{id:'compras_toppers',label:'Toppers'},{id:'transporte_compras',label:'Abastecimiento'},{id:'preparacion_operacion',label:'Operación'},{id:'presentacion',label:'Empaque'},{id:'tematica_visual',label:'Temática'},{id:'entrega_cliente',label:'Despacho'}];
