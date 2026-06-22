@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sagrada Delicia — Control de Operaciones V13 by Marto</title>
+    <title>Sagrada Delicia — Control de Operaciones V14.4 by Marto</title>
     <style>
         /* ==========================================================================
            PALETA DE COLORES Y VARIABLES RE-CONCEPTUALIZADAS
@@ -109,6 +109,80 @@
         .tarjeta-receta-sistema { background-color: rgba(30, 41, 59, 0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; transition: transform 0.2s, border-color 0.2s; }
         .tarjeta-receta-sistema:hover { transform: translateX(5px); border-color: var(--accent-secundario); }
 
+        /* ==========================================================================
+           BADGE TIEMPO RESTANTE
+           ========================================================================== */
+        #badge-tiempo-restante { margin-top: 8px; min-height: 36px; }
+        .badge-countdown { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.3px; font-variant-numeric: tabular-nums; transition: all 0.3s ease; }
+        .badge-countdown .cd-numero { font-size: 1rem; font-weight: 800; }
+
+        /* ==========================================================================
+           MOBILE — COMPATIBILIDAD Y ESTABILIDAD VISUAL
+           ========================================================================== */
+        @media (max-width: 768px) {
+            body { padding: 12px 10px; }
+
+            /* Header */
+            header { flex-direction: column; align-items: flex-start; gap: 10px; padding-bottom: 15px; margin-bottom: 15px; }
+            h1 { font-size: 1.15rem; letter-spacing: 1px; }
+            .controles-superiores { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+            .controles-superiores .btn { padding: 10px 6px; font-size: 0.75rem; justify-content: center; min-height: 44px; }
+            .controles-superiores .btn:last-child { grid-column: 1 / -1; }
+
+            /* Panels */
+            .panel { padding: 14px 12px; border-radius: 10px; }
+            .contenedor-principal { gap: 14px; }
+
+            /* Headings */
+            h2 { font-size: 0.95rem; flex-direction: column; align-items: flex-start; gap: 8px; }
+            h2 select, h2 button { width: 100%; }
+
+            /* Grids */
+            .grid-metadatos { grid-template-columns: 1fr !important; gap: 10px; }
+            .grid-inputs { grid-template-columns: 1fr !important; gap: 10px; }
+
+            /* Inputs: previene zoom en iOS (necesita font-size >= 16px) */
+            select, input, textarea { font-size: 16px !important; padding: 11px 10px; }
+
+            /* Touch targets mínimos */
+            .btn { min-height: 44px; padding: 10px 14px; font-size: 0.82rem; }
+            .btn-danger { min-height: 38px; }
+
+            /* Secciones */
+            .seccion-bloque { padding: 14px 12px; }
+            .seccion-titulo { font-size: 0.75rem; flex-wrap: wrap; gap: 6px; }
+
+            /* Tarjeta receta: stack vertical */
+            .tarjeta-receta-sistema { flex-direction: column; gap: 10px; }
+            .tarjeta-receta-sistema > div:last-child { display: grid; grid-template-columns: 1fr 1fr; min-width: unset; gap: 6px; }
+
+            /* Row items admin */
+            .row-item { flex-wrap: wrap; }
+            .row-item input { flex: 1; min-width: 80px; }
+
+            /* Totales */
+            .total-destacado strong { font-size: 1.35rem; }
+            .bloque-resultado { flex-wrap: wrap; gap: 4px; }
+            .bloque-resultado strong { text-align: right; flex: 1; }
+
+            /* Tabla recetas: scroll horizontal ya está, reforzar */
+            .tabla-recetas-avanzada th, .tabla-recetas-avanzada td { padding: 7px 6px; font-size: 0.8rem; }
+
+            /* Botones de impresión */
+            .grupo-botones-print { gap: 8px; }
+
+            /* Snapshots grid */
+            #container-snapshots-ui select { font-size: 14px !important; }
+        }
+
+        @media (max-width: 400px) {
+            body { padding: 8px 8px; }
+            .controles-superiores { grid-template-columns: 1fr; }
+            .controles-superiores .btn:last-child { grid-column: auto; }
+            h1 { font-size: 1rem; }
+            .panel { padding: 12px 10px; }
+        }
+
     </style>
 </head>
 <body class="view-cotizar">
@@ -118,7 +192,7 @@
     <input type="file" id="input-importar-recetas-json" style="display:none;" accept=".json" onchange="importarRecetasJSON(event)">
 
     <header>
-        <h1>🧁 SAGRADA DELICIA</h1>Control de Operaciones V.13
+        <h1>🧁 SAGRADA DELICIA</h1>Control de Operaciones V.14.4
         <div class="controles-superiores">
             <button class="btn btn-primario" onclick="navegarA('cotizar')">📊 Cotizador Comercial</button>
             <button class="btn btn-secundario" onclick="navegarA('recetas')">🍳 Recetas Relacionales</button>
@@ -134,7 +208,7 @@
                     <option value="torta">🎂 TORTAS</option>
                     <option value="cupcake">🧁 CUPCAKES</option>
                     <option value="desayuno">☀️ DESAYUNOS SORPRESA</option>
-                    <option value="ancheta">🧺 ANCHETAS ESPECIALES</option>
+                    <option value="ancheta">🎁 ANCHETAS ESPECIALES</option>
                 </select>
             </h2>
             <div id="dinamico-cotizador"></div>
@@ -248,7 +322,9 @@
                 </div>
                 <div>
                     <label for="global-fecha-entrega">🚀 Entrega</label>
-                    <input type="date" id="global-fecha-entrega" onchange="calcularCostosMecanicos()">
+                    <input type="date" id="global-fecha-entrega" onchange="calcularCostosMecanicos(); actualizarContadorEntrega();">
+                    <input type="time" id="global-hora-entrega" value="12:00" style="margin-top:6px;" onchange="calcularCostosMecanicos(); actualizarContadorEntrega();">
+                    <div id="badge-tiempo-restante"></div>
                 </div>
             </div>
 
@@ -299,7 +375,7 @@
         const CATALOGO_RESPALDO = {
             torta: {
                 sabores: [...LISTA_SABORES_MASTER], usaCantidadInput: false,
-                escalas: [ { valor: 0.25, label: "1/4 de Libra" }, { valor: 0.5, label: "1/2 Libra" }, { valor: 1.0, label: "1 Libra (Unidad Base)" }, { valor: 2.0, label: "2 Libras" } ],
+                escalas: [ { valor: 0.25, label: "1/4 de Libra" }, { valor: 0.5, label: "1/2 Libra" }, { valor: 1.0, label: "1 Libra (Unidad Base)" }, { valor: 2.0, label: "2 Libras" }, { valor: 3.0, label: "3 Libras" }, { valor: 4.0, label: "4 Libras" }, { valor: 5.0, label: "5 Libras" } ],
                 compras_insumos: [{ id: "harina_ref", label: "Base Mínima Referencia", valor: 15000, determinarEscalamiento: true }],
                 compras_toppers: [ { id: "top1", label: "Topper Estándar", valor: 4000, determinarEscalamiento: false } ],
                 transporte_compras: [ { id: "domicilio_ins", label: "Transporte Abastecimiento", valor: 5000, determinarEscalamiento: false } ],
@@ -349,9 +425,15 @@
             const copiaLocal = localStorage.getItem(LLAVE_STORAGE);
             if (copiaLocal) CATALOGO_ACTIVO = JSON.parse(copiaLocal);
             else { CATALOGO_ACTIVO = JSON.parse(JSON.stringify(CATALOGO_RESPALDO)); localStorage.setItem(LLAVE_STORAGE, JSON.stringify(CATALOGO_ACTIVO)); }
+            // Siempre sincronizar escalas y flags estructurales desde el respaldo (no son editables por usuario)
+            Object.keys(CATALOGO_RESPALDO).forEach(prod => {
+                if (!CATALOGO_ACTIVO[prod]) CATALOGO_ACTIVO[prod] = JSON.parse(JSON.stringify(CATALOGO_RESPALDO[prod]));
+                if (CATALOGO_RESPALDO[prod].escalas) CATALOGO_ACTIVO[prod].escalas = JSON.parse(JSON.stringify(CATALOGO_RESPALDO[prod].escalas));
+                CATALOGO_ACTIVO[prod].usaCantidadInput = CATALOGO_RESPALDO[prod].usaCantidadInput;
+            });
             recetaActivaNombre = localStorage.getItem(LLAVE_RECETA_ACTIVA) || null;
             document.getElementById('global-fecha').value = new Date().toISOString().split('T')[0];
-            navegarA('cotizar'); actualizarSelectorSnapshots();
+            navegarA('cotizar'); actualizarSelectorSnapshots(); actualizarContadorEntrega();
         };
 
         function navegarA(vista) {
@@ -539,14 +621,40 @@
             let baseCliente = costoTotal - subs['tematica_visual'] - subs['entrega_cliente'];
             let baseConMgn = baseCliente * fMargen; let temMgn = subs['tematica_visual'] * fMargen; let entMgn = subs['entrega_cliente'] * fMargen;
             
+            // Alarma de entrega con tiempo restante
+            let alarmaResumen = '';
+            const fEntResumen = document.getElementById('global-fecha-entrega').value;
+            if (fEntResumen) {
+                const ahoraR = new Date();
+                const pR = fEntResumen.split('-');
+                const horaEntR = document.getElementById('global-hora-entrega')?.value || '23:59';
+                const [hhR, mmR] = horaEntR.split(':').map(Number);
+                const entR = new Date(parseInt(pR[0]), parseInt(pR[1])-1, parseInt(pR[2]), hhR, mmR, 0);
+                const diffR = entR - ahoraR;
+                if (diffR <= 0) {
+                    alarmaResumen = `<div class="bloque-resultado"><span>⏰ Entrega:</span><strong style="color:var(--color-alerta-critica);">VENCIDA</strong></div>`;
+                } else {
+                    const dR = Math.floor(diffR/(1000*60*60*24));
+                    const hR = Math.floor((diffR%(1000*60*60*24))/(1000*60*60));
+                    const mR = Math.floor((diffR%(1000*60*60))/(1000*60));
+                    let colR, iconR;
+                    if(dR < 2)      { colR='var(--color-alerta-critica)'; iconR='🚨'; }
+                    else if(dR <= 4){ colR='var(--color-alerta-media)';   iconR='⚠️'; }
+                    else            { colR='var(--color-alerta-ok)';       iconR='✅'; }
+                    alarmaResumen = `<div class="bloque-resultado"><span>${iconR} Tiempo restante:</span><strong style="color:${colR};">${dR}d ${hR}h ${mR}m</strong></div>`;
+                }
+            }
+
             let out = `<div class="bloque-resultado"><span>Línea Activa:</span><strong style="text-transform:uppercase;">${prod}</strong></div><div class="bloque-resultado"><span>Volumen:</span><strong>${texto}</strong></div>`;
             if(recetaActivaNombre) out += `<div class="bloque-resultado"><span>Fórmula:</span><strong style="color:var(--accent-primario);">${recetaActivaNombre}</strong></div>`;
+            out += alarmaResumen;
             out += `<div class="bloque-resultado" style="border-bottom:2px solid var(--accent-primario); padding-bottom:12px; margin-bottom:10px;"><span>Costo Base con Margen:</span><strong>${formatearMoneda(baseConMgn)}</strong></div>`;
             if(subs['tematica_visual']>0) out += `<div class="bloque-resultado"><span>Temática:</span><strong>${formatearMoneda(temMgn)}</strong></div>`;
             if(subs['entrega_cliente']>0) out += `<div class="bloque-resultado"><span>Despacho:</span><strong>${formatearMoneda(entMgn)}</strong></div>`;
             
             document.getElementById('salida-resumen-dinamico').innerHTML = out;
             document.getElementById('totales-calculados').innerHTML = `<div class="bloque-resultado" style="opacity:0.6;"><span>Costo Bruto Taller:</span><strong>${formatearMoneda(costoTotal)}</strong></div><div class="bloque-resultado total-destacado"><span>TOTAL A COBRAR AL CLIENTE</span><strong>${formatearMoneda(costoTotal*fMargen)}</strong></div>`;
+            actualizarContadorEntrega();
         }
 
         // ==========================================================================
@@ -561,18 +669,35 @@
             const valCliente = document.getElementById('global-cliente').value || 'Cliente General';
             const fEmiRaw = document.getElementById('global-fecha').value;
             const fEntRaw = document.getElementById('global-fecha-entrega').value;
+            const horaEntPDF = document.getElementById('global-hora-entrega')?.value || '';
             const tipoDoc = document.getElementById('global-tipo-documento').value;
             const margen = parseFloat(document.getElementById('global-margen').value) || 0;
             const descripcion = descEle ? descEle.value.trim() : '';
 
+            // Etiqueta de entrega con hora
+            const fEntLabel = fEntRaw ? (horaEntPDF ? `${fEntRaw} — ${horaEntPDF}h` : fEntRaw) : '-';
+
             let alarmaHTML = '';
-            if (fEmiRaw && fEntRaw) {
-                const msEmi = new Date(fEmiRaw).getTime();
-                const msEnt = new Date(fEntRaw).getTime();
-                const diffDias = (msEnt - msEmi) / (1000 * 60 * 60 * 24);
-                if (diffDias < 2) alarmaHTML = `<span style="background-color:#fca5a5; color:#7f1d1d; padding:6px 10px; border-radius:4px; font-weight:bold; font-size:0.8rem; border: 1px solid #ef4444;">🚨 ALERTA: ENTREGA URGENTE</span>`;
-                else if (diffDias <= 4) alarmaHTML = `<span style="background-color:#fef08a; color:#854d0e; padding:6px 10px; border-radius:4px; font-weight:bold; font-size:0.8rem; border: 1px solid #eab308;">⚠️ TIEMPO CORTO</span>`;
-                else alarmaHTML = `<span style="background-color:#bbf7d0; color:#14532d; padding:6px 10px; border-radius:4px; font-weight:bold; font-size:0.8rem; border: 1px solid #22c55e;">✅ TIEMPO ÓPTIMO</span>`;
+            if (fEntRaw) {
+                const ahoraPDF = new Date();
+                const pPDF = fEntRaw.split('-');
+                const [hhPDF, mmPDF] = (horaEntPDF || '23:59').split(':').map(Number);
+                const entPDF = new Date(parseInt(pPDF[0]), parseInt(pPDF[1])-1, parseInt(pPDF[2]), hhPDF, mmPDF, 0);
+                const diffPDF = entPDF - ahoraPDF;
+                if (diffPDF <= 0) {
+                    alarmaHTML = `<span style="background-color:#fca5a5; color:#7f1d1d; padding:6px 10px; border-radius:4px; font-weight:bold; font-size:0.8rem; border:1px solid #ef4444;">⏰ ENTREGA VENCIDA</span>`;
+                } else {
+                    const dPDF = Math.floor(diffPDF/(1000*60*60*24));
+                    const hPDF = Math.floor((diffPDF%(1000*60*60*24))/(1000*60*60));
+                    const mPDF = Math.floor((diffPDF%(1000*60*60))/(1000*60));
+                    const cuentaStr = `${dPDF}d ${hPDF}h ${mPDF}m restantes`;
+                    if (dPDF < 2)
+                        alarmaHTML = `<span style="background-color:#fca5a5; color:#7f1d1d; padding:6px 10px; border-radius:4px; font-weight:bold; font-size:0.8rem; border:1px solid #ef4444;">🚨 URGENTE — ${cuentaStr}</span>`;
+                    else if (dPDF <= 4)
+                        alarmaHTML = `<span style="background-color:#fef08a; color:#854d0e; padding:6px 10px; border-radius:4px; font-weight:bold; font-size:0.8rem; border:1px solid #eab308;">⚠️ TIEMPO CORTO — ${cuentaStr}</span>`;
+                    else
+                        alarmaHTML = `<span style="background-color:#bbf7d0; color:#14532d; padding:6px 10px; border-radius:4px; font-weight:bold; font-size:0.8rem; border:1px solid #22c55e;">✅ TIEMPO ÓPTIMO — ${cuentaStr}</span>`;
+                }
             }
 
             let factor = 1.0, textoEscala = '';
@@ -633,7 +758,7 @@
     <button class="no-print" onclick="window.print()" style="padding:12px 24px; background:${colorAcento}; color:#fff; border:none; border-radius:6px; cursor:pointer; margin-bottom:20px; font-weight:bold;">🖨️ Imprimir PDF</button>
     <div class="header">
         <div><h1 class="logo-text">SAGRADA DELICIA</h1><div class="doc-title">${esInterno ? 'FICHA INTERNA DE COSTOS' : tituloDoc}</div></div>
-        <div class="meta-box"><strong>Fecha Emisión:</strong> ${fEmiRaw||'-'}<br><strong>Entrega Requerida:</strong> ${fEntRaw||'-'}<br><br>${alarmaHTML}</div>
+        <div class="meta-box"><strong>Fecha Emisión:</strong> ${fEmiRaw||'-'}<br><strong>Entrega Requerida:</strong> ${fEntLabel}<br><br>${alarmaHTML}</div>
     </div>
     <div class="info-grid">
         <div><span style="font-size:0.75rem; color:#64748b; text-transform:uppercase; font-weight:bold;">Cliente / Destinatario</span><br><strong style="font-size:1.1rem;">${valCliente}</strong></div>
@@ -735,6 +860,48 @@
         function eliminarSnap() { const id = document.getElementById('sel-snap').value; let snaps = JSON.parse(localStorage.getItem(LLAVE_SNAPSHOTS)) || []; snaps = snaps.filter(s=>s.id!==id); localStorage.setItem(LLAVE_SNAPSHOTS, JSON.stringify(snaps)); actualizarSelectorSnapshots(); }
         
         function formatearMoneda(val) { return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val); }
+
+        // ==========================================================================
+        // CONTADOR TIEMPO RESTANTE HASTA ENTREGA
+        // ==========================================================================
+        function actualizarContadorEntrega() {
+            const badge = document.getElementById('badge-tiempo-restante');
+            if (!badge) return;
+            const fEntRaw = document.getElementById('global-fecha-entrega').value;
+            if (!fEntRaw) { badge.innerHTML = ''; return; }
+
+            const ahora = new Date();
+            const partes = fEntRaw.split('-');
+            const horaEnt = document.getElementById('global-hora-entrega')?.value || '23:59';
+            const [hh, mm] = horaEnt.split(':').map(Number);
+            const entrega = new Date(parseInt(partes[0]), parseInt(partes[1])-1, parseInt(partes[2]), hh, mm, 0);
+            const diff = entrega - ahora;
+
+            if (diff <= 0) {
+                badge.innerHTML = `<span class="badge-countdown" style="background:rgba(252,165,165,0.15); color:var(--color-alerta-critica); border:1px solid var(--color-alerta-critica);">⏰ ENTREGA VENCIDA</span>`;
+                return;
+            }
+
+            const dias   = Math.floor(diff / (1000*60*60*24));
+            const horas  = Math.floor((diff % (1000*60*60*24)) / (1000*60*60));
+            const minutos= Math.floor((diff % (1000*60*60)) / (1000*60));
+
+            let color, bg, border, icono, urgencia;
+            if (dias < 2) {
+                color='var(--color-alerta-critica)'; bg='rgba(252,165,165,0.12)'; border='var(--color-alerta-critica)'; icono='🚨'; urgencia='URGENTE';
+            } else if (dias <= 4) {
+                color='var(--color-alerta-media)'; bg='rgba(253,224,71,0.1)'; border='var(--color-alerta-media)'; icono='⚠️'; urgencia='TIEMPO CORTO';
+            } else {
+                color='var(--color-alerta-ok)'; bg='rgba(134,239,172,0.1)'; border='var(--color-alerta-ok)'; icono='✅'; urgencia='TIEMPO ÓPTIMO';
+            }
+
+            badge.innerHTML = `<span class="badge-countdown" style="background:${bg}; color:${color}; border:1px solid ${border};">
+                ${icono} ${urgencia} &mdash; <span class="cd-numero">${dias}d ${horas}h ${minutos}m</span> restantes
+            </span>`;
+        }
+
+        // Actualizar cada 60 segundos automáticamente
+        setInterval(actualizarContadorEntrega, 60000);
     </script>
 </body>
 </html>
