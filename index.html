@@ -3,979 +3,391 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sagrada Delicia — Control de Operaciones V14.5 by Marto</title>
+    <title>Sagrada Delicia — Alta Repostería-catalogo</title>
+    
+    <!-- Fuentes Elegantes de Google -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    
     <style>
-        /* ==========================================================================
-           PALETA DE COLORES Y VARIABLES RE-CONCEPTUALIZADAS
-           ========================================================================== */
         :root {
-            --bg-principal: #0b111e;
-            --bg-card: #151f32;
-            --bg-input: #1e293b;
-            --border-color: #2e3d56;
-            
-            --color-texto: #cbd5e1;
-            --color-titulos: #f8fafc;
-            --color-subtitulos: #94a3b8;
-
-            --accent-primario: #7dd3fc;
-            --accent-secundario: #c084fc;
-            --accent-admin: #fde047;
-            --accent-hover: #38bdf8;
-            --accent-success: #22c55e;
-            
-            --color-alerta-critica: #fca5a5;
-            --color-alerta-media: #fde047;
-            --color-alerta-ok: #86efac;
+            --bg-principal: #0a0a0a;
+            --bg-card: #141414;
+            --dorado: #d4af37;
+            --dorado-hover: #ebd586;
+            --texto-claro: #fcfbf9;
+            --texto-mutado: #a8a29e;
+            --borde-suave: #262626;
         }
 
-        /* ==========================================================================
-           ESTILOS BASE Y TIPOGRAFÍA MINIMALISTA
-           ========================================================================== */
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
-        body { background-color: var(--bg-principal); color: var(--color-texto); padding: 30px 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; line-height: 1.5; transition: background-color 0.3s ease; }
-        header { width: 100%; max-width: 1240px; margin-bottom: 30px; border-bottom: 1px solid var(--border-color); padding-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
-        h1 { color: var(--color-titulos); font-size: 1.5rem; font-weight: 700; letter-spacing: 1.5px; display: flex; align-items: center; gap: 10px; }
-        .controles-superiores { display: flex; gap: 12px; flex-wrap: wrap; }
-
-        /* Botones Conceptuales */
-        .btn { padding: 10px 18px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.25s ease; display: inline-flex; align-items: center; gap: 8px; justify-content: center; }
-        .btn-primario { background-color: var(--accent-primario); color: #0b111e; }
-        .btn-primario:hover { background-color: var(--accent-hover); box-shadow: 0 0 15px rgba(125, 211, 252, 0.3); transform: translateY(-1px); }
-        .btn-secundario { background-color: rgba(192, 132, 252, 0.15); color: var(--accent-secundario); border: 1px solid var(--accent-secundario); }
-        .btn-secundario:hover { background-color: var(--accent-secundario); color: #0b111e; transform: translateY(-1px); }
-        .btn-admin { background-color: transparent; color: var(--accent-admin); border: 1px solid var(--accent-admin); }
-        .btn-admin:hover { background-color: var(--accent-admin); color: #0b111e; transform: translateY(-1px); }
-        .btn-success { background-color: rgba(34, 197, 94, 0.15); color: var(--accent-success); border: 1px solid var(--accent-success); }
-        .btn-success:hover { background-color: var(--accent-success); color: #0b111e; }
-        .btn-danger { background-color: rgba(252, 165, 165, 0.1); color: var(--color-alerta-critica); border: 1px solid var(--color-alerta-critica); padding: 5px 10px; font-size: 0.75rem; }
-        .btn-danger:hover { background-color: var(--color-alerta-critica); color: #0b111e; }
-
-        /* ==========================================================================
-           DISTRIBUCIÓN DEL ESPACIO DE TRABAJO
-           ========================================================================== */
-        .contenedor-principal { width: 100%; max-width: 1240px; display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 30px; transition: grid-template-columns 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
-        @media (max-width: 1024px) { .contenedor-principal { grid-template-columns: 1fr !important; } }
-
-        .panel { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 30px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); animation: fadeIn 0.4s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         
-        h2 { color: var(--color-titulos); font-size: 1.15rem; font-weight: 600; margin-bottom: 25px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
-
-        .grupo-formulario { margin-bottom: 20px; position: relative; }
-        .grid-metadatos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
-        @media (max-width: 600px) { .grid-metadatos { grid-template-columns: 1fr; } }
+        body { 
+            background-color: var(--bg-principal); 
+            color: var(--texto-claro); 
+            font-family: 'Montserrat', sans-serif; 
+            line-height: 1.6; 
+            padding-bottom: 80px; 
+            -webkit-font-smoothing: antialiased;
+        }
         
-        label { display: flex; align-items: center; font-size: 0.75rem; color: var(--color-subtitulos); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        /* CABECERA ELEGANTE */
+        header { 
+            text-align: center; 
+            padding: 70px 20px 50px; 
+            background: radial-gradient(circle at center, #1f1d18 0%, var(--bg-principal) 100%);
+            border-bottom: 1px solid var(--borde-suave); 
+            position: relative;
+        }
         
-        /* Tooltips No Invasivos */
-        .info-guide { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--border-color); color: var(--color-titulos); font-size: 0.6rem; font-weight: bold; margin-left: 6px; cursor: help; position: relative; transition: background 0.2s; }
-        .info-guide:hover { background: var(--accent-primario); color: var(--bg-principal); }
-        .info-guide::after { content: attr(data-tooltip); position: absolute; bottom: 130%; left: 50%; transform: translateX(-50%); background: #1e293b; color: #f8fafc; padding: 8px 12px; border-radius: 6px; font-size: 0.75rem; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s, bottom 0.2s; z-index: 10; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid var(--accent-primario); font-weight: normal; text-transform: none; letter-spacing: normal; }
-        .info-guide:hover::after { opacity: 1; bottom: 150%; }
-
-        select, input, textarea { width: 100%; background-color: var(--bg-input); border: 1px solid var(--border-color); color: var(--color-texto); padding: 12px; border-radius: 8px; font-size: 0.9rem; outline: none; transition: all 0.2s ease; }
-        select:focus, input:focus, textarea:focus { border-color: var(--accent-primario); box-shadow: 0 0 0 3px rgba(125, 211, 252, 0.1); }
-
-        .seccion-bloque { background-color: rgba(30, 41, 59, 0.4); border: 1px solid var(--border-color); border-radius: 10px; padding: 20px; margin-bottom: 20px; transition: border-color 0.3s; }
-        .seccion-bloque:hover { border-color: rgba(125, 211, 252, 0.3); }
-        .seccion-titulo { font-size: 0.8rem; color: var(--accent-primario); font-weight: 700; text-transform: uppercase; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; letter-spacing: 0.5px; }
-        
-        .grid-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; }
-        .row-item { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-        .grupo-botones-print { display: flex; flex-direction: column; gap: 12px; margin-top: 25px; }
-
-        .badge-tiempo { padding: 8px 14px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; display: inline-block; margin-top: 8px; line-height: 1.2; }
-        
-        #panel-cotizador, #panel-recetas-workspace, #panel-administrador { display: none; }
-        body.view-cotizar #panel-cotizador { display: block; }
-        body.view-recetas #panel-recetas-workspace { display: block; }
-        body.view-recetas .contenedor-principal { grid-template-columns: 1fr; }
-        body.view-recetas .panel-resumen { display: none; }
-        body.view-config #panel-administrador { display: block; }
-        body.view-config .contenedor-principal { grid-template-columns: 1fr; }
-        body.view-config .panel-resumen { display: none; }
-
-        .bloque-resultado { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; transition: background 0.2s; }
-        .bloque-resultado:hover { background: rgba(255,255,255,0.02); }
-        .bloque-resultado span { color: var(--color-texto); }
-        .bloque-resultado strong { color: var(--color-titulos); font-weight: 600; }
-        
-        .total-destacado { border-bottom: none; margin-top: 20px; padding: 20px; background: linear-gradient(135deg, rgba(125, 211, 252, 0.1) 0%, rgba(192, 132, 252, 0.1) 100%); border-radius: 10px; border: 1px solid var(--accent-primario); display: flex; flex-direction: column; align-items: flex-end; gap: 5px;}
-        .total-destacado span { font-size: 0.85rem; font-weight: 700; color: var(--color-subtitulos); text-transform: uppercase; letter-spacing: 0.5px; }
-        .total-destacado strong { font-size: 1.6rem; font-weight: 800; color: var(--accent-primario); }
-
-        .tabla-recetas-avanzada input, .tabla-recetas-avanzada select { padding: 8px 10px; font-size: 0.85rem; }
-        .tarjeta-receta-sistema { background-color: rgba(30, 41, 59, 0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; transition: transform 0.2s, border-color 0.2s; }
-        .tarjeta-receta-sistema:hover { transform: translateX(5px); border-color: var(--accent-secundario); }
-
-        /* ==========================================================================
-           BADGE TIEMPO RESTANTE
-           ========================================================================== */
-        #badge-tiempo-restante { margin-top: 8px; min-height: 36px; }
-        .badge-countdown { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.3px; font-variant-numeric: tabular-nums; transition: all 0.3s ease; }
-        .badge-countdown .cd-numero { font-size: 1rem; font-weight: 800; }
-
-        /* ==========================================================================
-           MOBILE — COMPATIBILIDAD Y ESTABILIDAD VISUAL
-           ========================================================================== */
-        @media (max-width: 768px) {
-            body { padding: 12px 10px; }
-
-            /* Header */
-            header { flex-direction: column; align-items: flex-start; gap: 10px; padding-bottom: 15px; margin-bottom: 15px; }
-            h1 { font-size: 1.15rem; letter-spacing: 1px; }
-            .controles-superiores { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-            .controles-superiores .btn { padding: 10px 6px; font-size: 0.75rem; justify-content: center; min-height: 44px; }
-            .controles-superiores .btn:last-child { grid-column: 1 / -1; }
-
-            /* Panels */
-            .panel { padding: 14px 12px; border-radius: 10px; }
-            .contenedor-principal { gap: 14px; }
-
-            /* Headings */
-            h2 { font-size: 0.95rem; flex-direction: column; align-items: flex-start; gap: 8px; }
-            h2 select, h2 button { width: 100%; }
-
-            /* Grids */
-            .grid-metadatos { grid-template-columns: 1fr !important; gap: 10px; }
-            .grid-inputs { grid-template-columns: 1fr !important; gap: 10px; }
-
-            /* Inputs: previene zoom en iOS (necesita font-size >= 16px) */
-            select, input, textarea { font-size: 16px !important; padding: 11px 10px; }
-
-            /* Touch targets mínimos */
-            .btn { min-height: 44px; padding: 10px 14px; font-size: 0.82rem; }
-            .btn-danger { min-height: 38px; }
-
-            /* Secciones */
-            .seccion-bloque { padding: 14px 12px; }
-            .seccion-titulo { font-size: 0.75rem; flex-wrap: wrap; gap: 6px; }
-
-            /* Tarjeta receta: stack vertical */
-            .tarjeta-receta-sistema { flex-direction: column; gap: 10px; }
-            .tarjeta-receta-sistema > div:last-child { display: grid; grid-template-columns: 1fr 1fr; min-width: unset; gap: 6px; }
-
-            /* Row items admin */
-            .row-item { flex-wrap: wrap; }
-            .row-item input { flex: 1; min-width: 80px; }
-
-            /* Totales */
-            .total-destacado strong { font-size: 1.35rem; }
-            .bloque-resultado { flex-wrap: wrap; gap: 4px; }
-            .bloque-resultado strong { text-align: right; flex: 1; }
-
-            /* Tabla recetas: scroll horizontal ya está, reforzar */
-            .tabla-recetas-avanzada th, .tabla-recetas-avanzada td { padding: 7px 6px; font-size: 0.8rem; }
-
-            /* Botones de impresión */
-            .grupo-botones-print { gap: 8px; }
-
-            /* Snapshots grid */
-            #container-snapshots-ui select { font-size: 14px !important; }
+        .eyebrow {
+            display: block;
+            color: var(--dorado);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 15px;
         }
 
-        @media (max-width: 400px) {
-            body { padding: 8px 8px; }
-            .controles-superiores { grid-template-columns: 1fr; }
-            .controles-superiores .btn:last-child { grid-column: auto; }
-            h1 { font-size: 1rem; }
-            .panel { padding: 12px 10px; }
+        h1 { 
+            font-family: 'Playfair Display', serif; 
+            color: var(--texto-claro); 
+            font-size: 3rem; 
+            font-weight: 700; 
+            letter-spacing: 1px; 
+            margin-bottom: 10px; 
+        }
+        
+        .divider { color: var(--dorado); font-size: 1.2rem; margin: 15px 0; opacity: 0.7; }
+        .subtitle { color: var(--texto-mutado); font-size: 0.95rem; font-weight: 300; letter-spacing: 2px; text-transform: uppercase; }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+        
+        .section-title { 
+            font-family: 'Playfair Display', serif;
+            font-size: 2rem; 
+            color: var(--dorado); 
+            margin: 70px 0 35px; 
+            text-align: center;
+            font-style: italic;
+        }
+        
+        /* Grid Layouts */
+        .grid-ofertas, .grid-menu, .grid-galeria { display: grid; gap: 30px; }
+        .grid-ofertas { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+        .grid-menu { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+        .grid-galeria { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
+
+        /* CARDS ELEGANTES */
+        .card { 
+            background: var(--bg-card); 
+            border: 1px solid var(--borde-suave); 
+            border-radius: 4px; 
+            overflow: hidden; 
+            display: flex; 
+            flex-direction: column; 
+            transition: transform 0.4s ease, border-color 0.4s ease; 
+        }
+        .card:hover { 
+            transform: translateY(-8px); 
+            border-color: var(--dorado); 
+        }
+        
+        .card-img { width: 100%; height: 280px; object-fit: cover; border-bottom: 1px solid var(--borde-suave); }
+        .card-body { padding: 30px 25px; flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; }
+        
+        .card-title { 
+            font-family: 'Playfair Display', serif;
+            font-size: 1.4rem; 
+            color: var(--texto-claro); 
+            margin-bottom: 12px; 
+        }
+        
+        /* Detalles Desplegables (OFERTAS) */
+        .btn-toggle-desc {
+            background: none;
+            border: none;
+            color: var(--texto-mutado);
+            font-family: 'Montserrat', sans-serif;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
+            cursor: pointer;
+            margin-bottom: 15px;
+            transition: color 0.3s;
+            text-transform: uppercase;
+        }
+        .btn-toggle-desc:hover { color: var(--dorado); }
+        
+        .desc-oculta { display: none; }
+        .desc-visible { 
+            display: block; 
+            animation: fadeInDesc 0.4s ease forwards; 
+        }
+        @keyframes fadeInDesc {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
+        .card-desc { font-size: 0.9rem; color: #d6d3d1; font-weight: 300; margin-bottom: 25px; flex: 1; font-style: italic; }
+        .card-desc-menu { font-size: 0.9rem; color: var(--texto-mutado); font-weight: 300; margin-bottom: 25px; flex: 1; }
+        
+        /* Precio (Solo Ofertas) */
+        .precio-oferta { 
+            font-family: 'Playfair Display', serif;
+            color: var(--dorado); 
+            font-weight: 600; 
+            font-size: 1.5rem; 
+            margin-bottom: 20px;
+        }
+
+        .oferta-badge { 
+            background: transparent; 
+            color: var(--dorado); 
+            padding: 6px 15px; 
+            font-size: 0.7rem; 
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            border: 1px solid var(--dorado); 
+            margin-bottom: 20px; 
+        }
+
+        /* Botones */
+        .btn-pedir { 
+            display: inline-block; 
+            width: 100%; 
+            background: transparent; 
+            color: var(--dorado); 
+            border: 1px solid var(--dorado); 
+            padding: 14px; 
+            font-size: 0.85rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-decoration: none; 
+            transition: all 0.3s ease; 
+            margin-top: auto;
+        }
+        .btn-pedir:hover { background: var(--dorado); color: var(--bg-principal); font-weight: 500; }
+
+        /* GALERÍA */
+        .galeria-item { position: relative; overflow: hidden; aspect-ratio: 1/1; border: 1px solid var(--borde-suave); }
+        .galeria-item img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.6s ease; filter: brightness(0.9); }
+        .galeria-item:hover img { transform: scale(1.08); filter: brightness(1); }
+        .galeria-overlay { 
+            position: absolute; bottom: 0; left: 0; right: 0; 
+            background: linear-gradient(transparent, rgba(0,0,0,0.95)); 
+            padding: 30px 20px 15px; 
+            color: var(--dorado); 
+            font-family: 'Playfair Display', serif;
+            font-style: italic;
+            font-size: 1.1rem; 
+            opacity: 0; transition: opacity 0.4s ease; 
+            text-align: center;
+        }
+        .galeria-item:hover .galeria-overlay { opacity: 1; }
+
+        /* LOADER */
+        .loader { text-align: center; padding: 100px 20px; color: var(--dorado); font-family: 'Playfair Display', serif; font-style: italic; font-size: 1.2rem; }
+        
+        /* PIE DE PÁGINA */
+        footer { 
+            text-align: center; 
+            padding: 60px 20px 40px; 
+            border-top: 1px solid var(--borde-suave);
+            margin-top: 60px;
+        }
+        footer p { color: var(--texto-mutado); font-size: 0.85rem; letter-spacing: 1px; }
+        .footer-wpp { color: var(--dorado); text-decoration: none; font-weight: 500; }
+
+        /* WHATSAPP FLOTANTE */
+        .wpp-float {
+            position: fixed; bottom: 25px; right: 25px; background-color: #25D366; color: white;
+            width: 55px; height: 55px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 30px; box-shadow: 0 4px 15px rgba(37, 211, 102, 0.4); z-index: 100; transition: transform 0.3s;
+            text-decoration: none;
+        }
+        .wpp-float:hover { transform: scale(1.1); }
     </style>
 </head>
-<body class="view-cotizar">
-
-    <!-- Inputs Ocultos para Importación de JSONs -->
-    <input type="file" id="input-importar-json" style="display:none;" accept=".json" onchange="importarSnapshotsJSON(event)">
-    <input type="file" id="input-importar-recetas-json" style="display:none;" accept=".json" onchange="importarRecetasJSON(event)">
-    <input type="file" id="input-importar-insumos-json" style="display:none;" accept=".json" onchange="importarInsumosJSON(event)">
+<body>
 
     <header>
-        <h1>🧁 SAGRADA DELICIA</h1>Control de Operaciones V.14.5
-        <div class="controles-superiores">
-            <button class="btn btn-primario" onclick="navegarA('cotizar')">📊 Cotizador Comercial</button>
-            <button class="btn btn-secundario" onclick="navegarA('recetas')">🍳 Recetas Relacionales</button>
-            <button class="btn btn-admin" onclick="navegarA('config')">⚙️ Configurar Catálogo</button>
-        </div>
+
+        <div align;style="width: 100%;">
+  <img
+      src="https://res.cloudinary.com/dv7lelmoy/image/upload/v1782263129/JQLB0329_ynelcv.jpg"
+    alt="logo"
+    style="width: 33%; height: auto;"
+  >
+</div>
+
+        
+        <span class="eyebrow">Repostería Fina</span>
+        <h1>Sagrada Delicia</h1>
+        <div class="divider">✦</div>
+        <p class="subtitle">Diseño de Autor</p>
+        <p style="color:Tomato;">1985</p>
     </header>
 
-    <main class="contenedor-principal" id="wrapper-app">
-        
-        <section class="panel panel-control" id="panel-cotizador">
-            <h2>✨ Panel de Cotización 
-                <select id="selector-producto" style="width: auto; padding: 6px 14px; font-size: 0.85rem;" onchange="cambiarEntorno()">
-                    <option value="torta">🎂 TORTAS</option>
-                    <option value="cupcake">🧁 CUPCAKES</option>
-                    <option value="desayuno">☀️ DESAYUNOS SORPRESA</option>
-                    <option value="ancheta">🧺 ANCHETAS ESPECIALES</option>
-                </select>
-            </h2>
-            <div id="dinamico-cotizador"></div>
-        </section>
+    <div class="container">
+        <div id="loader" class="loader">Preparando el menú...🧠+🥣</div>
 
-        <section class="panel panel-control" id="panel-recetas-workspace">
-            <h2>🍳 Biblioteca e Ingeniería de Recetas Relacionales
-                <button class="btn btn-primario" id="btn-guardar-receta" onclick="guardarRecetaAvanzadaForm()">💾 Guardar Receta Nueva</button>
-            </h2>
+        <div id="contenido-catalogo" style="display: none;">
             
-            <form id="form-receta-avanzada" onsubmit="event.preventDefault();" class="mb-4">
-                <div class="grid-metadatos" style="grid-template-columns: 1.2fr 1fr 0.8fr; gap:15px; margin-bottom: 20px;">
-                    <div>
-                        <label for="rec-nombre">📛 Nombre Variante Base</label>
-                        <input type="text" id="rec-nombre" placeholder="Ej. Bizcocho de Vainilla Premium" required>
-                    </div>
-                    <div>
-                        <label for="rec-producto-asociado">📦 Línea Destino</label>
-                        <select id="rec-producto-asociado">
-                            <option value="torta">🎂 TORTAS</option>
-                            <option value="cupcake">🧁 CUPCAKES</option>
-                            <option value="desayuno">☀️ DESAYUNOS SORPRESA</option>
-                            <option value="ancheta">🧺 ANCHETAS ESPECIALES</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="rec-rendimiento">🍰 Rendimiento <span class="info-guide" data-tooltip="Divisor base para prorratear el costo del batch completo a una sola unidad.">?</span></label>
-                        <input type="number" id="rec-rendimiento" value="1" min="1" oninput="calcularCostosRecetaAvanzada()" required>
-                    </div>
-                </div>
-
-                <div class="seccion-bloque">
-                    <div class="seccion-titulo">
-                        <span>🍎 Desglose de Insumos Maestros</span>
-                        <button type="button" class="btn btn-primario" style="padding: 5px 12px; font-size: 0.75rem;" onclick="agregarFilaIngredienteAvanzado()">➕ Añadir Insumo</button>
-                    </div>
-
-                    <div style="overflow-x: auto;">
-                        <table class="tabla-recetas-avanzada" style="width: 100%; border-collapse: collapse; min-width: 650px;">
-                            <thead>
-                                <tr style="border-bottom: 2px solid var(--border-color); text-align: left;">
-                                    <th style="padding: 10px; font-size: 0.75rem; color: var(--color-subtitulos); text-transform: uppercase;">Insumo Base Técnico</th>
-                                    <th style="padding: 10px; font-size: 0.75rem; color: var(--color-subtitulos); text-transform: uppercase; width: 14%;">Cantidad</th>
-                                    <th style="padding: 10px; font-size: 0.75rem; color: var(--color-subtitulos); text-transform: uppercase; width: 18%;">Unidad</th>
-                                    <th style="padding: 10px; font-size: 0.75rem; color: var(--color-subtitulos); text-transform: uppercase; width: 22%;">Costo Un. ($)</th>
-                                    <th style="padding: 10px; font-size: 0.75rem; color: var(--color-subtitulos); text-transform: uppercase; width: 20%;">Subtotal</th>
-                                    <th style="padding: 10px; font-size: 0.75rem; color: var(--color-subtitulos); text-transform: uppercase; width: 8%; text-align: center;">Acción</th>
-                                </tr>
-                            </thead>
-                            <tbody id="cuerpo-ingredientes-avanzados"></tbody>
-                        </table>
-                    </div>
-
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 25px; border-top: 1px dashed var(--border-color); padding-top: 20px;">
-                        <div>
-                            <span style="font-size: 0.8rem; color: var(--color-subtitulos); text-transform: uppercase;">Costo unitario por Porción:</span>
-                            <h4 id="rec-costo-porcion" style="color: var(--accent-primario); font-size: 1.25rem; font-weight: 700;">$0</h4>
-                        </div>
-                        <div style="text-align: right;">
-                            <span style="font-size: 0.8rem; color: var(--color-subtitulos); text-transform: uppercase;">Costo Bruto Total Batch:</span>
-                            <h3 id="rec-costo-total" style="color: var(--color-alerta-ok); font-size: 1.6rem; font-weight: 800;">$0</h3>
-                        </div>
-                    </div>
-                </div>
-            </form>
-
-            <div class="seccion-bloque" style="margin-top: 30px;">
-                <div class="seccion-titulo" style="color: var(--accent-secundario);">
-                    📋 Biblioteca de Recetas
-                    <div>
-                        <button class="btn btn-secundario" style="padding: 4px 8px; font-size: 0.7rem;" onclick="exportarRecetasADiscoDuro()">📥 Exportar</button>
-                        <button class="btn btn-secundario" style="padding: 4px 8px; font-size: 0.7rem;" onclick="dispararImportacionRecetas()">📤 Importar</button>
-                    </div>
-                </div>
-                <div id="lista-recetas-avanzadas-sistema" style="display: flex; flex-direction: column; gap: 12px; margin-top: 15px;"></div>
-            </div>
-        </section>
-
-        <section class="panel panel-administrador" id="panel-administrador">
-            <h2>⚙️ Administración General
-                <button class="btn btn-primario" onclick="guardarConfiguracionGlobalEnLocal()">💾 Guardar Configuraciones</button>
-            </h2>
-            
-            <div class="seccion-bloque">
-                <div class="seccion-titulo">
-                    <span>🍎 1. Catálogo Maestro de Insumos</span>
-                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                        <button class="btn btn-primario" style="padding:4px 10px; font-size:0.72rem;" onclick="agregarNuevoInsumoCatalogoDefinicion()">➕ Nuevo</button>
-                        <button class="btn btn-secundario" style="padding:4px 8px; font-size:0.72rem;" onclick="exportarInsumosADiscoDuro()">📥 Exportar</button>
-                        <button class="btn btn-secundario" style="padding:4px 8px; font-size:0.72rem;" onclick="dispararImportacionInsumos()">📤 Importar</button>
-                        <button class="btn btn-admin" style="padding:4px 8px; font-size:0.72rem;" onclick="imprimirPDFInsumos()">🖨️ PDF</button>
-                    </div>
-                </div>
-                <div id="dinamico-insumos-base"></div>
+            <!-- SECCIÓN 1: OFERTAS Y EDICIONES ESPECIALES (Muestra precios y detalles ocultos) -->
+            <div id="wrapper-ofertas" style="display: none;">
+                <h2 class="section-title">Ediciones Especiales</h2>
+                <div id="grid-ofertas" class="grid-ofertas"></div>
             </div>
 
-            <div class="seccion-bloque" style="margin-top:25px; border-color:var(--accent-secundario);">
-                <div class="seccion-titulo" style="color:var(--accent-secundario);"><span>📋 2. Parámetros Base Cotizador</span></div>
-                <div id="dinamico-administrador"></div>
-            </div>
-        </section>
+            <!-- SECCIÓN 2: MENÚ BASE (SIN precios) -->
+            <h2 class="section-title">Colección Clásica</h2>
+            <div id="grid-menu" class="grid-menu"></div>
 
-        <section class="panel panel-resumen">
-            <h2>📊 Hoja de Resultados</h2>
-
-            <div class="seccion-bloque evitar-print" style="background-color: rgba(192, 132, 252, 0.03); border-color: rgba(192, 132, 252, 0.2); padding: 15px;">
-                <div class="seccion-titulo" style="color: var(--accent-secundario); font-size: 0.75rem; margin-bottom: 10px;">💾 Memoria Rápida (Snapshots) <span class="info-guide" data-tooltip="Guarda el estado actual de toda la cotización para recargarla rápidamente después.">?</span></div>
-                <div id="container-snapshots-ui"></div>
-            </div>
-            
-            <div class="grid-metadatos">
-                <div>
-                    <label for="global-cliente">👤 Cliente</label>
-                    <input type="text" id="global-cliente" placeholder="Nombre completo" oninput="calcularCostosMecanicos()">
-                </div>
-                <div>
-                    <label for="global-fecha">📅 Emisión</label>
-                    <input type="date" id="global-fecha" onchange="calcularCostosMecanicos()">
-                </div>
-                <div>
-                    <label for="global-fecha-entrega">🚀 Entrega</label>
-                    <input type="date" id="global-fecha-entrega" onchange="calcularCostosMecanicos(); actualizarContadorEntrega();">
-                    <input type="time" id="global-hora-entrega" value="12:00" style="margin-top:6px;" onchange="calcularCostosMecanicos(); actualizarContadorEntrega();">
-                    <div id="badge-tiempo-restante"></div>
-                </div>
+            <!-- SECCIÓN 3: GALERÍA DE TRABAJOS -->
+            <div id="wrapper-galeria" style="display: none;">
+                <h2 class="section-title">» Obras Recientes </h2>
+                <div id="grid-galeria" class="grid-galeria"></div>
             </div>
 
-            <div class="grupo-formulario">
-                <label for="global-tipo-documento">🔀 Tipo de Salida <span class="info-guide" data-tooltip="Cambia el título y el enfoque del documento PDF final a exportar.">?</span></label>
-                <select id="global-tipo-documento" onchange="calcularCostosMecanicos()">
-                    <option value="cotizacion">📄 COTIZACIÓN COMERCIAL (Preliminar)</option>
-                    <option value="pedido">🏭 PEDIDO FORMAL (Envío a Taller)</option>
-                </select>
-            </div>
-
-            <div id="salida-resumen-dinamico"></div>
-            
-            <div class="grupo-formulario" style="margin-top: 20px;">
-                <label for="global-margen">📈 Margen Requerido (%) <span class="info-guide" data-tooltip="Porcentaje de ganancia libre a sumar sobre los costos brutos.">?</span></label>
-                <input type="number" id="global-margen" value="45" oninput="calcularCostosMecanicos()">
-            </div>
-            
-            <div id="totales-calculados"></div>
-            
-            <div class="grupo-botones-print">
-                <button class="btn btn-primario" style="padding: 14px; justify-content: center;" onclick="ejecutarImpresionFlujo('cliente')">🤝 PDF de Cara al Cliente</button>
-                <button class="btn btn-admin" style="padding: 14px; justify-content: center;" onclick="ejecutarImpresionFlujo('interno')">📊 PDF de Costos Internos</button>
-            </div>
-<br><em>Diseñado por: Marto</em> 🧠
-        </section>
-
-    </main>
-
-    <script>
-        // ==========================================================================
-        // CONSTANTES Y BASES DE DATOS
-        // ==========================================================================
-        const LISTA_SABORES_MASTER = ["Vanilla", "Choco-Vanilla", "Chocolate", "Maracuyá", "Red Velvet", "Envinada Clásica"];
-        const LLAVE_STORAGE = 'sagrada_delicia_framework_v11'; 
-        const LLAVE_SNAPSHOTS = 'sagrada_delicia_snapshots_v11';
-        const LLAVE_RECETAS = 'sagrada_delicia_recetas_v11';
-        const LLAVE_INSUMOS = 'sd_insumos_base_v11';
-        const LLAVE_RECETA_ACTIVA = 'sagrada_delicia_receta_activa_v11';
-
-        const INSUMOS_BASE_PREDETERMINADOS = [
-            { id: "harina", nombre: "Harina de Trigo Premium", costo: 4500, unidad: "kg" },
-            { id: "mantequilla", nombre: "Mantequilla Especial", costo: 16000, unidad: "kg" },
-            { id: "azucar", nombre: "Azúcar Refinada", costo: 3200, unidad: "kg" },
-            { id: "huevos", nombre: "Huevos AA (Unidad)", costo: 600, unidad: "und" }
-        ];
-
-        const CATALOGO_RESPALDO = {
-            torta: {
-                sabores: [...LISTA_SABORES_MASTER], usaCantidadInput: false,
-                escalas: [ { valor: 0.25, label: "1/4 de Libra" }, { valor: 0.5, label: "1/2 Libra" }, { valor: 1.0, label: "1 Libra (Unidad Base)" }, { valor: 2.0, label: "2 Libras" }, { valor: 3.0, label: "3 Libras" }, { valor: 4.0, label: "4 Libras" }, { valor: 5.0, label: "5 Libras" } ],
-                compras_insumos: [{ id: "harina_ref", label: "Base Mínima Referencia", valor: 15000, determinarEscalamiento: true }],
-                compras_toppers: [ { id: "top1", label: "Topper Estándar", valor: 4000, determinarEscalamiento: false } ],
-                transporte_compras: [ { id: "domicilio_ins", label: "Transporte Abastecimiento", valor: 5000, determinarEscalamiento: false } ],
-                preparacion_operacion: [{ id: "hornos", label: "Hornos/Neveras", valor: 3000, determinarEscalamiento: false }, { id: "mo_diseno", label: "Mano Obra: Diseño", valor: 18000, determinarEscalamiento: false }],
-                presentacion: [ { id: "caja", label: "Caja Decorada", valor: 12000, determinarEscalamiento: false } ],
-                tematica_visual: [ { id: "montaje", label: "Mano Obra Montaje Especial", valor: 10000, determinarEscalamiento: false } ],
-                entrega_cliente: [ { id: "domicilio_prov", label: "Despacho Cliente", valor: 7000, determinarEscalamiento: false } ]
-            },
-            cupcake: { 
-                sabores: [...LISTA_SABORES_MASTER], usaCantidadInput: true,
-                compras_insumos: [ { id: "cup_insumo_base", label: "Insumo Receta (x Unidad)", valor: 2200, determinarEscalamiento: true } ], 
-                compras_toppers: [ { id: "cup_top_std", label: "Mini Toppers", valor: 1000, determinarEscalamiento: false } ], 
-                transporte_compras: [ { id: "cup_dom_ins", label: "Abastecimiento", valor: 5000, determinarEscalamiento: false } ], 
-                preparacion_operacion: [ { id: "cup_horno", label: "Uso de Hornos", valor: 2000, determinarEscalamiento: false } ], 
-                presentacion: [ { id: "cup_empaque", label: "Caja Colectiva", valor: 6000, determinarEscalamiento: false } ], 
-                tematica_visual: [ { id: "cup_tematica", label: "Detalles Temáticos", valor: 4000, determinarEscalamiento: false } ], 
-                entrega_cliente: [ { id: "cup_dom_cliente", label: "Despacho Cliente", valor: 7000, determinarEscalamiento: false } ] 
-            },
-            desayuno: { 
-                sabores: ["Tradicional", "Premium", "Fit"], usaCantidadInput: true, 
-                compras_insumos: [ { id: "des_insumo_base", label: "Alimentos y Bebidas Base", valor: 18000, determinarEscalamiento: true } ], 
-                compras_toppers: [ { id: "des_tarjeta", label: "Tarjeta/Globo", valor: 3000, determinarEscalamiento: false } ], 
-                transporte_compras: [ { id: "des_trans", label: "Abastecimiento", valor: 5000, determinarEscalamiento: false } ], 
-                preparacion_operacion: [ { id: "des_mo_armado", label: "Mano de Obra Montaje", valor: 7000, determinarEscalamiento: false } ], 
-                presentacion: [ { id: "des_empaque", label: "Caja Decorada", valor: 12000, determinarEscalamiento: false } ], 
-                tematica_visual: [], 
-                entrega_cliente: [ { id: "des_dom", label: "Despacho Cliente", valor: 7000, determinarEscalamiento: false } ] 
-            },
-            ancheta: { 
-                sabores: ["Corporativa", "Cumpleaños", "Aniversario"], usaCantidadInput: true, 
-                compras_insumos: [ { id: "anch_insumo_base", label: "Licores/Dulces", valor: 35000, determinarEscalamiento: true } ], 
-                compras_toppers: [ { id: "anch_topper", label: "Lazo/Tarjeta", valor: 4000, determinarEscalamiento: false } ], 
-                transporte_compras: [ { id: "anch_trans", label: "Abastecimiento", valor: 5000, determinarEscalamiento: false } ], 
-                preparacion_operacion: [ { id: "anch_mo_armado", label: "Arreglo y Decoración", valor: 8000, determinarEscalamiento: false } ], 
-                presentacion: [ { id: "anch_canasto", label: "Canasto de Mimbre", valor: 22000, determinarEscalamiento: false } ], 
-                tematica_visual: [], 
-                entrega_cliente: [ { id: "anch_dom", label: "Despacho Cliente", valor: 7000, determinarEscalamiento: false } ] 
-            }
-        };
-
-        let CATALOGO_ACTIVO = {}; let DB_INSUMOS = []; let DB_RECETAS = [];
-        let recetaActivaNombre = null; let recetaEnEdicionId = null;
-
-        window.onload = function() {
-            DB_INSUMOS = JSON.parse(localStorage.getItem(LLAVE_INSUMOS)) || INSUMOS_BASE_PREDETERMINADOS;
-            DB_RECETAS = JSON.parse(localStorage.getItem(LLAVE_RECETAS)) || [];
-            const copiaLocal = localStorage.getItem(LLAVE_STORAGE);
-            if (copiaLocal) CATALOGO_ACTIVO = JSON.parse(copiaLocal);
-            else { CATALOGO_ACTIVO = JSON.parse(JSON.stringify(CATALOGO_RESPALDO)); localStorage.setItem(LLAVE_STORAGE, JSON.stringify(CATALOGO_ACTIVO)); }
-            // Siempre sincronizar escalas y flags estructurales desde el respaldo (no son editables por usuario)
-            Object.keys(CATALOGO_RESPALDO).forEach(prod => {
-                if (!CATALOGO_ACTIVO[prod]) CATALOGO_ACTIVO[prod] = JSON.parse(JSON.stringify(CATALOGO_RESPALDO[prod]));
-                if (CATALOGO_RESPALDO[prod].escalas) CATALOGO_ACTIVO[prod].escalas = JSON.parse(JSON.stringify(CATALOGO_RESPALDO[prod].escalas));
-                CATALOGO_ACTIVO[prod].usaCantidadInput = CATALOGO_RESPALDO[prod].usaCantidadInput;
-            });
-            recetaActivaNombre = localStorage.getItem(LLAVE_RECETA_ACTIVA) || null;
-            document.getElementById('global-fecha').value = new Date().toISOString().split('T')[0];
-            navegarA('cotizar'); actualizarSelectorSnapshots(); actualizarContadorEntrega();
-        };
-
-        function navegarA(vista) {
-            document.body.classList.remove('view-cotizar', 'view-recetas', 'view-config');
-            if (vista === 'cotizar') { document.body.classList.add('view-cotizar'); renderizarFormularioCotizador(); }
-            if (vista === 'recetas') { document.body.classList.add('view-recetas'); renderizarListaRecetasAvanzadas(); if(document.getElementById('cuerpo-ingredientes-avanzados').children.length === 0) agregarFilaIngredienteAvanzado(); }
-            if (vista === 'config') { document.body.classList.add('view-config'); renderizarSeccionConfiguracionInsumos(); renderizarFormularioAdministrador(); }
-        }
-
-        // ==========================================================================
-        // FUNCIONES DE RECETAS Y FICHA TÉCNICA PARA EL CHEF
-        // ==========================================================================
-        function agregarFilaIngredienteAvanzado(insumoId='', cantidad='') {
-            const tbody = document.getElementById('cuerpo-ingredientes-avanzados');
-            const tr = document.createElement('tr'); tr.style.borderBottom = "1px solid var(--border-color)";
-            let options = `<option value="">-- Seleccionar Insumo --</option>`;
-            DB_INSUMOS.forEach(i => options += `<option value="${i.id}">${i.nombre}</option>`);
-            tr.innerHTML = `<td style="padding:8px;"><select class="rec-ing-select-relacional" onchange="vincularCostosInsumoFila(this)" required>${options}</select></td><td style="padding:8px;"><input type="number" step="any" class="rec-ing-cantidad" value="${cantidad}" min="0" oninput="calcularCostosRecetaAvanzada()" required></td><td style="padding:8px;"><input type="text" class="rec-ing-unidad" style="background:transparent; border:none; font-weight:600;" readonly></td><td style="padding:8px;"><input type="text" class="rec-ing-costo-visual" style="background:transparent; border:none;" readonly value="$0"></td><td style="padding:8px;"><input type="text" class="rec-ing-subtotal-visual" style="background:transparent; border:none; font-weight:700; color:var(--accent-primario);" readonly value="$0"></td><td style="padding:8px; text-align:center;"><button type="button" class="btn btn-danger" style="padding:6px 10px;" onclick="eliminarFilaRecetaAvanzada(this)">✕</button></td>`;
-            tbody.appendChild(tr);
-            if(insumoId) { const select = tr.querySelector('.rec-ing-select-relacional'); select.value = insumoId; vincularCostosInsumoFila(select); }
-        }
-        function vincularCostosInsumoFila(sel) {
-            const fila = sel.closest('tr'); const ins = DB_INSUMOS.find(i => i.id === sel.value);
-            if(ins) { fila.querySelector('.rec-ing-unidad').value = ins.unidad; fila.querySelector('.rec-ing-costo-visual').value = formatearMoneda(ins.costo); fila.dataset.costoBase = ins.costo; fila.dataset.nombreInsumo = ins.nombre; } 
-            else { fila.querySelector('.rec-ing-unidad').value = ''; fila.querySelector('.rec-ing-costo-visual').value = '$0'; fila.dataset.costoBase = 0; fila.dataset.nombreInsumo = ''; }
-            calcularCostosRecetaAvanzada();
-        }
-        function eliminarFilaRecetaAvanzada(btn) { btn.closest('tr').remove(); calcularCostosRecetaAvanzada(); }
-        function calcularCostosRecetaAvanzada() {
-            let total = 0;
-            document.querySelectorAll('#cuerpo-ingredientes-avanzados tr').forEach(f => {
-                const c = parseFloat(f.querySelector('.rec-ing-cantidad').value) || 0; const u = parseFloat(f.dataset.costoBase) || 0;
-                const sub = c * u; total += sub; f.querySelector('.rec-ing-subtotal-visual').value = formatearMoneda(sub);
-            });
-            const ren = parseFloat(document.getElementById('rec-rendimiento').value) || 1;
-            document.getElementById('rec-costo-total').innerText = formatearMoneda(total); document.getElementById('rec-costo-porcion').innerText = formatearMoneda(total / ren);
-        }
-        function guardarRecetaAvanzadaForm() {
-            const nom = document.getElementById('rec-nombre').value.trim(); const lin = document.getElementById('rec-producto-asociado').value;
-            const ren = parseFloat(document.getElementById('rec-rendimiento').value) || 1; const filas = document.querySelectorAll('#cuerpo-ingredientes-avanzados tr');
-            if(!nom || filas.length===0) return alert("Revise los datos de la receta.");
-            let items = [], total = 0;
-            for(let f of filas) {
-                const id = f.querySelector('.rec-ing-select-relacional').value; const c = parseFloat(f.querySelector('.rec-ing-cantidad').value)||0;
-                if(!id || c<=0) return alert("Insumo inválido.");
-                const u = parseFloat(f.dataset.costoBase)||0; const sub = c*u; total += sub;
-                items.push({insumoId:id, nombre:f.dataset.nombreInsumo, cantidad:c, unidad:f.querySelector('.rec-ing-unidad').value, costoUnitario:u, subtotal:sub});
-            }
-            const rec = { nombre:nom, productoOrigen:lin, isAvanzada:true, rendimiento:ren, costoTotal:total, costoPorPorcion:total/ren, ingredientes:items };
-            if(recetaEnEdicionId) { const idx = DB_RECETAS.findIndex(r=>r.id===recetaEnEdicionId); if(idx!==-1) { rec.id=recetaEnEdicionId; DB_RECETAS[idx]=rec; } recetaEnEdicionId=null; document.getElementById('btn-guardar-receta').innerText="💾 Guardar Receta Nueva"; document.getElementById('btn-guardar-receta').style.backgroundColor=""; } 
-            else { rec.id='receta_'+Date.now(); DB_RECETAS.push(rec); }
-            localStorage.setItem(LLAVE_RECETAS, JSON.stringify(DB_RECETAS));
-            document.getElementById('rec-nombre').value=''; document.getElementById('cuerpo-ingredientes-avanzados').innerHTML=''; agregarFilaIngredienteAvanzado(); calcularCostosRecetaAvanzada(); alert("Receta guardada."); renderizarListaRecetasAvanzadas();
-        }
-        function habilitarEdicionReceta(id) {
-            const rec = DB_RECETAS.find(r=>r.id===id); if(!rec) return; recetaEnEdicionId=id;
-            document.getElementById('rec-nombre').value=rec.nombre; document.getElementById('rec-producto-asociado').value=rec.productoOrigen; document.getElementById('rec-rendimiento').value=rec.rendimiento;
-            document.getElementById('btn-guardar-receta').innerText="💾 Actualizar Cambios"; document.getElementById('btn-guardar-receta').style.backgroundColor="var(--accent-success)";
-            document.getElementById('cuerpo-ingredientes-avanzados').innerHTML='';
-            rec.ingredientes.forEach(i=>agregarFilaIngredienteAvanzado(i.insumoId, i.cantidad)); calcularCostosRecetaAvanzada(); document.getElementById('form-receta-avanzada').scrollIntoView({behavior:'smooth'});
-        }
-        
-        function renderizarListaRecetasAvanzadas() {
-            const con = document.getElementById('lista-recetas-avanzadas-sistema');
-            if(DB_RECETAS.length===0) return con.innerHTML = `<p style="font-style:italic;">No hay recetas creadas.</p>`;
-            let html = '';
-            DB_RECETAS.forEach(r => {
-                html += `<div class="tarjeta-receta-sistema">
-                    <div style="flex:1;">
-                        <span class="badge-tiempo" style="font-size:0.65rem; padding:3px 6px; background:rgba(125,211,252,0.1); color:var(--accent-primario); border:1px solid var(--border-color);">${r.productoOrigen}</span>
-                        <h4 style="margin-top:4px; font-size:0.95rem;">${r.nombre}</h4>
-                        <p style="font-size:0.8rem; color:var(--color-subtitulos); margin-top:2px;">Rendimiento: ${r.rendimiento} | Costo U/P: ${formatearMoneda(r.costoPorPorcion)}</p>
-                    </div>
-                    <div style="display:flex; flex-direction:column; gap:6px; min-width:140px;">
-                        <button class="btn btn-primario" style="padding:6px; font-size:0.75rem;" onclick="ejecutarCargaUnificadaReceta('${r.id}')">⚡ Cargar a Cotizador</button>
-                        <button class="btn btn-secundario" style="padding:6px; font-size:0.75rem; border-color:var(--accent-secundario); color:var(--accent-secundario);" onclick="imprimirFichaChef('${r.id}')">🖨️ Imprimir Chef</button>
-                        <button class="btn btn-success" style="padding:6px; font-size:0.75rem;" onclick="habilitarEdicionReceta('${r.id}')">✏️ Editar</button>
-                        <button class="btn btn-danger" style="padding:6px; font-size:0.75rem;" onclick="eliminarRecetaEspecifica('${r.id}')">🗑️ Eliminar</button>
-                    </div>
-                </div>`;
-            });
-            con.innerHTML = html;
-        }
-
-        /* ----- NUEVA FUNCIÓN: PDF PARA EL CHEF ----- */
-        function imprimirFichaChef(id) {
-            const rec = DB_RECETAS.find(r=>r.id===id);
-            if(!rec) return;
-
-            let filas = '';
-            rec.ingredientes.forEach(i => {
-                filas += `<tr>
-                    <td style="padding:12px; border-bottom:1px solid #e2e8f0; font-size:1rem; color:#334155;">${i.nombre}</td>
-                    <td style="padding:12px; border-bottom:1px solid #e2e8f0; font-size:1rem; font-weight:bold; text-align:center;">${i.cantidad}</td>
-                    <td style="padding:12px; border-bottom:1px solid #e2e8f0; font-size:1rem; text-align:center;">${i.unidad}</td>
-                </tr>`;
-            });
-
-            const html = `<!DOCTYPE html>
-            <html lang="es"><head><meta charset="UTF-8"><title>Ficha Producción - ${rec.nombre}</title>
-            <style>
-                body { font-family: 'Helvetica Neue', Arial, sans-serif; padding:40px; max-width:800px; margin:0 auto; color:#0f172a; line-height:1.6; }
-                @media print { .no-print { display:none !important; } }
-                .header { border-bottom: 4px solid #c084fc; padding-bottom: 20px; margin-bottom: 30px; }
-                h1 { margin: 0; font-size: 1.8rem; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; }
-                .meta { display: flex; justify-content: space-between; margin-top: 15px; color: #475569; font-size: 0.95rem; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;}
-                table { width: 100%; border-collapse: collapse; margin-top: 25px; }
-                th { background: #c084fc; color: #fff; padding: 14px; text-align: left; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.5px; }
-                th.center { text-align: center; }
-            </style></head><body>
-                <button class="no-print" onclick="window.print()" style="padding:12px 24px; background:#c084fc; color:#fff; border:none; border-radius:6px; cursor:pointer; margin-bottom:20px; font-weight:bold;">🖨️ Imprimir Ficha Técnica</button>
-                <div class="header">
-                    <h1>FICHA TÉCNICA DE ENSAMBLAJE</h1>
-                    <div class="meta">
-                        <span><strong>Línea Destino:</strong> ${rec.productoOrigen.toUpperCase()}</span>
-                        <span><strong>Rendimiento Batch:</strong> ${rec.rendimiento} Unidades/Porciones</span>
-                    </div>
-                </div>
-                <div style="font-size: 1.4rem; font-weight: bold; margin-bottom: 15px; display:flex; align-items:center; gap:10px;">
-                    <span style="opacity:0.6; font-size:1rem;">Fórmula Maestra:</span> <span style="color:#c084fc;">${rec.nombre}</span>
-                </div>
-                <table>
-                    <thead><tr><th>Insumo Requerido</th><th class="center" style="width:20%;">Cantidad</th><th class="center" style="width:20%;">Unidad</th></tr></thead>
-                    <tbody>${filas}</tbody>
-                </table>
-                <div style="margin-top:50px; font-size:0.85rem; color:#64748b; text-align:center; border-top:1px dashed #cbd5e1; padding-top:20px;">
-                    SAGRADA DELICIA — Documento Técnico de Uso Interno (Taller)
-                    <br><br><br>   Diseñado por: Marto🧠<br>martowave@gmail.com
-                </div>
-            </body></html>`;
-
-            const win = window.open('', '_blank', 'width=850,height=700');
-            win.document.write(html); win.document.close();
-        }
-
-        function eliminarRecetaEspecifica(id) { if(!confirm("¿Borrar receta?")) return; DB_RECETAS = DB_RECETAS.filter(r=>r.id!==id); localStorage.setItem(LLAVE_RECETAS, JSON.stringify(DB_RECETAS)); renderizarListaRecetasAvanzadas(); }
-        function ejecutarCargaUnificadaReceta(id) {
-            const rec = DB_RECETAS.find(r=>r.id===id); if(!rec) return; const prod = rec.productoOrigen; document.getElementById('selector-producto').value = prod;
-            CATALOGO_ACTIVO[prod].compras_insumos = rec.ingredientes.map(i => ({ id: "it_"+Math.random().toString(36).substring(2,8), label: `${i.nombre} (${i.cantidad/rec.rendimiento} ${i.unidad} /porción)`, valor: Math.round(i.subtotal/rec.rendimiento), determinarEscalamiento: true }));
-            localStorage.setItem(LLAVE_STORAGE, JSON.stringify(CATALOGO_ACTIVO)); recetaActivaNombre = rec.nombre; localStorage.setItem(LLAVE_RECETA_ACTIVA, recetaActivaNombre); navegarA('cotizar');
-        }
-        function exportarRecetasADiscoDuro() { const dl = document.createElement('a'); dl.href = "data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(DB_RECETAS)); dl.download = `sd_recetas_${Date.now()}.json`; document.body.appendChild(dl); dl.click(); dl.remove(); }
-        function dispararImportacionRecetas() { document.getElementById('input-importar-recetas-json').click(); }
-        function importarRecetasJSON(e) { const lector = new FileReader(); lector.onload = ev => { try { DB_RECETAS = JSON.parse(ev.target.result); localStorage.setItem(LLAVE_RECETAS, JSON.stringify(DB_RECETAS)); renderizarListaRecetasAvanzadas(); alert("Importado."); } catch(err){alert("Error JSON");} }; lector.readAsText(e.target.files[0]); e.target.value=''; }
-
-        // ==========================================================================
-        // COTIZADOR Y MATEMÁTICAS
-        // ==========================================================================
-        function cambiarEntorno() { recetaActivaNombre = null; localStorage.removeItem(LLAVE_RECETA_ACTIVA); renderizarFormularioCotizador(); }
-        function renderizarFormularioCotizador() {
-            const prod = document.getElementById('selector-producto').value; const data = CATALOGO_ACTIVO[prod]; let html = '';
-            if (data.usaCantidadInput) html += `<div class="grupo-formulario"><label>🔢 Unidades a Fabricar</label><input type="number" id="cot-cantidad" value="1" min="1" oninput="calcularCostosMecanicos()"></div>`;
-            else { html += `<div class="grupo-formulario"><label>⚖️ Tamaño / Escala <span class="info-guide" data-tooltip="Multiplicador global que escala únicamente los componentes variables de la receta.">?</span></label><select id="cot-escala" onchange="calcularCostosMecanicos()">`; data.escalas.forEach(e => html += `<option value="${e.valor}">${e.label} (x${e.valor})</option>`); html += `</select></div>`; }
-            
-            const bloques = [{ id:'compras_insumos', label:'🍎 Insumos / Contenido' }, { id:'compras_toppers', label:'🎀 Toppers & Accesorios' }, { id:'transporte_compras', label:'🚚 Abastecimiento' }, { id:'preparacion_operacion', label:'🥣 Operación & Mano de Obra' }, { id:'presentacion', label:'📦 Presentación / Empaque' }, { id:'tematica_visual', label:'🎨 Temática Visual' }, { id:'entrega_cliente', label:'🛵 Despacho & Logística' }];
-            bloques.forEach(b => {
-                const items = data[b.id]; if(!items||items.length===0) return;
-                html += `<div class="seccion-bloque"><div class="seccion-titulo">${b.label}</div>`;
-                if(b.id==='compras_insumos' && recetaActivaNombre) html += `<div style="margin-bottom:15px; color:var(--accent-primario); font-weight:bold; font-size:0.8rem;">RECETA CARGADA: ${recetaActivaNombre}</div>`;
-                html += `<div class="grid-inputs">`;
-                items.forEach(it => html += `<div><label>${it.label} <span style="opacity:0.6;font-size:0.65rem;margin-left:4px;">${it.determinarEscalamiento?'(Escalable)':'(Fijo)'}</span></label><input type="number" class="input-dinamico-calculo" data-bloque="${b.id}" data-itemid="${it.id}" data-escalar="${it.determinarEscalamiento}" value="${it.valor}" oninput="calcularCostosMecanicos()"></div>`);
-                html += `</div></div>`;
-            });
-            html += `<div class="grupo-formulario"><label>📝 Notas y Especificaciones Clave</label><textarea id="cot-descripcion" rows="3" placeholder="Mensajes, dedicatorias, colores específicos..."></textarea></div>`;
-            document.getElementById('dinamico-cotizador').innerHTML = html; calcularCostosMecanicos();
-        }
-
-        function calcularCostosMecanicos() {
-            const prod = document.getElementById('selector-producto').value;
-            const escala = document.getElementById('cot-escala'); const cant = document.getElementById('cot-cantidad');
-            let factor = 1.0, texto = "";
-            if(cant) { factor = parseFloat(cant.value)||1.0; texto = factor+" Unidades"; }
-            else if(escala) { factor = parseFloat(escala.value); texto = escala.options[escala.selectedIndex].text; }
-            
-            const margen = parseFloat(document.getElementById('global-margen').value)||0;
-            let fMargen = (margen<100 && margen>=0) ? 1/(1-(margen/100)) : 1;
-            
-            let subs = { 'compras_insumos':0, 'compras_toppers':0, 'transporte_compras':0, 'preparacion_operacion':0, 'presentacion':0, 'tematica_visual':0, 'entrega_cliente':0 };
-            document.querySelectorAll('.input-dinamico-calculo').forEach(i => {
-                const val = parseFloat(i.value)||0; const esc = i.getAttribute('data-escalar')==='true'; const b = i.getAttribute('data-bloque');
-                if(b in subs) subs[b] += esc ? (val*factor) : val;
-            });
-            
-            let costoTotal = 0; for(let k in subs) costoTotal += subs[k];
-            let baseCliente = costoTotal - subs['tematica_visual'] - subs['entrega_cliente'];
-            let baseConMgn = baseCliente * fMargen; let temMgn = subs['tematica_visual'] * fMargen; let entMgn = subs['entrega_cliente'] * fMargen;
-            
-            // Alarma de entrega con tiempo restante
-            let alarmaResumen = '';
-            const fEntResumen = document.getElementById('global-fecha-entrega').value;
-            if (fEntResumen) {
-                const ahoraR = new Date();
-                const pR = fEntResumen.split('-');
-                const horaEntR = document.getElementById('global-hora-entrega')?.value || '23:59';
-                const [hhR, mmR] = horaEntR.split(':').map(Number);
-                const entR = new Date(parseInt(pR[0]), parseInt(pR[1])-1, parseInt(pR[2]), hhR, mmR, 0);
-                const diffR = entR - ahoraR;
-                if (diffR <= 0) {
-                    alarmaResumen = `<div class="bloque-resultado"><span>⏰ Entrega:</span><strong style="color:var(--color-alerta-critica);">VENCIDA</strong></div>`;
-                } else {
-                    const dR = Math.floor(diffR/(1000*60*60*24));
-                    const hR = Math.floor((diffR%(1000*60*60*24))/(1000*60*60));
-                    const mR = Math.floor((diffR%(1000*60*60))/(1000*60));
-                    let colR, iconR;
-                    if(dR < 2)      { colR='var(--color-alerta-critica)'; iconR='🚨'; }
-                    else if(dR <= 4){ colR='var(--color-alerta-media)';   iconR='⚠️'; }
-                    else            { colR='var(--color-alerta-ok)';       iconR='✅'; }
-                    alarmaResumen = `<div class="bloque-resultado"><span>${iconR} Tiempo restante:</span><strong style="color:${colR};">${dR}d ${hR}h ${mR}m</strong></div>`;
-                }
-            }
-
-            let out = `<div class="bloque-resultado"><span>Línea Activa:</span><strong style="text-transform:uppercase;">${prod}</strong></div><div class="bloque-resultado"><span>Volumen:</span><strong>${texto}</strong></div>`;
-            if(recetaActivaNombre) out += `<div class="bloque-resultado"><span>Fórmula:</span><strong style="color:var(--accent-primario);">${recetaActivaNombre}</strong></div>`;
-            out += alarmaResumen;
-            out += `<div class="bloque-resultado" style="border-bottom:2px solid var(--accent-primario); padding-bottom:12px; margin-bottom:10px;"><span>Costo Base con Margen:</span><strong>${formatearMoneda(baseConMgn)}</strong></div>`;
-            if(subs['tematica_visual']>0) out += `<div class="bloque-resultado"><span>Temática:</span><strong>${formatearMoneda(temMgn)}</strong></div>`;
-            if(subs['entrega_cliente']>0) out += `<div class="bloque-resultado"><span>Despacho:</span><strong>${formatearMoneda(entMgn)}</strong></div>`;
-            
-            document.getElementById('salida-resumen-dinamico').innerHTML = out;
-            document.getElementById('totales-calculados').innerHTML = `<div class="bloque-resultado" style="opacity:0.6;"><span>Costo Bruto Taller:</span><strong>${formatearMoneda(costoTotal)}</strong></div><div class="bloque-resultado total-destacado"><span>TOTAL A COBRAR AL CLIENTE</span><strong>${formatearMoneda(costoTotal*fMargen)}</strong></div>`;
-            actualizarContadorEntrega();
-        }
-
-        // ==========================================================================
-        // EXPORTACIÓN PDF DE COTIZACIÓN
-        // ==========================================================================
-        function ejecutarImpresionFlujo(tipo) {
-            const prod = document.getElementById('selector-producto').value;
-            const escalaSelect = document.getElementById('cot-escala');
-            const cantidadInput = document.getElementById('cot-cantidad');
-            const descEle = document.getElementById('cot-descripcion');
-
-            const valCliente = document.getElementById('global-cliente').value || 'Cliente General';
-            const fEmiRaw = document.getElementById('global-fecha').value;
-            const fEntRaw = document.getElementById('global-fecha-entrega').value;
-            const horaEntPDF = document.getElementById('global-hora-entrega')?.value || '';
-            const tipoDoc = document.getElementById('global-tipo-documento').value;
-            const margen = parseFloat(document.getElementById('global-margen').value) || 0;
-            const descripcion = descEle ? descEle.value.trim() : '';
-
-            // Etiqueta de entrega con hora
-            const fEntLabel = fEntRaw ? (horaEntPDF ? `${fEntRaw} — ${horaEntPDF}h` : fEntRaw) : '-';
-
-            let alarmaHTML = '';
-            if (fEntRaw) {
-                const ahoraPDF = new Date();
-                const pPDF = fEntRaw.split('-');
-                const [hhPDF, mmPDF] = (horaEntPDF || '23:59').split(':').map(Number);
-                const entPDF = new Date(parseInt(pPDF[0]), parseInt(pPDF[1])-1, parseInt(pPDF[2]), hhPDF, mmPDF, 0);
-                const diffPDF = entPDF - ahoraPDF;
-                if (diffPDF <= 0) {
-                    alarmaHTML = `<span style="background-color:#fca5a5; color:#7f1d1d; padding:6px 10px; border-radius:4px; font-weight:bold; font-size:0.8rem; border:1px solid #ef4444;">⏰ ENTREGA VENCIDA</span>`;
-                } else {
-                    const dPDF = Math.floor(diffPDF/(1000*60*60*24));
-                    const hPDF = Math.floor((diffPDF%(1000*60*60*24))/(1000*60*60));
-                    const mPDF = Math.floor((diffPDF%(1000*60*60))/(1000*60));
-                    const cuentaStr = `${dPDF}d ${hPDF}h ${mPDF}m restantes`;
-                    if (dPDF < 2)
-                        alarmaHTML = `<span style="background-color:#fca5a5; color:#7f1d1d; padding:6px 10px; border-radius:4px; font-weight:bold; font-size:0.8rem; border:1px solid #ef4444;">🚨 URGENTE — ${cuentaStr}</span>`;
-                    else if (dPDF <= 4)
-                        alarmaHTML = `<span style="background-color:#fef08a; color:#854d0e; padding:6px 10px; border-radius:4px; font-weight:bold; font-size:0.8rem; border:1px solid #eab308;">⚠️ TIEMPO CORTO — ${cuentaStr}</span>`;
-                    else
-                        alarmaHTML = `<span style="background-color:#bbf7d0; color:#14532d; padding:6px 10px; border-radius:4px; font-weight:bold; font-size:0.8rem; border:1px solid #22c55e;">✅ TIEMPO ÓPTIMO — ${cuentaStr}</span>`;
-                }
-            }
-
-            let factor = 1.0, textoEscala = '';
-            if (cantidadInput) { factor = parseFloat(cantidadInput.value) || 1.0; textoEscala = factor + ' Unidades'; } 
-            else if (escalaSelect) { factor = parseFloat(escalaSelect.value); textoEscala = escalaSelect.options[escalaSelect.selectedIndex].text; }
-            let factorMargen = (margen >= 0 && margen < 100) ? 1 / (1 - margen / 100) : 1;
-
-            const categorias = [
-                { id: 'compras_insumos', label: 'Insumos Base Receta / Contenido' }, { id: 'compras_toppers', label: 'Toppers & Accesorios' },
-                { id: 'transporte_compras', label: 'Logística de Abastecimiento' }, { id: 'preparacion_operacion', label: 'Mano de Obra Operativa' },
-                { id: 'presentacion', label: 'Presentación Final / Empaque' }, { id: 'tematica_visual', label: 'Temática Visual / Especial' },
-                { id: 'entrega_cliente', label: 'Despacho Entrega Final' }
-            ];
-
-            const valoresDom = {}; document.querySelectorAll('.input-dinamico-calculo').forEach(inp => { const b = inp.getAttribute('data-bloque'); const i = inp.getAttribute('data-itemid'); if(!valoresDom[b]) valoresDom[b]={}; valoresDom[b][i] = parseFloat(inp.value)||0; });
-            const subtotales = {}, detalles = {};
-            categorias.forEach(cat => {
-                const items = CATALOGO_ACTIVO[prod][cat.id] || []; subtotales[cat.id] = 0; detalles[cat.id] = [];
-                items.forEach(it => { const raw = (valoresDom[cat.id] && valoresDom[cat.id][it.id] !== undefined) ? valoresDom[cat.id][it.id] : it.valor; const calc = it.determinarEscalamiento ? raw * factor : raw; subtotales[cat.id] += calc; if(calc>0) detalles[cat.id].push({label:it.label, valor:calc}); });
-            });
-
-            const costoTotal = Object.values(subtotales).reduce((a, b) => a + b, 0);
-            const baseConMargen = (costoTotal - subtotales['tematica_visual'] - subtotales['entrega_cliente']) * factorMargen;
-            const precioFinal = costoTotal * factorMargen;
-            const esInterno = tipo === 'interno';
-            
-            const colorAcento = esInterno ? '#8b5cf6' : '#0284c7';
-            const tituloDoc = tipoDoc === 'cotizacion' ? 'COTIZACIÓN COMERCIAL' : 'ORDEN DE PRODUCCIÓN';
-
-            let filas = '';
-            if(esInterno) {
-                categorias.forEach(cat => {
-                    if (subtotales[cat.id] === 0) return;
-                    filas += `<tr style="background:#f8fafc;"><td style="padding:10px; font-weight:bold; color:${colorAcento}; text-transform:uppercase; font-size:0.8rem;">${cat.label}</td><td style="padding:10px;text-align:right;font-weight:bold;">${formatearMoneda(subtotales[cat.id])}</td></tr>`;
-                    detalles[cat.id].forEach(it => filas += `<tr><td style="padding:6px 10px 6px 20px;font-size:0.85rem;border-bottom:1px solid #e2e8f0;color:#475569;">↳ ${it.label}</td><td style="padding:6px 10px;text-align:right;font-size:0.85rem;border-bottom:1px solid #e2e8f0;">${formatearMoneda(it.valor)}</td></tr>`);
-                });
-            } else {
-                filas += `<tr><td style="padding:14px;border-bottom:1px solid #e2e8f0; font-size:1rem;">Base de Producción / Diseño</td><td style="padding:14px;text-align:right;font-weight:bold;border-bottom:1px solid #e2e8f0; font-size:1rem;">${formatearMoneda(baseConMargen)}</td></tr>`;
-                if(subtotales['tematica_visual']>0) filas += `<tr><td style="padding:14px;border-bottom:1px solid #e2e8f0;">Desarrollo Temático Visual</td><td style="padding:14px;text-align:right;font-weight:bold;border-bottom:1px solid #e2e8f0;">${formatearMoneda(subtotales['tematica_visual']*factorMargen)}</td></tr>`;
-                if(subtotales['entrega_cliente']>0) filas += `<tr><td style="padding:14px;border-bottom:1px solid #e2e8f0;">Logística de Despacho</td><td style="padding:14px;text-align:right;font-weight:bold;border-bottom:1px solid #e2e8f0;">${formatearMoneda(subtotales['entrega_cliente']*factorMargen)}</td></tr>`;
-            }
-
-            const html = `<!DOCTYPE html>
-<html lang="es"><head><meta charset="UTF-8"><title>${tituloDoc} - ${valCliente}</title>
-<style>
-    body { font-family: 'Helvetica Neue', Arial, sans-serif; padding:40px; max-width:850px; margin:0 auto; color:#0f172a; line-height:1.6; }
-    @media print { .no-print { display:none !important; } @page { margin:10mm; } body{padding:0;} }
-    .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:4px solid ${colorAcento}; padding-bottom:20px; margin-bottom:30px; }
-    .logo-text { font-size:2.2rem; font-weight:900; letter-spacing:-1px; margin:0; color:#0f172a; }
-    .meta-box { text-align:right; font-size:0.9rem; color:#475569; }
-    .doc-title { font-size:1.1rem; text-transform:uppercase; font-weight:bold; color:${colorAcento}; margin-bottom:5px; letter-spacing:2px; }
-    .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; background:#f8fafc; padding:20px; border-radius:8px; margin-bottom:30px; border: 1px solid #e2e8f0; }
-    table { width:100%; border-collapse:collapse; margin-bottom:30px; }
-    th { background:${colorAcento}; color:#fff; padding:12px; text-align:left; font-size:0.9rem; text-transform:uppercase; letter-spacing:1px; }
-    .total-box { display:flex; justify-content:flex-end; gap:30px; align-items:center; background:#0f172a; color:#fff; padding:20px 30px; border-radius:8px; }
-    .notes { border-left: 4px solid ${colorAcento}; padding-left:15px; margin-bottom:30px; font-size:0.9rem; color:#334155; }
-</style></head><body>
-    <button class="no-print" onclick="window.print()" style="padding:12px 24px; background:${colorAcento}; color:#fff; border:none; border-radius:6px; cursor:pointer; margin-bottom:20px; font-weight:bold;">🖨️ Imprimir PDF</button>
-    <div class="header">
-        <div><h1 class="logo-text">SAGRADA DELICIA</h1><div class="doc-title">${esInterno ? 'FICHA INTERNA DE COSTOS' : tituloDoc}</div></div>
-        <div class="meta-box"><strong>Fecha Emisión:</strong> ${fEmiRaw||'-'}<br><strong>Entrega Requerida:</strong> ${fEntLabel}<br><br>${alarmaHTML}</div>
-    </div>
-    <div class="info-grid">
-        <div><span style="font-size:0.75rem; color:#64748b; text-transform:uppercase; font-weight:bold;">Cliente / Destinatario</span><br><strong style="font-size:1.1rem;">${valCliente}</strong></div>
-        <div><span style="font-size:0.75rem; color:#64748b; text-transform:uppercase; font-weight:bold;">Línea de Producción</span><br><strong style="font-size:1.1rem;">${prod.toUpperCase()} - ${textoEscala}</strong> ${recetaActivaNombre ? `<br><span style="font-size:0.8rem; color:${colorAcento};">Fórmula: ${recetaActivaNombre}</span>` : ''}</div>
-    </div>
-    ${descripcion ? `<div class="notes"><strong style="text-transform:uppercase; font-size:0.8rem; color:${colorAcento};">📝 Especificaciones del Pedido</strong><br><span style="white-space:pre-wrap;">${descripcion}</span></div>` : ''}
-    <table><thead><tr><th>Concepto / Detalle</th><th style="text-align:right;">Monto</th></tr></thead><tbody>${filas}</tbody></table>
-    <div class="total-box">
-        <span style="font-size:0.9rem; text-transform:uppercase; opacity:0.8;">${esInterno ? `Costo Bruto (Taller)` : `Total Final a Pagar`}</span>
-        <span style="font-size:2rem; font-weight:bold;">${formatearMoneda(esInterno ? costoTotal : precioFinal)}</span>
-    </div>
-<br><br><br>   Diseñado por: Marto🧠<br>martowave@gmail.com
-</body></html>`;
-            const win = window.open('', '_blank', 'width=900,height=800');
-            win.document.write(html); win.document.close();
-        }
-
-        // ==========================================================================
-        // FUNCIONES ADMINISTRATIVAS Y SNAPSHOTS
-        // ==========================================================================
-        function renderizarSeccionConfiguracionInsumos() {
-            let html = `<div style="display:flex; flex-direction:column; gap:10px;">`;
-            DB_INSUMOS.forEach((ins, i) => html += `<div class="grid-inputs" style="grid-template-columns:2fr 1fr 1fr auto; align-items:center; gap:10px;"><input type="text" value="${ins.nombre}" onchange="DB_INSUMOS[${i}].nombre=this.value"><input type="number" value="${ins.costo}" onchange="DB_INSUMOS[${i}].costo=parseFloat(this.value)||0"><input type="text" value="${ins.unidad}" onchange="DB_INSUMOS[${i}].unidad=this.value"><button class="btn btn-danger" onclick="DB_INSUMOS.splice(${i},1); renderizarSeccionConfiguracionInsumos();">✕</button></div>`);
-            document.getElementById('dinamico-insumos-base').innerHTML = html + `</div>`;
-        }
-        function agregarNuevoInsumoCatalogoDefinicion() { DB_INSUMOS.push({id:'ins_'+Date.now(), nombre:"Nuevo Insumo", costo:0, unidad:"und"}); renderizarSeccionConfiguracionInsumos(); }
-
-        function exportarInsumosADiscoDuro() {
-            const dl = document.createElement('a');
-            dl.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(DB_INSUMOS, null, 2));
-            dl.download = `sd_insumos_${Date.now()}.json`;
-            document.body.appendChild(dl); dl.click(); dl.remove();
-        }
-        function dispararImportacionInsumos() { document.getElementById('input-importar-insumos-json').click(); }
-        function importarInsumosJSON(e) {
-            const lector = new FileReader();
-            lector.onload = ev => {
-                try {
-                    const parsed = JSON.parse(ev.target.result);
-                    if (!Array.isArray(parsed)) return alert("Archivo inválido: se esperaba un array de insumos.");
-                    DB_INSUMOS = parsed;
-                    localStorage.setItem(LLAVE_INSUMOS, JSON.stringify(DB_INSUMOS));
-                    renderizarSeccionConfiguracionInsumos();
-                    alert(`✅ ${DB_INSUMOS.length} insumos importados correctamente.`);
-                } catch(err) { alert("Error al leer el archivo JSON de Insumos."); }
-            };
-            lector.readAsText(e.target.files[0]);
-            e.target.value = '';
-        }
-        function imprimirPDFInsumos() {
-            const fecha = new Date().toLocaleDateString('es-CO', { year:'numeric', month:'long', day:'numeric' });
-            let filas = '';
-            DB_INSUMOS.forEach((ins, i) => {
-                filas += `<tr style="background:${i%2===0?'#f8fafc':'#fff'};">
-                    <td style="padding:12px 14px; border-bottom:1px solid #e2e8f0;">${ins.nombre}</td>
-                    <td style="padding:12px 14px; border-bottom:1px solid #e2e8f0; text-align:right; font-weight:700;">${formatearMoneda(ins.costo)}</td>
-                    <td style="padding:12px 14px; border-bottom:1px solid #e2e8f0; text-align:center; color:#64748b;">/ ${ins.unidad}</td>
-                </tr>`;
-            });
-            const html = `<!DOCTYPE html>
-<html lang="es"><head><meta charset="UTF-8"><title>Catálogo de Insumos — Sagrada Delicia</title>
-<style>
-    body { font-family:'Helvetica Neue', Arial, sans-serif; padding:40px; max-width:800px; margin:0 auto; color:#0f172a; line-height:1.6; }
-    @media print { .no-print { display:none !important; } @page { margin:10mm; } body{padding:0;} }
-    .header { border-bottom:4px solid #f59e0b; padding-bottom:18px; margin-bottom:28px; display:flex; justify-content:space-between; align-items:flex-end; }
-    h1 { margin:0; font-size:1.8rem; font-weight:900; letter-spacing:-0.5px; }
-    .sub { font-size:0.85rem; color:#64748b; margin-top:4px; text-transform:uppercase; letter-spacing:1px; }
-    .meta { text-align:right; font-size:0.85rem; color:#64748b; }
-    table { width:100%; border-collapse:collapse; }
-    th { background:#f59e0b; color:#fff; padding:12px 14px; text-align:left; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.5px; }
-    th.right { text-align:right; }
-    th.center { text-align:center; }
-    .footer { margin-top:30px; font-size:0.8rem; color:#94a3b8; text-align:center; border-top:1px dashed #cbd5e1; padding-top:16px; }
-</style></head><body>
-    <button class="no-print" onclick="window.print()" style="padding:10px 22px; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer; margin-bottom:24px; font-weight:bold;">🖨️ Imprimir PDF</button>
-    <div class="header">
-        <div>
-            <h1>SAGRADA DELICIA</h1>
-            <div class="sub">Catálogo Maestro de Insumos</div>
         </div>
-        <div class="meta"><strong>Fecha:</strong> ${fecha}<br><strong>Total insumos:</strong> ${DB_INSUMOS.length}</div>
     </div>
-    <table>
-        <thead><tr><th>Insumo</th><th class="right">Costo Unitario</th><th class="center">Unidad</th></tr></thead>
-        <tbody>${filas}</tbody>
-    </table>
-    <div class="footer">SAGRADA DELICIA — Documento Interno de Costos de Insumos<br>Diseñado por: Marto 🧠 martowave@gmail.com</div>
-</body></html>`;
-            const win = window.open('', '_blank', 'width=860,height=700');
-            win.document.write(html); win.document.close();
-        }
-        function renderizarFormularioAdministrador() {
-            const prod = document.getElementById('selector-producto').value; const data = CATALOGO_ACTIVO[prod]; let html = '';
-            const blks = [{id:'compras_insumos',label:'Insumos'},{id:'compras_toppers',label:'Toppers'},{id:'transporte_compras',label:'Abastecimiento'},{id:'preparacion_operacion',label:'Operación'},{id:'presentacion',label:'Empaque'},{id:'tematica_visual',label:'Temática'},{id:'entrega_cliente',label:'Despacho'}];
-            blks.forEach(b => {
-                const items = data[b.id]; if(!items) return;
-                html += `<div class="seccion-bloque"><div class="seccion-titulo">${b.label} <button class="btn btn-primario" style="padding:4px 8px; font-size:0.75rem;" onclick="CATALOGO_ACTIVO['${prod}']['${b.id}'].push({id:'it_'+Date.now(), label:'Nuevo', valor:0, determinarEscalamiento:false}); renderizarFormularioAdministrador();">+ Añadir</button></div><div id="campos-${b.id}">`;
-                items.forEach((it, i) => html += `<div class="row-item"><input type="text" value="${it.label}" style="width:60%;" onchange="CATALOGO_ACTIVO['${prod}']['${b.id}'][${i}].label=this.value"><input type="number" value="${it.valor}" style="width:30%;" onchange="CATALOGO_ACTIVO['${prod}']['${b.id}'][${i}].valor=parseFloat(this.value)||0"><button class="btn btn-danger" onclick="CATALOGO_ACTIVO['${prod}']['${b.id}'].splice(${i},1); renderizarFormularioAdministrador();">✕</button></div>`);
-                html += `</div></div>`;
-            });
-            document.getElementById('dinamico-administrador').innerHTML = html;
-        }
-        function guardarConfiguracionGlobalEnLocal() { localStorage.setItem(LLAVE_INSUMOS, JSON.stringify(DB_INSUMOS)); localStorage.setItem(LLAVE_STORAGE, JSON.stringify(CATALOGO_ACTIVO)); alert("Configuraciones guardadas."); }
-        
-        /* ----- ACTUALIZACIÓN: IMPORTACIÓN Y EXPORTACIÓN DE SNAPSHOTS ----- */
-        function actualizarSelectorSnapshots() {
-            const snaps = JSON.parse(localStorage.getItem(LLAVE_SNAPSHOTS)) || [];
-            let html = `<button class="btn" style="border-color:var(--accent-secundario); color:var(--accent-secundario); width:100%; padding:8px; font-size:0.85rem; background:rgba(192, 132, 252, 0.05);" onclick="guardarSnapshotActual()">📸 Capturar Datos Actuales</button>`;
+
+    <footer>
+        <div style="font-size: 24px; color: var(--dorado); margin-bottom: 15px;">✧</div>
+        <p>Cali, Colombia</p>
+        <p style="margin: 10px 0;">Contáctanos vía WhatsApp: <a href="https://wa.me/573183110524" class="footer-wpp">+57 318 3110524</a></p>
+        <p style="margin-top: 20px; font-size: 0.7rem; opacity: 0.4;">© 2024 Sagrada Delicia. Todos los derechos reservados.</p>
+    </footer>
+
+    <!-- Botón flotante WhatsApp -->
+    <a href="https://wa.me/573183110524" class="wpp-float" target="_blank" aria-label="WhatsApp">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/>
+        </svg>
+    </a>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAeAWVCyu_qUSVo11uToAgGKqSYhdU1ABI",
+            authDomain: "sagrada-delicia-central.firebaseapp.com",
+            projectId: "sagrada-delicia-central",
+            storageBucket: "sagrada-delicia-central.firebasestorage.app",
+            messagingSenderId: "474340023357",
+            appId: "1:474340023357:web:bd7a643fa77733eaaede54"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const WHATSAPP_NUM = "573183110524"; 
+
+        // === FUNCIÓN GLOBAL PARA EL ONCLICK ===
+        window.toggleDescripcion = function(id) {
+            const parrafo = document.getElementById(`desc-${id}`);
+            const boton = document.getElementById(`btn-${id}`);
             
-            // Nuevos botones de importación/exportación agregados
-            html += `<div style="display:flex; gap:8px; margin-top:8px;">
-                        <button class="btn btn-secundario" style="flex:1; padding:4px; font-size:0.75rem;" onclick="exportarSnapshotsADiscoDuro()">📥 Exportar Memoria</button>
-                        <button class="btn btn-secundario" style="flex:1; padding:4px; font-size:0.75rem;" onclick="dispararImportacionSnapshots()">📤 Importar Memoria</button>
-                     </div>`;
-
-            if(snaps.length > 0) {
-                let options = '<option value="">-- Cargar Memoria --</option>'; snaps.forEach(s => options += `<option value="${s.id}">${s.nombre}</option>`);
-                html += `<div style="display:grid; grid-template-columns:1fr auto auto; gap:8px; margin-top:12px;"><select id="sel-snap" style="padding:8px; font-size:0.85rem;">${options}</select><button class="btn btn-primario" onclick="cargarSnap()">Cargar</button><button class="btn btn-danger" onclick="eliminarSnap()">✕</button></div>`;
-            }
-            document.getElementById('container-snapshots-ui').innerHTML = html;
-        }
-
-        function exportarSnapshotsADiscoDuro() {
-            const snaps = localStorage.getItem(LLAVE_SNAPSHOTS) || "[]";
-            const dl = document.createElement('a');
-            dl.href = "data:text/json;charset=utf-8," + encodeURIComponent(snaps);
-            dl.download = `sd_snapshots_${Date.now()}.json`;
-            document.body.appendChild(dl);
-            dl.click();
-            dl.remove();
-        }
-
-        function dispararImportacionSnapshots() {
-            document.getElementById('input-importar-json').click();
-        }
-
-        function importarSnapshotsJSON(e) {
-            const lector = new FileReader();
-            lector.onload = ev => {
-                try {
-                    const snapsParseados = JSON.parse(ev.target.result);
-                    localStorage.setItem(LLAVE_SNAPSHOTS, JSON.stringify(snapsParseados));
-                    actualizarSelectorSnapshots();
-                    alert("Snapshots importados exitosamente.");
-                } catch(err) {
-                    alert("Error al leer el archivo JSON de Snapshots.");
-                }
-            };
-            lector.readAsText(e.target.files[0]);
-            e.target.value = ''; // Resetear el input para permitir recargar el mismo archivo si es necesario
-        }
-
-        function guardarSnapshotActual() {
-            const prod = document.getElementById('selector-producto').value; const cliente = document.getElementById('global-cliente').value;
-            let inputs = []; document.querySelectorAll('.input-dinamico-calculo').forEach(i => inputs.push({bId:i.getAttribute('data-bloque'), iId:i.getAttribute('data-itemid'), val:i.value}));
-            const snap = { id: "snap_"+Date.now(), nombre: `${cliente || 'Sin Nombre'} - ${prod.toUpperCase()}`, prod, cliente, inputs, receta: recetaActivaNombre };
-            let snaps = JSON.parse(localStorage.getItem(LLAVE_SNAPSHOTS)) || []; snaps.push(snap); localStorage.setItem(LLAVE_SNAPSHOTS, JSON.stringify(snaps)); actualizarSelectorSnapshots();
-        }
-        function cargarSnap() {
-            const id = document.getElementById('sel-snap').value; const snaps = JSON.parse(localStorage.getItem(LLAVE_SNAPSHOTS)) || []; const snap = snaps.find(s=>s.id===id);
-            if(!snap) return; document.getElementById('selector-producto').value = snap.prod; document.getElementById('global-cliente').value = snap.cliente; recetaActivaNombre = snap.receta;
-            renderizarFormularioCotizador(); snap.inputs.forEach(i => { const input = document.querySelector(`.input-dinamico-calculo[data-bloque="${i.bId}"][data-itemid="${i.iId}"]`); if(input) input.value = i.val; }); calcularCostosMecanicos();
-        }
-        function eliminarSnap() { const id = document.getElementById('sel-snap').value; let snaps = JSON.parse(localStorage.getItem(LLAVE_SNAPSHOTS)) || []; snaps = snaps.filter(s=>s.id!==id); localStorage.setItem(LLAVE_SNAPSHOTS, JSON.stringify(snaps)); actualizarSelectorSnapshots(); }
-        
-        function formatearMoneda(val) { return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val); }
-
-        // ==========================================================================
-        // CONTADOR TIEMPO RESTANTE HASTA ENTREGA
-        // ==========================================================================
-        function actualizarContadorEntrega() {
-            const badge = document.getElementById('badge-tiempo-restante');
-            if (!badge) return;
-            const fEntRaw = document.getElementById('global-fecha-entrega').value;
-            if (!fEntRaw) { badge.innerHTML = ''; return; }
-
-            const ahora = new Date();
-            const partes = fEntRaw.split('-');
-            const horaEnt = document.getElementById('global-hora-entrega')?.value || '23:59';
-            const [hh, mm] = horaEnt.split(':').map(Number);
-            const entrega = new Date(parseInt(partes[0]), parseInt(partes[1])-1, parseInt(partes[2]), hh, mm, 0);
-            const diff = entrega - ahora;
-
-            if (diff <= 0) {
-                badge.innerHTML = `<span class="badge-countdown" style="background:rgba(252,165,165,0.15); color:var(--color-alerta-critica); border:1px solid var(--color-alerta-critica);">⏰ ENTREGA VENCIDA</span>`;
-                return;
-            }
-
-            const dias   = Math.floor(diff / (1000*60*60*24));
-            const horas  = Math.floor((diff % (1000*60*60*24)) / (1000*60*60));
-            const minutos= Math.floor((diff % (1000*60*60)) / (1000*60));
-
-            let color, bg, border, icono, urgencia;
-            if (dias < 2) {
-                color='var(--color-alerta-critica)'; bg='rgba(252,165,165,0.12)'; border='var(--color-alerta-critica)'; icono='🚨'; urgencia='URGENTE';
-            } else if (dias <= 4) {
-                color='var(--color-alerta-media)'; bg='rgba(253,224,71,0.1)'; border='var(--color-alerta-media)'; icono='⚠️'; urgencia='TIEMPO CORTO';
+            if (parrafo.classList.contains('desc-oculta')) {
+                parrafo.classList.remove('desc-oculta');
+                parrafo.classList.add('desc-visible');
+                boton.innerText = "Ocultar detalles ✕";
             } else {
-                color='var(--color-alerta-ok)'; bg='rgba(134,239,172,0.1)'; border='var(--color-alerta-ok)'; icono='✅'; urgencia='TIEMPO ÓPTIMO';
+                parrafo.classList.remove('desc-visible');
+                parrafo.classList.add('desc-oculta');
+                boton.innerText = "Ver detalles del diseño ✦";
             }
+        };
 
-            badge.innerHTML = `<span class="badge-countdown" style="background:${bg}; color:${color}; border:1px solid ${border};">
-                ${icono} ${urgencia} &mdash; <span class="cd-numero">${dias}d ${horas}h ${minutos}m</span> restantes
-            </span>`;
+        function formatearMoneda(val) { 
+            return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val); 
         }
 
-        // Actualizar cada 60 segundos automáticamente
-        setInterval(actualizarContadorEntrega, 60000);
+        function generarLinkWpp(producto, predefinido = '') {
+            let msj = `¡Hola Sagrada Delicia! ✨ Me interesa información sobre: *${producto}*.`;
+            if(predefinido) msj += ` (Vi la oferta especial de ${predefinido}).`;
+            return `https://wa.me/${WHATSAPP_NUM}?text=${encodeURIComponent(msj)}`;
+        }
+
+        async function cargarCatalogo() {
+            try {
+                const snapshot = await getDoc(doc(db, "publico", "menu"));
+                if (!snapshot.exists()) throw new Error("No hay datos");
+
+                const data = snapshot.data();
+                const gridOfertas = document.getElementById('grid-ofertas');
+                const gridMenu = document.getElementById('grid-menu');
+                const gridGaleria = document.getElementById('grid-galeria');
+
+                // 1. EDICIONES ESPECIALES (Con OnClick)
+                if (data.ofertas && data.ofertas.length > 0) {
+                    document.getElementById('wrapper-ofertas').style.display = 'block';
+                    gridOfertas.innerHTML = data.ofertas.map((of, index) => {
+                        const uid = of.id || `oferta-${index}`; // Aseguramos un ID único
+                        return `
+                        <div class="card">
+                            <img src="${of.imagen || 'https://placehold.co/600x400/141414/d4af37?text=Especial'}" class="card-img" alt="${of.nombre}">
+                            <div class="card-body">
+                                <span class="oferta-badge">Edición Limitada</span>
+                                <h3 class="card-title">${of.nombre}</h3>
+                                
+                                <button id="btn-${uid}" class="btn-toggle-desc" onclick="toggleDescripcion('${uid}')">
+                                    Ver detalles del diseño ✦
+                                </button>
+                                
+                                <p id="desc-${uid}" class="card-desc desc-oculta">${of.descripcion}</p>
+                                
+                                <div class="precio-oferta">${formatearMoneda(of.precioVenta)}</div>
+                                <a href="${generarLinkWpp(of.nombre, formatearMoneda(of.precioVenta))}" target="_blank" class="btn-pedir">Reservar Ahora</a>
+                            </div>
+                        </div>
+                        `;
+                    }).join('');
+                }
+
+                // 2. MENÚ CLÁSICO (Sin precios)
+                if (data.menu) {
+                    let htmlMenu = '';
+                    Object.values(data.menu).forEach(prod => {
+                        htmlMenu += `
+                            <div class="card">
+                                <img src="${prod.imagen || 'https://placehold.co/600x400/141414/a8a29e?text='+prod.nombre}" class="card-img" alt="${prod.nombre}">
+                                <div class="card-body">
+                                    <h3 class="card-title">${prod.nombre.replace(/_/g, ' ')}</h3>
+                                    <p class="card-desc-menu">${prod.descripcion || 'Creación artesanal personalizada, diseño de autor exclusivo.'}</p>
+                                    <a href="${generarLinkWpp(prod.nombre.replace(/_/g, ' '))}" target="_blank" class="btn-pedir">Cotizar Personalizado</a>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    gridMenu.innerHTML = htmlMenu;
+                }
+
+                // 3. GALERÍA / OBRAS
+                if (data.galeria && data.galeria.length > 0) {
+                    document.getElementById('wrapper-galeria').style.display = 'block';
+                    gridGaleria.innerHTML = data.galeria.map(item => `
+                        <div class="galeria-item">
+                            <img src="${item.imagen || 'https://placehold.co/400x400/141414/333333'}" loading="lazy" alt="${item.nombre}">
+                            <div class="galeria-overlay">${item.nombre}</div>
+                        </div>
+                    `).join('');
+                }
+
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('contenido-catalogo').style.display = 'block';
+
+            } catch (error) {
+                console.error(error);
+                document.getElementById('loader').innerHTML = 'Nuestro menú está siendo actualizado. Vuelve en unos minutos.';
+            }
+        }
+
+        window.onload = cargarCatalogo;
     </script>
+    <p style="margin-top: 20px; font-size: 0.7rem; opacity: 0.3;">Diseñado por: Marto 🧠<br>martowave@gmail.com</p>
+
 </body>
 </html>
