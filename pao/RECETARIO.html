@@ -1,0 +1,2365 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sagrada Delicia — Recetario V1.9</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍳</text></svg>">
+
+    <!-- ╔══════════════════════════════════════════════════════════════╗
+         ║  FIREBASE MODULE — RECETARIO                               ║
+         ║  onSnapshot  → escucha cambios en tiempo real              ║
+         ║  updateDoc   → escribe SOLO DB_RECETAS o                   ║
+         ║                DB_CATEGORIAS_RECETAS (anti-pisado)         ║
+         ║  También lee DB_INSUMOS y CATALOGO_ACTIVO (solo lectura)   ║
+         ╚══════════════════════════════════════════════════════════════╝ -->
+    <script type="module">
+        import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, updateDoc, onSnapshot }
+            from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey:            "AIzaSyAeAWVCyu_qUSVo11uToAgGKqSYhdU1ABI",
+            authDomain:        "sagrada-delicia-central.firebaseapp.com",
+            projectId:         "sagrada-delicia-central",
+            storageBucket:     "sagrada-delicia-central.firebasestorage.app",
+            messagingSenderId: "474340023357",
+            appId:             "1:474340023357:web:bd7a643fa77733eaaede54"
+        };
+
+        const app          = initializeApp(firebaseConfig);
+        const db           = getFirestore(app);
+        const docTallerRef = doc(db, "operaciones", "taller");
+
+        let unsubscribe = null;
+
+        /* ── UI helpers ── */
+        function setBadge(estado, texto) {
+            const b = document.getElementById('badge-cloud-sync');
+            if (!b) return;
+            b.className = 'sync-' + estado;
+            b.innerHTML = texto;
+        }
+        function horaCorta(iso) {
+            try {
+                const d = new Date(iso);
+                return d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})
+                    + ' · ' + d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit'});
+            } catch(e){ return ''; }
+        }
+
+        window._mostrarToast = function(msg, tipo = 'info', dur = 3500) {
+            const cont = document.getElementById('toast-cloud');
+            if (!cont) return;
+            const el = document.createElement('div');
+            el.className = `toast-item t-${tipo}`;
+            el.textContent = msg;
+            cont.appendChild(el);
+            setTimeout(() => { el.classList.add('saliendo'); setTimeout(() => el.remove(), 400); }, dur);
+        };
+
+        function syncActivo() { return localStorage.getItem('sd_sync_activo') !== 'false'; }
+
+        /* ── LISTENER EN TIEMPO REAL ── */
+        function iniciarListenerTiempoReal() {
+            if (unsubscribe) return;
+            if (!syncActivo()) return;
+            setBadge('working', '<span class="dot-anim">☁️</span> Conectando...');
+
+            unsubscribe = onSnapshot(docTallerRef, (snap) => {
+                if (!snap.exists()) { setBadge('pending', '⚠️ Sin datos en nube'); return; }
+                const data = snap.data();
+                const ts   = data.ultimaActualizacion || new Date().toISOString();
+                setBadge('ok', '✅ En vivo · ' + horaCorta(ts));
+
+                /* ── Actualizar INSUMOS (solo lectura en este módulo) ── */
+                if (data.DB_INSUMOS && Array.isArray(data.DB_INSUMOS)) {
+                    if (typeof window._onInsumosUpdate === 'function')
+                        window._onInsumosUpdate(data.DB_INSUMOS);
+                }
+
+                /* ── Actualizar CATALOGO_ACTIVO (solo lectura) ── */
+                if (data.CATALOGO_ACTIVO && typeof data.CATALOGO_ACTIVO === 'object') {
+                    if (typeof window._onCatalogoUpdate === 'function')
+                        window._onCatalogoUpdate(data.CATALOGO_ACTIVO);
+                }
+
+                /* ── Actualizar RECETAS (fuente de verdad) ── */
+                if (data.DB_RECETAS && Array.isArray(data.DB_RECETAS)) {
+                    if (typeof window._onRecetasUpdate === 'function')
+                        window._onRecetasUpdate(data.DB_RECETAS, ts);
+                }
+
+                /* ── V1.3: Actualizar CATEGORIAS_RECETAS (fuente de verdad) ── */
+                if (data.DB_CATEGORIAS_RECETAS && Array.isArray(data.DB_CATEGORIAS_RECETAS)) {
+                    if (typeof window._onCategoriasUpdate === 'function')
+                        window._onCategoriasUpdate(data.DB_CATEGORIAS_RECETAS);
+                }
+            }, (err) => {
+                console.error('onSnapshot error:', err);
+                setBadge('error', '❌ Error listener');
+                window._mostrarToast('❌ Error en listener Firebase', 'error', 5000);
+            });
+        }
+
+        function detenerListener() {
+            if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+        }
+
+        /* ── GUARDAR → Cloud (updateDoc solo DB_RECETAS — anti-pisado) ── */
+        window.guardarRecetasEnCloud = async function(recetas) {
+            if (!syncActivo()) { setBadge('offline','🔕 Sync desactivado'); return; }
+            if (!navigator.onLine) {
+                window._mostrarToast('💾 Local OK · Sin conexión cloud','warn');
+                setBadge('offline','🔌 Sin red');
+                return;
+            }
+            setBadge('working','<span class="dot-anim">☁️</span> Guardando...');
+            try {
+                await updateDoc(docTallerRef, {
+                    DB_RECETAS:           recetas,
+                    ultimaActualizacion:  new Date().toISOString()
+                });
+                window._mostrarToast('✅ Recetario sincronizado con la nube','ok');
+            } catch(err) {
+                console.error('updateDoc error:', err);
+                setBadge('error','❌ Error sync');
+                window._mostrarToast('❌ No se pudo guardar en la nube','error',5000);
+            }
+        };
+
+        /* ── V1.3: GUARDAR CATEGORÍAS → Cloud (updateDoc solo DB_CATEGORIAS_RECETAS) ── */
+        window.guardarCategoriasEnCloud = async function(categorias) {
+            if (!syncActivo()) { setBadge('offline','🔕 Sync desactivado'); return; }
+            if (!navigator.onLine) {
+                window._mostrarToast('💾 Categorías guardadas local · Sin conexión cloud','warn');
+                setBadge('offline','🔌 Sin red');
+                return;
+            }
+            setBadge('working','<span class="dot-anim">☁️</span> Guardando categorías...');
+            try {
+                await updateDoc(docTallerRef, {
+                    DB_CATEGORIAS_RECETAS: categorias,
+                    ultimaActualizacion:   new Date().toISOString()
+                });
+                window._mostrarToast('✅ Categorías sincronizadas con la nube','ok');
+            } catch(err) {
+                console.error('updateDoc categorias error:', err);
+                setBadge('error','❌ Error sync');
+                window._mostrarToast('❌ No se pudo guardar categorías en la nube','error',5000);
+            }
+        };
+
+        /* ── SYNC MANUAL ── */
+        window.forzarSyncManual = function() {
+            if (!navigator.onLine) { window._mostrarToast('⚠️ Sin conexión','warn'); return; }
+            detenerListener();
+            setTimeout(iniciarListenerTiempoReal, 300);
+            window._mostrarToast('☁️ Reconectando listener en tiempo real...','info');
+        };
+
+        window._iniciarListener = iniciarListenerTiempoReal;
+        window._detenerListener = detenerListener;
+
+        window.addEventListener('online',  () => {
+            if (!syncActivo()) return;
+            window._mostrarToast('🌐 Conexión restaurada','info');
+            if (!unsubscribe) iniciarListenerTiempoReal();
+        });
+        window.addEventListener('offline', () => {
+            setBadge('offline','🔌 Sin red — modo local');
+            window._mostrarToast('⚠️ Sin conexión','warn',5000);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (navigator.onLine && syncActivo()) iniciarListenerTiempoReal();
+            else if (!navigator.onLine) setBadge('offline','🔌 Sin red — modo local');
+        });
+    </script>
+
+    <style>
+        /* ══════════════════════════════════════════
+           PALETA NOCTURNA — idéntica a INSUMOS V3
+           ══════════════════════════════════════════ */
+        :root {
+            --bg-principal:      #0b111e;
+            --bg-card:           #151f32;
+            --bg-input:          #1e293b;
+            --border-color:      #2e3d56;
+            --color-texto:       #cbd5e1;
+            --color-titulos:     #f8fafc;
+            --color-subtitulos:  #94a3b8;
+            --accent-primario:   #7dd3fc;
+            --accent-secundario: #c084fc;
+            --accent-admin:      #fde047;
+            --accent-hover:      #38bdf8;
+            --accent-success:    #22c55e;
+            --color-alerta-critica: #fca5a5;
+            --color-alerta-media:   #fde047;
+            --color-alerta-ok:      #86efac;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: var(--bg-principal);
+            color: var(--color-texto);
+            padding: 28px 20px;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; line-height: 1.5;
+        }
+
+        /* ── Header ── */
+        header {
+            width: 100%; max-width: 1280px;
+            margin-bottom: 28px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 18px;
+            display: flex; flex-direction: column; gap: 14px;
+        }
+        .header-top {
+            display: flex; justify-content: space-between;
+            align-items: center; flex-wrap: wrap; gap: 10px;
+        }
+        .header-brand { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        h1 {
+            color: var(--color-titulos); font-size: 1.4rem;
+            font-weight: 700; letter-spacing: 1.5px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .chip-modulo {
+            background: rgba(125,211,252,0.12); color: var(--accent-primario);
+            border: 1px solid rgba(125,211,252,0.3); border-radius: 20px;
+            font-size: 0.7rem; font-weight: 700; padding: 3px 10px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+
+        /* ── Botones ── */
+        .btn {
+            padding: 9px 16px; border-radius: 8px; font-size: 0.83rem;
+            font-weight: 600; cursor: pointer; border: 1px solid transparent;
+            transition: all 0.22s ease;
+            display: inline-flex; align-items: center; gap: 6px;
+            justify-content: center; text-decoration: none; background: none;
+        }
+        .btn-primario  { background: var(--accent-primario); color: #0b111e; border-color: var(--accent-primario); }
+        .btn-primario:hover { background: var(--accent-hover); box-shadow: 0 0 14px rgba(125,211,252,0.3); transform: translateY(-1px); }
+        .btn-secundario { background: rgba(192,132,252,0.12); color: var(--accent-secundario); border: 1px solid var(--accent-secundario); }
+        .btn-secundario:hover { background: var(--accent-secundario); color: #0b111e; transform: translateY(-1px); }
+        .btn-admin { background: transparent; color: var(--accent-admin); border: 1px solid var(--accent-admin); }
+        .btn-admin:hover { background: var(--accent-admin); color: #0b111e; }
+        .btn-success { background: rgba(34,197,94,0.12); color: var(--accent-success); border: 1px solid var(--accent-success); }
+        .btn-success:hover { background: var(--accent-success); color: #0b111e; }
+        .btn-danger { background: rgba(252,165,165,0.08); color: var(--color-alerta-critica); border: 1px solid var(--color-alerta-critica); padding: 5px 10px; font-size: 0.75rem; }
+        .btn-danger:hover { background: var(--color-alerta-critica); color: #0b111e; }
+
+        /* ── Navegación ecosistema ── */
+        .nav-ecosistema { display: flex; gap: 6px; flex-wrap: wrap; }
+        .btn-nav {
+            background: rgba(30,41,59,0.5); color: var(--color-subtitulos);
+            border: 1px solid var(--border-color); padding: 7px 11px; font-size: 0.76rem;
+        }
+        .btn-nav:hover { background: rgba(125,211,252,0.08); color: var(--color-titulos); border-color: rgba(125,211,252,0.3); }
+        .btn-nav.activo { background: rgba(125,211,252,0.1); color: var(--accent-primario); border-color: var(--accent-primario); }
+
+        /* ── Controles sync ── */
+        .ctrl-sync { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+        /* ── Layout principal ── */
+        .contenedor { width: 100%; max-width: 1280px; display: flex; flex-direction: column; gap: 20px; }
+
+        /* ── Panel ── */
+        .panel {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 26px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+            animation: fadeIn 0.35s ease-out;
+        }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+        h2 {
+            color: var(--color-titulos); font-size: 1.1rem; font-weight: 600;
+            margin-bottom: 20px; border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+        }
+
+        /* ── Stats bar ── */
+        .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; }
+        .stat-card {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 16px 18px;
+            display: flex; flex-direction: column; gap: 4px;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+        .stat-card:hover { border-color: var(--accent-primario); transform: translateY(-2px); }
+        .stat-valor { font-size: 1.35rem; font-weight: 800; color: var(--color-titulos); line-height: 1; }
+        .stat-label { font-size: 0.67rem; color: var(--color-subtitulos); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+        /* ── Toolbar ── */
+        .toolbar {
+            display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+            background: rgba(30,41,59,0.35); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 13px 15px; margin-bottom: 16px;
+        }
+        .toolbar-buscador {
+            flex: 1; min-width: 200px;
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 9px 13px; border-radius: 8px;
+            font-size: 0.87rem; outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .toolbar-buscador:focus { border-color: var(--accent-primario); box-shadow: 0 0 0 3px rgba(125,211,252,0.1); }
+        .toolbar-select {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 9px 12px; border-radius: 8px;
+            font-size: 0.82rem; outline: none; min-width: 180px;
+        }
+        .toolbar-select:focus { border-color: var(--accent-primario); }
+        .toolbar-acciones { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+
+        /* ── Formulario campos ── */
+        .form-grid { display: grid; grid-template-columns: 1.2fr 1fr 0.8fr; gap: 15px; margin-bottom: 20px; }
+        .form-grid-4 { display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.8fr; gap: 15px; margin-bottom: 20px; }
+        .grupo-formulario { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+        label {
+            font-size: 0.73rem; color: var(--color-subtitulos);
+            font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        select, input[type="text"], input[type="number"], textarea {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 10px 12px; border-radius: 8px;
+            font-size: 0.87rem; outline: none; transition: all 0.2s ease; width: 100%;
+        }
+        select:focus, input:focus, textarea:focus {
+            border-color: var(--accent-primario); box-shadow: 0 0 0 3px rgba(125,211,252,0.1);
+        }
+        textarea { resize: vertical; font-family: inherit; }
+
+        /* ── Bloque ingredientes ── */
+        .seccion-bloque {
+            background: rgba(30,41,59,0.3); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 18px; margin-bottom: 16px;
+            transition: border-color 0.2s;
+        }
+        .seccion-bloque:hover { border-color: rgba(125,211,252,0.25); }
+        .seccion-titulo {
+            font-size: 0.8rem; color: var(--accent-primario); font-weight: 700;
+            text-transform: uppercase; margin-bottom: 15px;
+            display: flex; justify-content: space-between; align-items: center; letter-spacing: 0.5px;
+        }
+
+        /* ── Tabla ingredientes ── */
+        .tabla-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border-color); }
+        table.tabla-ing { width: 100%; border-collapse: collapse; min-width: 620px; }
+        table.tabla-ing thead tr { background: rgba(30,41,59,0.7); }
+        table.tabla-ing th {
+            padding: 10px 12px; font-size: 0.7rem; color: var(--color-subtitulos);
+            text-transform: uppercase; letter-spacing: 0.5px;
+            text-align: left; border-bottom: 2px solid var(--border-color); white-space: nowrap;
+        }
+        table.tabla-ing td { padding: 8px 10px; border-bottom: 1px solid var(--border-color); font-size: 0.86rem; vertical-align: middle; }
+        table.tabla-ing tbody tr:hover td { background: rgba(125,211,252,0.03); }
+        table.tabla-ing tbody tr:last-child td { border-bottom: none; }
+        .td-sel-ing {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 7px 9px; border-radius: 6px;
+            font-size: 0.82rem; width: 100%;
+        }
+        .td-inp-ing {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 7px 9px; border-radius: 6px;
+            font-size: 0.84rem; width: 100%;
+        }
+        .td-inp-ing:focus, .td-sel-ing:focus { border-color: var(--accent-primario); outline: none; }
+        .td-readonly {
+            background: transparent; border: none; color: var(--color-subtitulos);
+            font-size: 0.82rem; font-weight: 600; padding: 0;
+        }
+
+        /* ── Totales receta ── */
+        .totales-receta {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-top: 20px; border-top: 1px dashed var(--border-color); padding-top: 18px;
+            flex-wrap: wrap; gap: 16px;
+        }
+        .total-item { display: flex; flex-direction: column; gap: 3px; }
+        .total-label { font-size: 0.7rem; color: var(--color-subtitulos); text-transform: uppercase; letter-spacing: 0.5px; }
+        .total-valor { font-size: 1.3rem; font-weight: 800; }
+
+        /* ── Imagen preview ── */
+        .img-upload-row {
+            display: flex; align-items: center; gap: 16px;
+            padding: 14px; background: rgba(0,0,0,0.15);
+            border-radius: 8px; border: 1px solid var(--border-color);
+            margin-bottom: 18px; flex-wrap: wrap;
+        }
+        #rec-imagen-preview {
+            display: none; width: 80px; height: 80px;
+            object-fit: cover; border-radius: 8px;
+            border: 1px solid var(--border-color); flex-shrink: 0;
+        }
+
+        /* ── Tarjetas biblioteca ── */
+        .tarjeta-receta {
+            background: rgba(30,41,59,0.3); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 16px 18px;
+            display: flex; justify-content: space-between; align-items: flex-start;
+            gap: 16px; transition: transform 0.2s, border-color 0.2s;
+        }
+        .tarjeta-receta:hover { transform: translateX(4px); border-color: var(--accent-secundario); }
+        .tarjeta-receta-img {
+            width: 72px; height: 72px; object-fit: cover;
+            border-radius: 8px; border: 1px solid var(--border-color); flex-shrink: 0;
+        }
+        .tarjeta-receta-info { flex: 1; }
+        .tarjeta-receta-badge {
+            display: inline-flex; align-items: center;
+            padding: 3px 8px; border-radius: 12px; font-size: 0.66rem;
+            font-weight: 700; letter-spacing: 0.3px; white-space: nowrap;
+            background: rgba(125,211,252,0.1); color: var(--accent-primario);
+            border: 1px solid var(--border-color); text-transform: uppercase;
+        }
+        .tarjeta-receta-nombre { font-size: 0.95rem; font-weight: 700; color: var(--color-titulos); margin-bottom: 4px; }
+        .tarjeta-receta-meta { font-size: 0.8rem; color: var(--color-subtitulos); }
+        .tarjeta-receta-acciones {
+            display: flex; flex-direction: column; gap: 6px; min-width: 130px;
+        }
+
+        /* ── Pie tabla ── */
+        .tabla-footer {
+            margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color);
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 10px;
+        }
+        .contador-vis { font-size: 0.77rem; color: var(--color-subtitulos); }
+
+        /* ── Autocomplete custom de insumos — V1.6 ── */
+        .ac-wrap {
+            position: relative; width: 100%;
+        }
+        .ac-input {
+            width: 100%;
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: #22c55e; padding: 7px 10px; border-radius: 8px;
+            font-size: 0.83rem; outline: none; font-weight: 600;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .ac-input::placeholder { color: rgba(34,197,94,0.4); }
+        .ac-input:focus { border-color: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,0.12); }
+        .ac-input.seleccionado { color: var(--color-titulos); border-color: var(--accent-success); }
+        .ac-lista {
+            display: none;
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            background: var(--bg-card); border: 1px solid #22c55e;
+            border-radius: 9px; z-index: 9000;
+            max-height: 220px; overflow-y: auto;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+        }
+        .ac-lista.abierta { display: block; }
+        .ac-item {
+            padding: 8px 12px; font-size: 0.82rem; cursor: pointer;
+            color: var(--color-texto); border-bottom: 1px solid var(--border-color);
+            transition: background 0.12s;
+        }
+        .ac-item:last-child { border-bottom: none; }
+        .ac-item:hover, .ac-item.activo { background: rgba(34,197,94,0.12); color: var(--color-titulos); }
+        .ac-item mark { background: none; color: #22c55e; font-weight: 700; }
+        .ac-vacio {
+            padding: 10px 12px; font-size: 0.8rem;
+            color: var(--color-subtitulos); font-style: italic;
+        }
+
+        /* ── Paginación biblioteca ── */
+        .paginacion {
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            justify-content: center; margin-top: 16px; padding-top: 14px;
+            border-top: 1px solid var(--border-color);
+        }
+        .paginacion .btn-pag {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 7px 14px; border-radius: 8px;
+            font-size: 0.8rem; font-weight: 600; cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .paginacion .btn-pag:hover:not(:disabled) { border-color: var(--accent-primario); color: var(--accent-primario); background: rgba(125,211,252,0.07); }
+        .paginacion .btn-pag:disabled { opacity: 0.35; cursor: not-allowed; }
+        .paginacion .pag-info { font-size: 0.78rem; color: var(--color-subtitulos); padding: 0 6px; }
+        .paginacion .btn-pag.activa { background: rgba(125,211,252,0.12); border-color: var(--accent-primario); color: var(--accent-primario); }
+
+        /* ── Estado vacío ── */
+        .estado-vacio { text-align: center; padding: 50px 20px; color: var(--color-subtitulos); font-style: italic; }
+        .estado-vacio .ico { font-size: 2.2rem; display: block; margin-bottom: 10px; }
+
+        /* ── Modal receta detalle ── */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.78);
+            z-index: 1000; display: flex; align-items: center; justify-content: center;
+            padding: 20px; animation: fadeIn 0.2s;
+        }
+        .modal-box {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 14px; padding: 28px; max-width: 620px; width: 100%;
+            max-height: 85vh; overflow-y: auto;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+        }
+        .modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border-color);
+        }
+        .modal-header h3 { color: var(--color-titulos); font-size: 1rem; }
+
+        /* ── Badge cloud sync ── */
+        #badge-cloud-sync {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 12px; border-radius: 20px; font-size: 0.71rem;
+            font-weight: 700; letter-spacing: 0.3px; border: 1px solid;
+            transition: all 0.4s ease; cursor: default; white-space: nowrap;
+        }
+        #badge-cloud-sync.sync-ok      { color: var(--accent-success);       border-color: var(--accent-success);       background: rgba(34,197,94,0.08); }
+        #badge-cloud-sync.sync-pending { color: var(--accent-admin);          border-color: var(--accent-admin);          background: rgba(253,224,71,0.08); }
+        #badge-cloud-sync.sync-error   { color: var(--color-alerta-critica);  border-color: var(--color-alerta-critica);  background: rgba(252,165,165,0.08); }
+        #badge-cloud-sync.sync-offline { color: var(--color-subtitulos);      border-color: var(--border-color);          background: rgba(148,163,184,0.08); }
+        #badge-cloud-sync.sync-working { color: var(--accent-primario);       border-color: var(--accent-primario);       background: rgba(125,211,252,0.08); }
+        @keyframes pulse-sync { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        #badge-cloud-sync.sync-working .dot-anim { animation: pulse-sync 1s infinite; }
+
+        /* ── Toast ── */
+        #toast-cloud {
+            position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+            display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+        }
+        .toast-item {
+            padding: 10px 16px; border-radius: 10px; font-size: 0.81rem;
+            font-weight: 600; border: 1px solid; backdrop-filter: blur(8px);
+            animation: toast-in 0.28s ease; pointer-events: none;
+            max-width: 320px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+        .toast-item.t-ok    { color:var(--accent-success);       border-color:var(--accent-success);       background:rgba(10,25,15,0.94); }
+        .toast-item.t-warn  { color:var(--accent-admin);         border-color:var(--accent-admin);         background:rgba(22,18,4,0.94); }
+        .toast-item.t-error { color:var(--color-alerta-critica); border-color:var(--color-alerta-critica); background:rgba(28,8,8,0.94); }
+        .toast-item.t-info  { color:var(--accent-primario);      border-color:var(--accent-primario);      background:rgba(4,16,28,0.94); }
+        .toast-item.saliendo { animation: toast-out 0.4s ease forwards; }
+        @keyframes toast-in  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes toast-out { from{opacity:1;transform:translateY(0)} to{opacity:0;transform:translateY(10px)} }
+
+        /* ── Pill EN VIVO ── */
+        .pill-live {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 0.67rem; font-weight: 700; color: var(--accent-success);
+            background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25);
+            border-radius: 20px; padding: 3px 9px;
+        }
+        .pill-live::before { content:'●'; animation: pulse-sync 1.4s infinite; }
+
+        /* ── Fila nueva ── */
+        .fila-nueva { animation: pulso-fila 1.2s ease; }
+        @keyframes pulso-fila { 0%,100%{outline:none;} 30%,70%{outline:2px solid var(--accent-primario);outline-offset:1px;} }
+
+        /* ── Panel collapsible ── */
+        .form-toggle-h2 {
+            cursor: pointer; user-select: none;
+        }
+        .form-toggle-h2:hover .form-toggle-arrow { color: var(--accent-hover); }
+        .form-toggle-arrow {
+            font-size: 0.72rem; transition: transform 0.25s;
+            color: var(--accent-primario); margin-left: 6px;
+        }
+        .form-toggle-arrow.abierto { transform: rotate(180deg); }
+        .form-panel-body { display: none; }
+        .form-panel-body.visible {
+            display: block;
+            animation: slideDown 0.25s ease;
+        }
+        @keyframes slideDown {
+            from { opacity:0; transform:translateY(-6px); }
+            to   { opacity:1; transform:translateY(0); }
+        }
+
+        /* ══════════════════════════════════════════
+           V1.3 — GESTOR DE CATEGORÍAS
+           ══════════════════════════════════════════ */
+        .gestor-cats-grid {
+            display: flex; flex-wrap: wrap; gap: 8px;
+            margin-bottom: 18px; min-height: 36px; align-items: flex-start;
+        }
+        .gestor-cat-item {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: rgba(30,41,59,0.5); border: 1px solid var(--border-color);
+            border-radius: 20px; padding: 6px 12px; font-size: 0.78rem;
+            transition: border-color 0.2s;
+        }
+        .gestor-cat-nombre { color: var(--color-titulos); font-weight: 600; }
+        .gestor-cat-count  { font-size: 0.67rem; color: var(--color-subtitulos); }
+        .gestor-cat-dot    { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .gestor-cat-del {
+            background: none; border: none; cursor: pointer;
+            color: var(--color-alerta-critica); font-size: 0.72rem;
+            padding: 0 2px; line-height: 1; opacity: 0.55;
+            transition: opacity 0.15s;
+        }
+        .gestor-cat-del:hover { opacity: 1; }
+        .gestor-nueva-fila {
+            display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;
+            border-top: 1px solid var(--border-color); padding-top: 16px; margin-top: 4px;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 900px) {
+            .stats-bar { grid-template-columns: repeat(2,1fr); }
+            .form-grid  { grid-template-columns: 1fr 1fr; }
+            .form-grid-4 { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 700px) {
+            body { padding: 12px 10px; }
+            h1 { font-size: 1.1rem; }
+            .nav-ecosistema { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+            .btn-nav { padding: 8px 6px; font-size: 0.72rem; justify-content: center; }
+            .toolbar { flex-direction: column; }
+            .toolbar-buscador { width: 100%; }
+            .toolbar-acciones { width: 100%; }
+            .form-grid { grid-template-columns: 1fr; }
+            .form-grid-4 { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 480px) {
+            .nav-ecosistema { grid-template-columns: 1fr 1fr; }
+            .stats-bar { grid-template-columns: 1fr 1fr; }
+            .tarjeta-receta { flex-direction: column; }
+            .tarjeta-receta-acciones { flex-direction: row; flex-wrap: wrap; min-width: unset; }
+        }
+
+        /* ══ TUTORIAL SYSTEM ══ */
+        #tutorial-overlay { position:fixed; inset:0; z-index:9990; background:rgba(5,12,28,0.86); pointer-events:all; transition:opacity 0.3s; }
+        #tutorial-overlay.oculto { display:none !important; }
+        #tutorial-spotlight-ring { position:fixed; z-index:9995; border-radius:12px; box-shadow:0 0 0 3px var(--accent-primario),0 0 0 7px rgba(125,211,252,0.18),0 0 28px rgba(125,211,252,0.12); pointer-events:none; transition:top 0.35s cubic-bezier(0.4,0,0.2,1),left 0.35s cubic-bezier(0.4,0,0.2,1),width 0.35s cubic-bezier(0.4,0,0.2,1),height 0.35s cubic-bezier(0.4,0,0.2,1); }
+        #tutorial-card { position:fixed; z-index:10000; background:var(--bg-card); border:1px solid var(--accent-primario); border-radius:14px; padding:22px 22px 16px; width:316px; box-shadow:0 20px 60px rgba(0,0,0,0.75),0 0 0 1px rgba(125,211,252,0.07); }
+        #tutorial-card.animando { animation:tut-fade 0.26s ease; }
+        @keyframes tut-fade { from{opacity:0;transform:translateY(7px)} to{opacity:1;transform:translateY(0)} }
+        .tut-progress-bar { display:flex; gap:3px; margin-bottom:16px; }
+        .tut-pip { flex:1; height:3px; border-radius:3px; background:var(--border-color); transition:background 0.3s; }
+        .tut-pip.activo { background:var(--accent-primario); }
+        .tut-pip.hecho  { background:rgba(125,211,252,0.32); }
+        #tutorial-emoji { font-size:1.55rem; margin-bottom:8px; line-height:1; }
+        #tutorial-titulo { color:var(--color-titulos); font-size:0.98rem; font-weight:700; margin-bottom:9px; }
+        #tutorial-texto { color:var(--color-texto); font-size:0.81rem; line-height:1.65; margin-bottom:16px; }
+        .tut-nav-row { display:flex; gap:6px; align-items:center; justify-content:space-between; }
+        .tut-step-label { font-size:0.67rem; color:var(--color-subtitulos); font-weight:600; white-space:nowrap; }
+        .btn-tut-ant { background:none; border:1px solid var(--border-color); color:var(--color-subtitulos); padding:7px 11px; border-radius:8px; font-size:0.76rem; cursor:pointer; transition:all 0.18s; }
+        .btn-tut-ant:hover { border-color:var(--accent-primario); color:var(--accent-primario); }
+        .btn-tut-sig { background:var(--accent-primario); color:#0b111e; border:none; padding:7px 14px; border-radius:8px; font-size:0.76rem; font-weight:700; cursor:pointer; transition:all 0.18s; white-space:nowrap; }
+        .btn-tut-sig:hover { background:var(--accent-hover); transform:translateY(-1px); }
+        .btn-tut-saltar { background:none; border:none; color:var(--color-subtitulos); font-size:0.7rem; cursor:pointer; padding:4px 5px; transition:color 0.18s; white-space:nowrap; }
+        .btn-tut-saltar:hover { color:var(--color-alerta-critica); }
+        .btn-guia { background:rgba(125,211,252,0.07); color:var(--accent-primario); border:1px solid rgba(125,211,252,0.35); padding:8px 13px; border-radius:8px; font-size:0.78rem; font-weight:600; cursor:pointer; transition:all 0.2s; display:inline-flex; align-items:center; gap:5px; }
+        .btn-guia:hover { background:rgba(125,211,252,0.14); box-shadow:0 0 10px rgba(125,211,252,0.15); }
+    </style>
+</head>
+<body>
+
+<!-- Toast container -->
+<div id="toast-cloud"></div>
+
+<!-- Inputs ocultos -->
+<input type="file" id="input-importar-recetas" style="display:none;" accept=".json" onchange="importarRecetasJSON(event)">
+
+<!-- ══ TUTORIAL OVERLAY ══ -->
+<div id="tutorial-overlay" class="oculto">
+    <div id="tutorial-spotlight-ring" style="display:none;"></div>
+    <div id="tutorial-card">
+        <div class="tut-progress-bar" id="tut-progress-bar"></div>
+        <div id="tutorial-emoji"></div>
+        <div id="tutorial-titulo"></div>
+        <p id="tutorial-texto"></p>
+        <div class="tut-nav-row">
+            <button class="btn-tut-ant" id="btn-tut-ant" onclick="tutorialAnterior()">← Ant.</button>
+            <span class="tut-step-label" id="tut-step-label"></span>
+            <button class="btn-tut-saltar" onclick="tutorialSaltar()">✕ Saltar</button>
+            <button class="btn-tut-sig" id="btn-tut-sig" onclick="tutorialSiguiente()">Siguiente →</button>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════
+     HEADER
+════════════════════════════════════ -->
+<header>
+    <div class="header-top">
+        <div class="header-brand">
+            <h1>👩‍🍳 SAGRADA DELICIA</h1>
+            <span class="chip-modulo">Recetario V1.9</span>
+            <span id="badge-cloud-sync" class="sync-offline" title="Listener en tiempo real">⚫ Conectando...</span>
+            <span class="pill-live" id="pill-live" style="display:none;">EN VIVO</span>
+        </div>
+        <div class="ctrl-sync">
+            <button class="btn-guia" onclick="iniciarTutorial(true)" title="Relanzar guía interactiva">🎓 Guía</button>
+            <button class="btn" id="btn-sync-manual"
+                style="border-color:var(--accent-success);color:var(--accent-success);background:rgba(34,197,94,0.07);padding:8px 14px;"
+                onclick="forzarSyncManual()" title="Reconectar listener">☁️ Sync</button>
+            <button class="btn" id="btn-toggle-sync" onclick="toggleSync()" title="Activar / pausar Firebase">🔔 Sync ON</button>
+        </div>
+    </div>
+
+    <!-- NAVEGACIÓN ECOSISTEMA -->
+    <nav class="nav-ecosistema" aria-label="Páginas del sistema">
+        <a class="btn btn-nav" onclick="irA('cotizador')">← Cotizador</a>
+        <a class="btn btn-nav activo" aria-current="page">👩‍🍳 Recetario</a>
+        <a class="btn btn-nav" onclick="irA('insumos')">🍎 Insumos</a>
+        <a class="btn btn-nav" onclick="irA('lineas')">📦 Líneas de Negocio</a>
+        <a class="btn btn-nav" onclick="irA('costoLinea')">💰 Costo de Línea</a>
+        <a class="btn btn-nav" onclick="irA('pedidos')">📋 Pedidos</a>
+        <a class="btn btn-nav" onclick="irA('catalogo')">📖 Catálogo &amp; Historial</a>
+        <a class="btn btn-nav" onclick="irA('sobreNosotros')">💌 Sobre Nosotros</a>
+    </nav>
+</header>
+
+<!-- ════════════════════════════════════
+     CONTENIDO PRINCIPAL
+════════════════════════════════════ -->
+<main class="contenedor">
+
+    <!-- STATS BAR -->
+    <div class="stats-bar">
+        <div class="stat-card">
+            <span class="stat-valor" id="stat-total">—</span>
+            <span class="stat-label">Total Recetas</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-valor" id="stat-lineas" style="color:var(--accent-secundario);">—</span>
+            <span class="stat-label">Líneas Activas</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-valor" id="stat-porcion" style="color:var(--accent-primario);">—</span>
+            <span class="stat-label">Costo U/P Promedio</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-valor" id="stat-con-imagen" style="color:var(--color-alerta-ok);">—</span>
+            <span class="stat-label">Con Foto</span>
+        </div>
+    </div>
+
+    <!-- ══ V1.3: PANEL GESTOR DE CATEGORÍAS ══ -->
+    <section class="panel">
+        <h2 class="form-toggle-h2" onclick="toggleGestorCategorias()">
+            <span>🏷 Gestor de Categorías <span class="form-toggle-arrow" id="gestor-cats-arrow">▼</span></span>
+            <span id="gestor-cats-count" style="font-size:0.72rem; color:var(--color-subtitulos); font-weight:400; border:none; padding:0; margin:0;"></span>
+        </h2>
+        <div class="form-panel-body" id="gestor-cats-body">
+
+            <!-- Lista de categorías existentes -->
+            <div class="gestor-cats-grid" id="gestor-cats-lista">
+                <span style="font-size:0.8rem; color:var(--color-subtitulos); font-style:italic;">Ninguna categoría creada aún.</span>
+            </div>
+
+            <!-- Formulario nueva categoría -->
+            <div class="gestor-nueva-fila">
+                <div class="grupo-formulario" style="flex:1; min-width:200px; margin:0;">
+                    <label>Nueva Categoría</label>
+                    <input type="text" id="nueva-cat-nombre"
+                        placeholder="Ej. Tortas Gourmet, Sin Gluten, Buffet..."
+                        maxlength="60"
+                        onkeydown="if(event.key==='Enter'){event.preventDefault();agregarCategoria();}">
+                </div>
+                <div class="grupo-formulario" style="min-width:160px; margin:0;">
+                    <label>Color Identificador</label>
+                    <select id="nueva-cat-color">
+                        <option value="#7dd3fc">🔵 Azul Cielo</option>
+                        <option value="#c084fc">🟣 Violeta</option>
+                        <option value="#fde047">🟡 Ámbar</option>
+                        <option value="#86efac">🟢 Verde Menta</option>
+                        <option value="#fca5a5">🔴 Coral</option>
+                        <option value="#f97316">🟠 Naranja</option>
+                        <option value="#38bdf8">💎 Cian</option>
+                        <option value="#a78bfa">🫐 Lavanda</option>
+                        <option value="#fb7185">🌸 Rosa</option>
+                        <option value="#34d399">🌿 Esmeralda</option>
+                    </select>
+                </div>
+                <button class="btn btn-primario" onclick="agregarCategoria()" style="padding:10px 20px; margin-bottom:14px;">
+                    ➕ Añadir
+                </button>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- ══ PANEL FORMULARIO FICHA TÉCNICA ══ -->
+    <section class="panel">
+        <h2 class="form-toggle-h2" onclick="toggleFormReceta()">
+            <span>🍳 Nueva Ficha Técnica <span class="form-toggle-arrow" id="form-toggle-arrow">▼</span></span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;" onclick="event.stopPropagation()">
+                <button class="btn btn-danger" onclick="limpiarFormulario()" style="font-size:0.78rem;">🔄 Limpiar</button>
+                <button class="btn btn-primario" id="btn-guardar-receta" onclick="guardarReceta()">💾 Guardar Receta</button>
+            </div>
+        </h2>
+        <div class="form-panel-body" id="form-panel-body">
+
+        <!-- METADATOS — 4 columnas: Nombre · Línea · Categoría · Rendimiento -->
+        <div class="form-grid-4">
+            <div class="grupo-formulario">
+                <label>📛 Nombre de la Receta / Variante</label>
+                <input type="text" id="rec-nombre" placeholder="Ej. Choco-Vainilla</em>">
+            </div>
+            <div class="grupo-formulario">
+                <label>📦 Línea de Destino</label>
+                <select id="rec-linea">
+                    <option value="">⏳ Cargando líneas desde nube...</option>
+                </select>
+            </div>
+            <div class="grupo-formulario">
+                <label>🏷 Categoría</label>
+                <select id="rec-categoria">
+                    <option value="">— Sin categoría —</option>
+                </select>
+            </div>
+            <div class="grupo-formulario">
+                <label>🍰 Rendimiento (unidades)</label>
+                <input type="number" id="rec-rendimiento" value="1" min="1" step="1" oninput="calcularTotalesReceta()">
+            </div>
+        </div>
+
+        <!-- DESCRIPCIÓN PÚBLICA -->
+        <div class="grupo-formulario">
+            <label>💬 Descripción para el Catálogo <span style="color:var(--color-subtitulos);font-size:0.72rem;font-weight:400;">— frase breve visible en el menú público</span></label>
+            <textarea id="rec-descripcion" rows="2" placeholder="Ej: Tentación húmeda de chocolate belga con glaseado espejo y toque de sal marina..."></textarea>
+        </div>
+
+        <!-- DESCRIPCIÓN / INSTRUCCIONES -->
+        <div class="grupo-formulario">
+            <label>📝 Instrucciones / Paso a Paso</label>
+            <textarea id="rec-instrucciones" rows="4" placeholder="Describe el proceso de preparación, temperaturas, tiempos de horneado..."></textarea>
+        </div>
+
+        <!-- NOTAS -->
+        <div class="grupo-formulario">
+            <label>🗒 Notas / Observaciones</label>
+            <textarea id="rec-notas" rows="2" placeholder="Alérgenos, variaciones posibles, tips de presentación..."></textarea>
+        </div>
+
+        <!-- IMAGEN CLOUDINARY -->
+        <div class="img-upload-row">
+            <img id="rec-imagen-preview" src="" alt="Vista previa">
+            <div style="flex:1;">
+                <label style="margin-bottom:10px;display:block;">📸 Foto de la Receta <span style="color:var(--color-subtitulos);font-size:0.72rem;font-weight:400;">(Cloudinary — optimizada automáticamente)</span></label>
+                <input type="file" id="rec-imagen-input" accept="image/*" style="display:none;" onchange="subirImagenReceta(this)">
+                <button type="button" class="btn btn-secundario" style="padding:9px 20px;font-size:0.83rem;"
+                    onclick="document.getElementById('rec-imagen-input').click()">
+                    📷 Seleccionar imagen
+                </button>
+                <span id="rec-imagen-status" style="font-size:0.74rem;color:var(--color-subtitulos);display:block;margin-top:8px;"></span>
+                <input type="hidden" id="rec-imagen-url">
+            </div>
+        </div>
+
+        <!-- INGREDIENTES -->
+        <div class="seccion-bloque">
+            <div class="seccion-titulo">
+                🍎 Desglose de Insumos
+                <button type="button" class="btn btn-primario" style="padding:5px 12px;font-size:0.75rem;" onclick="agregarFilaIngrediente()">➕ Añadir Insumo</button>
+            </div>
+
+            <!-- BUSCADOR INTEGRADO EN CADA FILA — V1.6 -->
+            <div style="font-size:0.72rem;color:rgba(34,197,94,0.7);margin-bottom:10px;padding:6px 10px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:7px;">
+                🔍 Escribe directamente en el campo verde de cada fila para buscar y seleccionar el insumo.
+            </div>
+            <div class="tabla-wrapper">
+                <table class="tabla-ing">
+                    <thead>
+                        <tr>
+                            <th style="width:32%;">Insumo Base</th>
+                            <th style="width:12%;">Cantidad</th>
+                            <th style="width:12%;text-align:center;">Unidad</th>
+                            <th style="width:18%;text-align:right;">Costo Unitario</th>
+                            <th style="width:18%;text-align:right;">Subtotal</th>
+                            <th style="width:8%;text-align:center;">✕</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-ingredientes"></tbody>
+                </table>
+            </div>
+
+            <!-- TOTALES -->
+            <div class="totales-receta">
+                <div class="total-item">
+                    <span class="total-label">Costo Bruto del Batch</span>
+                    <span class="total-valor" id="rec-costo-total" style="color:var(--color-alerta-ok);">$0</span>
+                </div>
+                <div class="total-item" style="text-align:right;">
+                    <span class="total-label">Costo Unitario por Porción</span>
+                    <span class="total-valor" id="rec-costo-porcion" style="color:var(--accent-primario);">$0</span>
+                </div>
+            </div>
+
+<button class="btn btn-primario" id="btn-guardar-receta" onclick="guardarReceta()">💾 Guardar Receta</button>
+
+        </div>
+        </div><!-- /form-panel-body -->
+    </section>
+
+    <!-- ══ PANEL BIBLIOTECA DE RECETAS ══ -->
+    <section class="panel">
+        <h2>
+            📋 Biblioteca de Recetas
+            <span id="badge-modo-edicion" style="display:none; font-size:0.72rem; color:var(--accent-admin); border:1px solid var(--accent-admin); padding:3px 9px; border-radius:12px; font-weight:700;">✏️ EDITANDO</span>
+        </h2>
+
+        <!-- TOOLBAR -->
+        <div class="toolbar">
+            
+
+            <select class="toolbar-select" id="filtro-linea" onchange="renderizarBiblioteca()">
+                <option value="">📦 Todas las líneas</option>
+            </select>
+
+            <!-- V1.3: Filtro por categoría -->
+            <select class="toolbar-select" id="filtro-categoria" onchange="renderizarBiblioteca()" style="min-width:175px;">
+                <option value="">🏷 Todas las categorías</option>
+            </select>
+
+            <select class="toolbar-select" id="filtro-orden" onchange="renderizarBiblioteca()" style="min-width:180px;">
+                <option value="reciente" selected>🕐 Más recientes</option>
+                <option value="nombre-asc">🔤 Nombre A → Z</option>
+                <option value="nombre-desc">🔤 Nombre Z → A</option>
+                <option value="costo-asc">💰 Costo U/P ↑</option>
+                <option value="costo-desc">💰 Costo U/P ↓</option>
+                <option value="linea">📦 Por línea</option>
+                <option value="categoria">🏷 Por categoría</option>
+            </select>
+
+
+
+            <div class="toolbar-acciones">
+
+<input type="search" class="toolbar-buscador" id="buscador-recetas"
+                placeholder="🔍 Buscar por nombre, línea, categoría o ingrediente..."
+                oninput="renderizarBiblioteca()">
+
+                <button class="btn btn-danger" onclick="exportarRecetarioCompletoPDF()" title="Exportar recetario completo PDF">📄 PDF</button>
+                <button class="btn btn-primario" onclick="exportarRecetasJSON()" title="Backup JSON">💾 JSON</button>
+                <button class="btn btn-secundario" onclick="document.getElementById('input-importar-recetas').click()" title="Importar desde JSON">📂 Importar</button>
+
+
+
+            </div>
+        </div>
+
+        <!-- LISTA -->
+        <div id="lista-recetas" style="display:flex;flex-direction:column;gap:12px;"></div>
+
+        <!-- PAGINACIÓN -->
+        <div id="paginacion-biblioteca" class="paginacion" style="display:none;"></div>
+
+        <!-- PIE -->
+        <div class="tabla-footer">
+            <span class="contador-vis" id="contador-visible"></span>
+            <button class="btn btn-primario" onclick="guardarManual()" style="padding:10px 22px;">
+                💾 Guardar y Sincronizar
+            </button>
+        </div>
+    </section>
+
+</main>
+
+<!-- ════════════════════════════════════
+     MODAL — FICHA CHEF (DETALLE)
+════════════════════════════════════ -->
+<div id="modal-ficha" class="modal-overlay" style="display:none;" onclick="cerrarModal(event)">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-ficha-titulo">
+        <div class="modal-header">
+            <h3 id="modal-ficha-titulo">🍳 Ficha Técnica</h3>
+            <button class="btn btn-danger" onclick="cerrarModal(null,true)">✕ Cerrar</button>
+        </div>
+        <div id="modal-ficha-cuerpo"></div>
+        <div style="margin-top:18px;">
+            <button class="btn btn-secundario" style="width:100%;" id="modal-btn-imprimir"
+                onclick="">🖨 Imprimir Ficha de Chef</button>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════
+     SCRIPT PRINCIPAL
+════════════════════════════════════ -->
+<script>
+/* ══════════════════════════════════════════════════════════
+   SAGRADA DELICIA — RECETARIO V1.3
+   Standalone · onSnapshot tiempo real · updateDoc anti-pisado
+   Solo toca DB_RECETAS / DB_CATEGORIAS_RECETAS
+   No pisa DB_INSUMOS ni CATALOGO_ACTIVO
+   V1.2: Buscador en dropdown · Paginación · Orden reciente por defecto
+   V1.3: Campo categoría en recetas · Gestor de categorías colapsable ·
+         DB_CATEGORIAS_RECETAS en Firebase · Filtro por categoría en biblioteca
+   Diseñado por: Marto 🧠
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Cloudinary ── */
+const CLOUDINARY_CLOUD_NAME   = 'dv7lelmoy';
+const CLOUDINARY_UPLOAD_PRESET = 'sagrada_preset';
+
+/* ── Rutas del ecosistema ── */
+const RUTAS = {
+    cotizador:    'COTIZADOR.html',
+    insumos:      'INSUMOS.html',
+    recetario:    'RECETARIO.html',
+    lineas:       'LINEAS.html',
+    costoLinea:   'COSTOS.html',
+    pedidos:      'PEDIDOS.html',
+    catalogo:     'CATALOGO.html',
+    sobreNosotros:'NOSOTROSEDITOR.html'
+};
+function irA(clave) {
+    const ruta = RUTAS[clave];
+    if (ruta) window.location.href = ruta;
+    else window._mostrarToast && window._mostrarToast('🚧 Página en construcción: ' + clave, 'warn');
+}
+
+/* ── Llaves localStorage ── */
+const LLAVE_RECETAS       = 'sagrada_delicia_recetas_v17';
+const LLAVE_INSUMOS       = 'sd_insumos_base_v17';
+const LLAVE_CATALOGO      = 'sagrada_delicia_framework_v17';
+const LLAVE_SYNC          = 'sd_sync_activo';
+const LLAVE_RECETA_ACTIVA = 'sagrada_delicia_receta_activa_v17';
+const LLAVE_CATEGORIAS    = 'sagrada_delicia_categorias_recetas_v17'; /* V1.3 */
+
+/* ── Estado global ── */
+let DB_RECETAS            = [];
+let DB_INSUMOS            = [];
+let CATALOGO_ACTIVO       = {};
+let DB_CATEGORIAS_RECETAS = []; /* V1.3 */
+let _recetaEnEdicionId    = null;
+let _lastCloudStr         = '';
+let _hayPendientes        = false;
+let _paginaActual         = 1;
+const RECETAS_POR_PAG     = 10;
+let _gestorCatsAbierto    = false; /* V1.3 */
+
+/* ══════════════════════════════════════
+   INIT
+══════════════════════════════════════ */
+window.onload = function() {
+    DB_RECETAS            = JSON.parse(localStorage.getItem(LLAVE_RECETAS))     || [];
+    DB_INSUMOS            = JSON.parse(localStorage.getItem(LLAVE_INSUMOS))     || [];
+    CATALOGO_ACTIVO       = JSON.parse(localStorage.getItem(LLAVE_CATALOGO))    || {};
+    DB_CATEGORIAS_RECETAS = JSON.parse(localStorage.getItem(LLAVE_CATEGORIAS))  || []; /* V1.3 */
+
+    _poblarSelectorLineas();
+    _poblarFiltroLinea();
+    _poblarSelectorCategorias(); /* V1.3 */
+    renderizarGestorCategorias(); /* V1.3 */
+
+    /* V1.8: preseleccionar filtro por línea si llega ?filtro=id desde otra pantalla (ej. LINEAS) */
+    const _parametrosURL = new URLSearchParams(window.location.search);
+    const _lineaDesdeURL = _parametrosURL.get('filtro');
+    if (_lineaDesdeURL) {
+        const _selLinea = document.getElementById('filtro-linea');
+        if (_selLinea && [..._selLinea.options].some(o => o.value === _lineaDesdeURL)) {
+            _selLinea.value = _lineaDesdeURL;
+        }
+    }
+
+    renderizarBiblioteca();
+    actualizarStats();
+    actualizarBtnSync();
+    agregarFilaIngrediente(); // fila vacía inicial
+};
+
+/* ── Callback Firebase: RECETAS (fuente de verdad) ── */
+window._onRecetasUpdate = function(recetasCloud, ts) {
+    const cloudStr = JSON.stringify(recetasCloud.map(r => ({ id: r.id, nombre: r.nombre })));
+    if (cloudStr === _lastCloudStr) return; // eco propio → ignorar
+    _lastCloudStr = cloudStr;
+
+    DB_RECETAS = recetasCloud;
+    localStorage.setItem(LLAVE_RECETAS, JSON.stringify(DB_RECETAS));
+    renderizarBiblioteca();
+    actualizarStats();
+    _poblarFiltroLinea();
+    renderizarGestorCategorias(); /* V1.3: actualizar conteos */
+
+    const pill = document.getElementById('pill-live');
+    if (pill) {
+        pill.style.display = 'inline-flex';
+        clearTimeout(window._liveTO);
+        window._liveTO = setTimeout(() => { pill.style.display = 'none'; }, 3000);
+    }
+    window._mostrarToast && window._mostrarToast('🔄 Recetario actualizado desde la nube','info',2500);
+};
+
+/* ── Callback Firebase: INSUMOS (solo lectura) ── */
+window._onInsumosUpdate = function(insumosCloud) {
+    DB_INSUMOS = insumosCloud;
+    localStorage.setItem(LLAVE_INSUMOS, JSON.stringify(DB_INSUMOS));
+    calcularTotalesReceta();
+};
+
+/* ── Callback Firebase: CATALOGO_ACTIVO (solo lectura) ── */
+window._onCatalogoUpdate = function(catalogo) {
+    CATALOGO_ACTIVO = catalogo;
+    localStorage.setItem(LLAVE_CATALOGO, JSON.stringify(CATALOGO_ACTIVO));
+    _poblarSelectorLineas();
+    _poblarFiltroLinea();
+};
+
+/* ── V1.3: Callback Firebase: CATEGORIAS_RECETAS (fuente de verdad) ── */
+window._onCategoriasUpdate = function(catCloud) {
+    DB_CATEGORIAS_RECETAS = catCloud;
+    localStorage.setItem(LLAVE_CATEGORIAS, JSON.stringify(DB_CATEGORIAS_RECETAS));
+    _poblarSelectorCategorias();
+    renderizarGestorCategorias();
+    renderizarBiblioteca(); /* Refrescar pills de categoría en las tarjetas */
+    window._mostrarToast && window._mostrarToast('🏷 Categorías actualizadas desde la nube','info',2000);
+};
+
+/* ══════════════════════════════════════
+   FORMULARIO — INGREDIENTES
+══════════════════════════════════════ */
+function agregarFilaIngrediente(insumoId = '', cantidad = '') {
+    const tbody = document.getElementById('tbody-ingredientes');
+    const tr    = document.createElement('tr');
+    tr.style.borderBottom = '1px solid var(--border-color)';
+
+    /* Buscar nombre si viene con id (edición) */
+    const insInicial = insumoId ? DB_INSUMOS.find(i => i.id === insumoId) : null;
+    const nombreInicial = insInicial ? insInicial.nombre : '';
+
+    tr.innerHTML = `
+        <td style="padding:8px;">
+            <div class="ac-wrap">
+                <input type="text" class="ac-input rec-ing-texto"
+                    placeholder="🔍 Buscar insumo..."
+                    value="${_esc(nombreInicial)}"
+                    autocomplete="off"
+                    oninput="_acFiltrar(this)"
+                    onfocus="_acAbrir(this)"
+                    onkeydown="_acTecla(event, this)">
+                <input type="hidden" class="rec-ing-select" value="${_esc(insumoId)}">
+                <div class="ac-lista"></div>
+            </div>
+        </td>
+        <td style="padding:8px;">
+            <input type="number" step="any" min="0" class="td-inp-ing rec-ing-cantidad"
+                value="${cantidad}" placeholder="0" oninput="calcularTotalesReceta()" required>
+        </td>
+        <td style="padding:8px;text-align:center;">
+            <span class="td-readonly rec-ing-unidad">—</span>
+        </td>
+        <td style="padding:8px;text-align:right;">
+            <span class="td-readonly rec-ing-costo" style="color:var(--accent-admin);">$0</span>
+        </td>
+        <td style="padding:8px;text-align:right;">
+            <span class="td-readonly rec-ing-subtotal" style="color:var(--accent-primario);font-weight:700;">$0</span>
+        </td>
+        <td style="padding:8px;text-align:center;">
+            <button type="button" class="btn btn-danger" style="padding:5px 9px;"
+                onclick="this.closest('tr').remove(); calcularTotalesReceta();">✕</button>
+        </td>`;
+
+    tbody.appendChild(tr);
+
+    /* Si viene con id preseleccionado (edición), vincular costos */
+    if (insInicial) {
+        _acSeleccionar(tr.querySelector('.ac-input'), insInicial);
+    }
+}
+
+/* ── Vincular costos desde la fila ── */
+function vincularCostoPorFila(fila, ins) {
+    if (ins) {
+        fila.querySelector('.rec-ing-unidad').textContent = ins.unidad || '—';
+        fila.querySelector('.rec-ing-costo').textContent  = _moneda(ins.costo);
+        fila.dataset.costoBase    = ins.costo;
+        fila.dataset.nombreInsumo = ins.nombre;
+        fila.dataset.unidad       = ins.unidad || '';
+    } else {
+        fila.querySelector('.rec-ing-unidad').textContent = '—';
+        fila.querySelector('.rec-ing-costo').textContent  = '$0';
+        fila.dataset.costoBase    = 0;
+        fila.dataset.nombreInsumo = '';
+        fila.dataset.unidad       = '';
+    }
+    calcularTotalesReceta();
+}
+
+/* ── Mantener compatibilidad con vincularCosto(sel) si algo lo llama ── */
+function vincularCosto(sel) {
+    const fila = sel.closest('tr');
+    const ins  = DB_INSUMOS.find(i => i.id === sel.value);
+    vincularCostoPorFila(fila, ins);
+}
+
+/* ══════════════════════════════════════
+   AUTOCOMPLETE — motor interno V1.6
+══════════════════════════════════════ */
+function _acFiltrar(inputEl) {
+    const q      = inputEl.value.toLowerCase().trim();
+    const lista  = inputEl.closest('.ac-wrap').querySelector('.ac-lista');
+    const hidden = inputEl.closest('.ac-wrap').querySelector('.rec-ing-select');
+
+    /* Si el usuario edita el texto, limpiar selección previa */
+    hidden.value = '';
+    inputEl.classList.remove('seleccionado');
+
+    _acRenderLista(lista, q, inputEl);
+    lista.classList.add('abierta');
+}
+
+function _acAbrir(inputEl) {
+    const q     = inputEl.value.toLowerCase().trim();
+    const lista = inputEl.closest('.ac-wrap').querySelector('.ac-lista');
+    _acRenderLista(lista, q, inputEl);
+    lista.classList.add('abierta');
+    /* Cerrar otras listas abiertas */
+    document.querySelectorAll('.ac-lista.abierta').forEach(l => {
+        if (l !== lista) l.classList.remove('abierta');
+    });
+}
+
+function _acRenderLista(lista, q, inputEl) {
+    const filtrados = q
+        ? DB_INSUMOS.filter(i => i.nombre.toLowerCase().includes(q))
+        : DB_INSUMOS;
+
+    if (filtrados.length === 0) {
+        lista.innerHTML = `<div class="ac-vacio">Sin resultados para "${q}"</div>`;
+        return;
+    }
+
+    lista.innerHTML = filtrados.map(ins => {
+        const nombre = ins.nombre;
+        const resaltado = q
+            ? nombre.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'),
+                '<mark>$1</mark>')
+            : nombre;
+        return `<div class="ac-item" data-id="${_esc(ins.id)}" onmousedown="_acSeleccionarPorId(event,'${_esc(ins.id)}',this)">${resaltado}</div>`;
+    }).join('');
+}
+
+function _acSeleccionarPorId(e, insId, itemEl) {
+    e.preventDefault(); /* evita que el blur cierre la lista antes */
+    const wrap   = itemEl.closest('.ac-wrap');
+    const input  = wrap.querySelector('.ac-input');
+    const ins    = DB_INSUMOS.find(i => i.id === insId);
+    if (ins) _acSeleccionar(input, ins);
+}
+
+function _acSeleccionar(inputEl, ins) {
+    const wrap   = inputEl.closest('.ac-wrap');
+    const hidden = wrap.querySelector('.rec-ing-select');
+    const lista  = wrap.querySelector('.ac-lista');
+
+    inputEl.value = ins.nombre;
+    inputEl.classList.add('seleccionado');
+    hidden.value  = ins.id;
+    lista.classList.remove('abierta');
+
+    vincularCostoPorFila(inputEl.closest('tr'), ins);
+}
+
+function _acTecla(e, inputEl) {
+    const lista   = inputEl.closest('.ac-wrap').querySelector('.ac-lista');
+    const items   = [...lista.querySelectorAll('.ac-item')];
+    const activo  = lista.querySelector('.ac-item.activo');
+    let idx       = items.indexOf(activo);
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (idx < items.length - 1) { if (activo) activo.classList.remove('activo'); items[idx+1].classList.add('activo'); items[idx+1].scrollIntoView({block:'nearest'}); }
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (idx > 0) { if (activo) activo.classList.remove('activo'); items[idx-1].classList.add('activo'); items[idx-1].scrollIntoView({block:'nearest'}); }
+    } else if (e.key === 'Enter' && activo) {
+        e.preventDefault();
+        const ins = DB_INSUMOS.find(i => i.id === activo.dataset.id);
+        if (ins) _acSeleccionar(inputEl, ins);
+    } else if (e.key === 'Escape') {
+        lista.classList.remove('abierta');
+    }
+}
+
+/* Cerrar listas al hacer clic fuera */
+document.addEventListener('click', e => {
+    if (!e.target.closest('.ac-wrap')) {
+        document.querySelectorAll('.ac-lista.abierta').forEach(l => l.classList.remove('abierta'));
+    }
+});
+
+/* ── Eliminar función vieja de filtro dropdown — reemplazada por autocomplete ── */
+function filtrarDropdownInsumos() { /* obsoleta — mantenida por compatibilidad */ }
+
+function calcularTotalesReceta() {
+    let total = 0;
+    document.querySelectorAll('#tbody-ingredientes tr').forEach(f => {
+        const c   = parseFloat(f.querySelector('.rec-ing-cantidad')?.value) || 0;
+        const u   = parseFloat(f.dataset.costoBase) || 0;
+        const sub = c * u;
+        total += sub;
+        const elSub = f.querySelector('.rec-ing-subtotal');
+        if (elSub) elSub.textContent = _moneda(sub);
+    });
+    const ren = parseFloat(document.getElementById('rec-rendimiento').value) || 1;
+    document.getElementById('rec-costo-total').textContent   = _moneda(total);
+    document.getElementById('rec-costo-porcion').textContent = _moneda(total / ren);
+}
+
+/* ══════════════════════════════════════
+   GUARDAR RECETA
+══════════════════════════════════════ */
+function guardarReceta() {
+    const nombre = document.getElementById('rec-nombre').value.trim();
+    const linea  = document.getElementById('rec-linea').value;
+    const ren    = parseFloat(document.getElementById('rec-rendimiento').value) || 1;
+    const filas  = document.querySelectorAll('#tbody-ingredientes tr');
+
+    if (!nombre) { window._mostrarToast('⚠️ El nombre de la receta es obligatorio','warn'); return; }
+
+    let ingredientes = [];
+    let total = 0;
+    let valido = true;
+    for (const f of filas) {
+        const id = f.querySelector('.rec-ing-select').value;
+        const c  = parseFloat(f.querySelector('.rec-ing-cantidad').value) || 0;
+        if (!id || c <= 0) { window._mostrarToast('⚠️ Insumo inválido en el desglose','warn'); valido = false; break; }
+        const u   = parseFloat(f.dataset.costoBase) || 0;
+        const sub = c * u;
+        total += sub;
+        ingredientes.push({
+            insumoId:      id,
+            nombre:        f.dataset.nombreInsumo || '',
+            cantidad:      c,
+            unidad:        f.dataset.unidad || '',
+            costoUnitario: u,
+            subtotal:      sub
+        });
+    }
+    if (!valido) return;
+
+    const rec = {
+        nombre,
+        productoOrigen:  linea,
+        categoria:       document.getElementById('rec-categoria').value,
+        rendimiento:     ren,
+        costoTotal:      total,
+        costoPorPorcion: total / ren,
+        ingredientes,
+        descripcion:     document.getElementById('rec-descripcion').value.trim(),
+        instrucciones:   document.getElementById('rec-instrucciones').value.trim(),
+        notas:           document.getElementById('rec-notas').value.trim(),
+        imagen_url:      document.getElementById('rec-imagen-url').value,
+        isAvanzada:      true,
+        desc:            document.getElementById('rec-instrucciones').value.trim(),
+        fechaModificacion: new Date().toISOString()
+    };
+
+    if (_recetaEnEdicionId) {
+        const idx = DB_RECETAS.findIndex(r => r.id === _recetaEnEdicionId);
+        if (idx !== -1) { rec.id = _recetaEnEdicionId; DB_RECETAS[idx] = rec; }
+        _recetaEnEdicionId = null;
+        document.getElementById('btn-guardar-receta').textContent = '💾 Guardar Receta';
+        document.getElementById('badge-modo-edicion').style.display = 'none';
+        window._mostrarToast('✅ Receta actualizada y sincronizada','ok');
+    } else {
+        rec.id = 'receta_' + Date.now();
+        DB_RECETAS.push(rec);
+        window._mostrarToast('✅ Receta guardada y sincronizada','ok');
+    }
+
+    _hayPendientes = true;
+    guardarManual();
+    limpiarFormulario();
+    renderizarBiblioteca();
+    actualizarStats();
+    _poblarFiltroLinea();
+    renderizarGestorCategorias(); /* V1.3: actualizar conteos */
+}
+
+/* ══════════════════════════════════════
+   CARGAR RECETA EN COSTOS
+   ⚠️ NO MODIFICAR — funcionalidad crítica
+══════════════════════════════════════ */
+function cargarRecetaEnCotizador(id) {
+    const rec = DB_RECETAS.find(r => r.id === id);
+    if (!rec) return;
+    const payload = JSON.stringify({
+        id:              rec.id,
+        nombre:          rec.nombre,
+        costoPorPorcion: rec.costoPorPorcion || 0,
+        productoOrigen:  rec.productoOrigen  || '',
+        ingredientes:    rec.ingredientes    || [],
+        imagen_url:      rec.imagen_url      || ''
+    });
+    /* Llave persistente para Costos de Línea */
+    localStorage.setItem('sd_receta_costos_ref', payload);
+    /* Llave transitoria para Cotizador (compatibilidad) */
+    localStorage.setItem(LLAVE_RECETA_ACTIVA, payload);
+    window._mostrarToast && window._mostrarToast(`📊 Cargando "${rec.nombre}" en Costos...`, 'ok');
+    setTimeout(() => { window.location.href = RUTAS.costoLinea; }, 800);
+}
+
+/* ══════════════════════════════════════
+   TOGGLE FORMULARIO COLLAPSIBLE
+══════════════════════════════════════ */
+let _formAbierto = false;
+
+function toggleFormReceta(forzarAbrir = false) {
+    if (forzarAbrir && _formAbierto) return;
+    _formAbierto = forzarAbrir ? true : !_formAbierto;
+    const body  = document.getElementById('form-panel-body');
+    const arrow = document.getElementById('form-toggle-arrow');
+    if (body)  body.classList.toggle('visible', _formAbierto);
+    if (arrow) arrow.classList.toggle('abierto', _formAbierto);
+}
+
+/* ══════════════════════════════════════
+   EDITAR RECETA
+══════════════════════════════════════ */
+function habilitarEdicion(id) {
+    const rec = DB_RECETAS.find(r => r.id === id);
+    if (!rec) return;
+    _recetaEnEdicionId = id;
+
+    document.getElementById('rec-nombre').value          = rec.nombre;
+    document.getElementById('rec-linea').value           = rec.productoOrigen || '';
+    document.getElementById('rec-categoria').value       = rec.categoria || '';
+    document.getElementById('rec-rendimiento').value     = rec.rendimiento;
+    document.getElementById('rec-descripcion').value     = rec.descripcion || '';
+    document.getElementById('rec-instrucciones').value   = rec.instrucciones || rec.desc || '';
+    document.getElementById('rec-notas').value           = rec.notas || '';
+    document.getElementById('rec-imagen-url').value      = rec.imagen_url || '';
+
+    const prev = document.getElementById('rec-imagen-preview');
+    if (rec.imagen_url) { prev.src = rec.imagen_url; prev.style.display = 'block'; }
+    else                { prev.src = ''; prev.style.display = 'none'; }
+
+    document.getElementById('rec-imagen-status').textContent = rec.imagen_url ? '✅ Imagen cargada' : '';
+    document.getElementById('btn-guardar-receta').textContent = '💾 Actualizar Cambios';
+    document.getElementById('badge-modo-edicion').style.display = 'inline-flex';
+
+    document.getElementById('tbody-ingredientes').innerHTML = '';
+    (rec.ingredientes || []).forEach(i => agregarFilaIngrediente(i.insumoId, i.cantidad));
+    calcularTotalesReceta();
+
+    toggleFormReceta(true);
+    document.querySelector('.panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window._mostrarToast('✏️ Receta cargada en el formulario para editar','info');
+}
+
+/* ══════════════════════════════════════
+   ELIMINAR RECETA
+══════════════════════════════════════ */
+function eliminarReceta(id) {
+    const rec = DB_RECETAS.find(r => r.id === id);
+    if (!rec) return;
+    if (!confirm(`⚠️ ¿Eliminar la receta "${rec.nombre}"?\n\nEsta acción no se puede deshacer.`)) return;
+    DB_RECETAS = DB_RECETAS.filter(r => r.id !== id);
+    guardarManual();
+    renderizarBiblioteca();
+    actualizarStats();
+    _poblarFiltroLinea();
+    renderizarGestorCategorias(); /* V1.3 */
+    window._mostrarToast(`🗑 "${rec.nombre}" eliminada`,'warn');
+}
+
+/* ══════════════════════════════════════
+   LIMPIAR FORMULARIO
+══════════════════════════════════════ */
+function limpiarFormulario() {
+    _recetaEnEdicionId = null;
+    document.getElementById('rec-nombre').value         = '';
+    document.getElementById('rec-linea').value          = '';
+    document.getElementById('rec-categoria').value      = '';
+    document.getElementById('rec-rendimiento').value    = '1';
+    document.getElementById('rec-descripcion').value    = '';
+    document.getElementById('rec-instrucciones').value  = '';
+    document.getElementById('rec-notas').value          = '';
+    document.getElementById('rec-imagen-url').value     = '';
+    document.getElementById('rec-imagen-status').textContent = '';
+    document.getElementById('rec-imagen-input').value   = '';
+    const prev = document.getElementById('rec-imagen-preview');
+    prev.src = ''; prev.style.display = 'none';
+    document.getElementById('btn-guardar-receta').textContent = '💾 Guardar Receta';
+    document.getElementById('badge-modo-edicion').style.display = 'none';
+    document.getElementById('tbody-ingredientes').innerHTML = '';
+    agregarFilaIngrediente();
+    calcularTotalesReceta();
+}
+
+/* ══════════════════════════════════════
+   RENDER BIBLIOTECA — V1.3
+   · Orden por defecto: más recientes
+   · Paginación: grupos de 10
+   · Filtro por categoría (nuevo)
+   · Pill de categoría en tarjeta (nuevo)
+══════════════════════════════════════ */
+function renderizarBiblioteca(resetPagina = false) {
+    /* V1.3: Actualizar filtro categoría según línea activa */
+    _actualizarFiltroCategoriaSegunLinea();
+
+    const cont    = document.getElementById('lista-recetas');
+    const busq    = (document.getElementById('buscador-recetas')?.value || '').toLowerCase().trim();
+    const lineaF  = document.getElementById('filtro-linea')?.value || '';
+    const catF    = document.getElementById('filtro-categoria')?.value || ''; /* V1.3 */
+    const orden   = document.getElementById('filtro-orden')?.value || 'reciente';
+
+    if (resetPagina) _paginaActual = 1;
+
+    let lista = [...DB_RECETAS];
+
+    /* Filtros */
+    if (busq) lista = lista.filter(r =>
+        r.nombre.toLowerCase().includes(busq) ||
+        (r.productoOrigen || '').toLowerCase().includes(busq) ||
+        (r.ingredientes || []).some(i => i.nombre.toLowerCase().includes(busq)) ||
+        /* V1.3: también busca por nombre de categoría */
+        (() => {
+            const cat = DB_CATEGORIAS_RECETAS.find(c => c.id === r.categoria);
+            return cat ? cat.nombre.toLowerCase().includes(busq) : false;
+        })()
+    );
+    if (lineaF) lista = lista.filter(r => (r.productoOrigen || '') === lineaF);
+    if (catF)   lista = lista.filter(r => (r.categoria || '') === catF); /* V1.3 */
+
+    /* Orden */
+    switch (orden) {
+        case 'nombre-asc':  lista.sort((a,b) => a.nombre.localeCompare(b.nombre,'es')); break;
+        case 'nombre-desc': lista.sort((a,b) => b.nombre.localeCompare(a.nombre,'es')); break;
+        case 'costo-asc':   lista.sort((a,b) => (a.costoPorPorcion||0) - (b.costoPorPorcion||0)); break;
+        case 'costo-desc':  lista.sort((a,b) => (b.costoPorPorcion||0) - (a.costoPorPorcion||0)); break;
+        case 'linea':       lista.sort((a,b) => (a.productoOrigen||'').localeCompare(b.productoOrigen||'')); break;
+        /* V1.3 */
+        case 'categoria':
+            lista.sort((a,b) => {
+                const cA = DB_CATEGORIAS_RECETAS.find(c => c.id === a.categoria)?.nombre || '';
+                const cB = DB_CATEGORIAS_RECETAS.find(c => c.id === b.categoria)?.nombre || '';
+                return cA.localeCompare(cB,'es');
+            }); break;
+        case 'reciente':
+        default:            lista.sort((a,b) => (b.fechaModificacion||b.id||'').localeCompare(a.fechaModificacion||a.id||'')); break;
+    }
+
+    const totalFiltrado = lista.length;
+    const totalPags     = Math.max(1, Math.ceil(totalFiltrado / RECETAS_POR_PAG));
+
+    if (_paginaActual > totalPags) _paginaActual = totalPags;
+    if (_paginaActual < 1)         _paginaActual = 1;
+
+    const inicio   = (_paginaActual - 1) * RECETAS_POR_PAG;
+    const fin      = inicio + RECETAS_POR_PAG;
+    const pagLista = lista.slice(inicio, fin);
+
+    const desde = totalFiltrado === 0 ? 0 : inicio + 1;
+    const hasta  = Math.min(fin, totalFiltrado);
+    document.getElementById('contador-visible').textContent =
+        totalFiltrado === 0
+            ? '0 recetas'
+            : `${desde}–${hasta} de ${totalFiltrado} receta${totalFiltrado !== 1 ? 's' : ''}`;
+
+    if (totalFiltrado === 0) {
+        cont.innerHTML = `<div class="estado-vacio">
+            <span class="ico">${busq || lineaF || catF ? '🔍' : '🍳'}</span>
+            ${busq || lineaF || catF ? 'Sin resultados — prueba con otros filtros.' : 'No hay recetas. Usa el formulario de arriba para crear la primera.'}
+        </div>`;
+        document.getElementById('paginacion-biblioteca').style.display = 'none';
+        return;
+    }
+
+    cont.innerHTML = pagLista.map(r => {
+        const lineaLabel = (r.productoOrigen || '').replace(/_/g,' ').toUpperCase() || '— Sin línea —';
+        const nIng       = (r.ingredientes || []).length;
+        const imgTag     = r.imagen_url
+            ? `<img class="tarjeta-receta-img" src="${_esc(r.imagen_url)}" alt="${_esc(r.nombre)}" onerror="this.style.display='none'">`
+            : '';
+        const fechaMod = r.fechaModificacion
+            ? new Date(r.fechaModificacion).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'})
+            : '';
+
+        /* V1.3: Pill de categoría */
+        const cat    = DB_CATEGORIAS_RECETAS.find(c => c.id === r.categoria);
+        const catTag = cat
+            ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:0.66rem;font-weight:700;letter-spacing:0.3px;white-space:nowrap;border:1px solid ${cat.color}44;color:${cat.color};background:${cat.color}14;">🏷 ${_esc(cat.nombre)}</span>`
+            : '';
+
+        return `<div class="tarjeta-receta">
+            ${imgTag}
+            <div class="tarjeta-receta-info">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+                    <span class="tarjeta-receta-badge">📦 ${_esc(lineaLabel)}</span>${catTag}
+                </div>
+                <div class="tarjeta-receta-nombre">${_esc(r.nombre)}</div>
+                <div class="tarjeta-receta-meta">
+                    🍰 Rend.: <strong>${r.rendimiento}</strong> uds ·
+                    💰 U/P: <strong style="color:var(--accent-primario);">${_moneda(r.costoPorPorcion)}</strong> ·
+                    🍎 ${nIng} insumo${nIng !== 1 ? 's' : ''}
+                    ${fechaMod ? `· <span style="font-size:0.74rem;opacity:0.7;">📅 ${fechaMod}</span>` : ''}
+                </div>
+            </div>
+            <div class="tarjeta-receta-acciones">
+                <button class="btn btn-secundario" style="padding:6px;font-size:0.75rem;" onclick="verFichaDetalle('${_esc(r.id)}')">👁 Ver Ficha</button>
+                <button class="btn btn-success" style="padding:6px;font-size:0.75rem;" onclick="habilitarEdicion('${_esc(r.id)}')">✏️ Editar</button>
+                <button class="btn btn-primario" style="padding:6px;font-size:0.75rem;" onclick="cargarRecetaEnCotizador('${_esc(r.id)}')">📊 ↗ Costos</button>
+                <button class="btn btn-danger" style="padding:6px;font-size:0.75rem;" onclick="eliminarReceta('${_esc(r.id)}')">🗑 Eliminar</button>
+            </div>
+        </div>`;
+    }).join('');
+
+    _renderPaginacion(totalPags, totalFiltrado);
+}
+
+function _renderPaginacion(totalPags, totalFiltrado) {
+    const cont = document.getElementById('paginacion-biblioteca');
+    if (!cont) return;
+
+    if (totalPags <= 1) { cont.style.display = 'none'; return; }
+    cont.style.display = 'flex';
+
+    let html = '';
+    html += `<button class="btn-pag" onclick="irPagina(${_paginaActual - 1})" ${_paginaActual === 1 ? 'disabled' : ''}>‹ Anterior</button>`;
+
+    const rango = _rangoPags(totalPags, _paginaActual);
+    rango.forEach(p => {
+        if (p === '...') {
+            html += `<span class="pag-info">…</span>`;
+        } else {
+            html += `<button class="btn-pag ${p === _paginaActual ? 'activa' : ''}" onclick="irPagina(${p})">${p}</button>`;
+        }
+    });
+
+    html += `<button class="btn-pag" onclick="irPagina(${_paginaActual + 1})" ${_paginaActual === totalPags ? 'disabled' : ''}>Siguiente ›</button>`;
+    html += `<span class="pag-info" style="margin-left:4px;">Pág. ${_paginaActual} / ${totalPags}</span>`;
+
+    cont.innerHTML = html;
+}
+
+function _rangoPags(total, actual) {
+    if (total <= 7) return Array.from({length: total}, (_,i) => i+1);
+    const pags = [];
+    if (actual <= 4) {
+        for (let i = 1; i <= 5; i++) pags.push(i);
+        pags.push('...'); pags.push(total);
+    } else if (actual >= total - 3) {
+        pags.push(1); pags.push('...');
+        for (let i = total - 4; i <= total; i++) pags.push(i);
+    } else {
+        pags.push(1); pags.push('...');
+        for (let i = actual - 1; i <= actual + 1; i++) pags.push(i);
+        pags.push('...'); pags.push(total);
+    }
+    return pags;
+}
+
+function irPagina(n) {
+    const totalPags = Math.max(1, Math.ceil(
+        DB_RECETAS.filter(r => {
+            const busq   = (document.getElementById('buscador-recetas')?.value || '').toLowerCase().trim();
+            const lineaF = document.getElementById('filtro-linea')?.value || '';
+            const catF   = document.getElementById('filtro-categoria')?.value || '';
+            if (busq && !(r.nombre.toLowerCase().includes(busq) || (r.productoOrigen||'').toLowerCase().includes(busq) || (r.ingredientes||[]).some(i=>i.nombre.toLowerCase().includes(busq)))) return false;
+            if (lineaF && (r.productoOrigen||'') !== lineaF) return false;
+            if (catF   && (r.categoria||'') !== catF) return false;
+            return true;
+        }).length / RECETAS_POR_PAG
+    ));
+    if (n < 1 || n > totalPags) return;
+    _paginaActual = n;
+    renderizarBiblioteca();
+    document.querySelector('.panel:last-of-type')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ══════════════════════════════════════
+   VER FICHA DETALLE — MODAL
+══════════════════════════════════════ */
+function verFichaDetalle(id) {
+    const rec = DB_RECETAS.find(r => r.id === id);
+    if (!rec) return;
+
+    document.getElementById('modal-ficha-titulo').textContent = '🍳 ' + rec.nombre;
+    document.getElementById('modal-btn-imprimir').onclick = () => imprimirFichaChef(id);
+
+    const lineaLabel = (rec.productoOrigen || '').replace(/_/g,' ').toUpperCase() || '— Sin línea —';
+    const cat = DB_CATEGORIAS_RECETAS.find(c => c.id === rec.categoria); /* V1.3 */
+    const ingRows = (rec.ingredientes || []).map(i =>
+        `<tr>
+            <td style="padding:9px 12px;border-bottom:1px solid var(--border-color);font-size:0.86rem;">${_esc(i.nombre)}</td>
+            <td style="padding:9px 12px;border-bottom:1px solid var(--border-color);text-align:center;font-weight:700;">${i.cantidad}</td>
+            <td style="padding:9px 12px;border-bottom:1px solid var(--border-color);text-align:center;">${_esc(i.unidad)}</td>
+            <td style="padding:9px 12px;border-bottom:1px solid var(--border-color);text-align:right;color:var(--accent-admin);">${_moneda(i.costoUnitario)}</td>
+            <td style="padding:9px 12px;border-bottom:1px solid var(--border-color);text-align:right;color:var(--accent-primario);font-weight:700;">${_moneda(i.subtotal)}</td>
+        </tr>`
+    ).join('');
+
+    document.getElementById('modal-ficha-cuerpo').innerHTML = `
+        <div style="display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+            ${rec.imagen_url ? `<img src="${_esc(rec.imagen_url)}" style="width:90px;height:90px;object-fit:cover;border-radius:10px;border:1px solid var(--border-color);">` : ''}
+            <div>
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+                    <div style="font-size:0.72rem;color:var(--accent-primario);font-weight:700;text-transform:uppercase;">📦 ${_esc(lineaLabel)}</div>
+                    ${cat ? `<span style="font-size:0.72rem;font-weight:700;padding:2px 8px;border-radius:10px;border:1px solid ${cat.color}44;color:${cat.color};background:${cat.color}14;">🏷 ${_esc(cat.nombre)}</span>` : ''}
+                </div>
+                <div style="color:var(--color-subtitulos);font-size:0.84rem;">🍰 Rendimiento: <strong style="color:var(--color-titulos);">${rec.rendimiento} unidades</strong></div>
+                <div style="color:var(--color-subtitulos);font-size:0.84rem;margin-top:4px;">💰 Costo bruto: <strong style="color:var(--color-alerta-ok);">${_moneda(rec.costoTotal)}</strong></div>
+                <div style="color:var(--color-subtitulos);font-size:0.84rem;margin-top:2px;">🎯 Costo U/P: <strong style="color:var(--accent-primario);font-size:1rem;">${_moneda(rec.costoPorPorcion)}</strong></div>
+            </div>
+        </div>
+        ${(rec.instrucciones || rec.desc) ? `
+        <div style="background:rgba(30,41,59,0.4);padding:14px;border-radius:8px;border:1px solid var(--border-color);margin-bottom:16px;">
+            <div style="font-size:0.72rem;color:var(--accent-secundario);font-weight:700;text-transform:uppercase;margin-bottom:8px;">📝 Instrucciones</div>
+            <p style="font-size:0.85rem;line-height:1.6;white-space:pre-wrap;">${_esc(rec.instrucciones || rec.desc)}</p>
+        </div>` : ''}
+        ${rec.notas ? `
+        <div style="background:rgba(253,224,71,0.05);padding:12px;border-radius:8px;border:1px solid rgba(253,224,71,0.2);margin-bottom:16px;">
+            <div style="font-size:0.72rem;color:var(--accent-admin);font-weight:700;text-transform:uppercase;margin-bottom:6px;">🗒 Notas</div>
+            <p style="font-size:0.83rem;line-height:1.5;white-space:pre-wrap;">${_esc(rec.notas)}</p>
+        </div>` : ''}
+        <div style="font-size:0.72rem;color:var(--accent-primario);font-weight:700;text-transform:uppercase;margin-bottom:10px;">🍎 Desglose de Insumos</div>
+        <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--border-color);">
+            <table style="width:100%;border-collapse:collapse;min-width:400px;">
+                <thead>
+                    <tr style="background:rgba(30,41,59,0.7);">
+                        <th style="padding:9px 12px;font-size:0.69rem;color:var(--color-subtitulos);text-transform:uppercase;text-align:left;border-bottom:2px solid var(--border-color);">Insumo</th>
+                        <th style="padding:9px 12px;font-size:0.69rem;color:var(--color-subtitulos);text-transform:uppercase;text-align:center;border-bottom:2px solid var(--border-color);">Cantidad</th>
+                        <th style="padding:9px 12px;font-size:0.69rem;color:var(--color-subtitulos);text-transform:uppercase;text-align:center;border-bottom:2px solid var(--border-color);">Unidad</th>
+                        <th style="padding:9px 12px;font-size:0.69rem;color:var(--color-subtitulos);text-transform:uppercase;text-align:right;border-bottom:2px solid var(--border-color);">Costo Un.</th>
+                        <th style="padding:9px 12px;font-size:0.69rem;color:var(--color-subtitulos);text-transform:uppercase;text-align:right;border-bottom:2px solid var(--border-color);">Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody>${ingRows || '<tr><td colspan="5" style="text-align:center;padding:20px;font-style:italic;color:var(--color-subtitulos);">Sin insumos registrados</td></tr>'}</tbody>
+            </table>
+        </div>`;
+
+    document.getElementById('modal-ficha').style.display = 'flex';
+}
+
+function cerrarModal(event, forzar = false) {
+    if (forzar || event?.target === document.getElementById('modal-ficha')) {
+        document.getElementById('modal-ficha').style.display = 'none';
+    }
+}
+
+/* ══════════════════════════════════════
+   IMPRIMIR FICHA CHEF — PDF
+══════════════════════════════════════ */
+function imprimirFichaChef(id) {
+    const rec = DB_RECETAS.find(r => r.id === id);
+    if (!rec) return;
+
+    const lineaLabel = (rec.productoOrigen || '').replace(/_/g,' ').toUpperCase() || '—';
+    const cat        = DB_CATEGORIAS_RECETAS.find(c => c.id === rec.categoria); /* V1.3 */
+    const catLabel   = cat ? cat.nombre : null;
+    const fechaHoy   = new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'});
+    let ingRows = '';
+    (rec.ingredientes || []).forEach(i => {
+        ingRows += `<tr>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:0.95rem;">${i.nombre}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;font-size:1rem;">${i.cantidad}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:center;">${i.unidad}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:right;color:#0284c7;font-weight:700;">${_moneda(i.subtotal)}</td>
+        </tr>`;
+    });
+
+    /* V1.3: meta grid de 4 cols si hay categoría, de 3 si no */
+    const metaCols = catLabel ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr';
+    const catMetaItem = catLabel
+        ? `<div class="meta-item"><label>🏷 Categoría</label><strong>${catLabel}</strong></div>`
+        : '';
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>Ficha Chef — ${rec.nombre}</title>
+    <style>
+        body { font-family: sans-serif; padding:40px; max-width:800px; margin:0 auto; color:#0f172a; }
+        @media print { .no-print{display:none!important} body{padding:20px;} }
+        .header { border-bottom:4px solid #c084fc; padding-bottom:20px; margin-bottom:28px; display:flex; justify-content:space-between; align-items:flex-start; }
+        .header h1 { margin:0; font-size:1.6rem; letter-spacing:1px; }
+        .header .sub { color:#64748b; font-size:0.82rem; text-transform:uppercase; margin-top:4px; }
+        .meta { display:grid; grid-template-columns:${metaCols}; gap:12px; background:#f8fafc; padding:16px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:24px; }
+        .meta-item label { font-size:0.65rem; text-transform:uppercase; color:#64748b; letter-spacing:0.5px; display:block; margin-bottom:3px; }
+        .meta-item strong { font-size:1rem; color:#0f172a; }
+        table { width:100%; border-collapse:collapse; }
+        th { background:#c084fc; color:#fff; padding:11px 14px; text-align:left; font-size:0.82rem; text-transform:uppercase; }
+        .totales { display:flex; justify-content:space-between; margin-top:20px; padding:16px 20px; background:#0b111e; color:#fff; border-radius:8px; }
+        .totales span { font-size:0.75rem; opacity:0.7; display:block; margin-bottom:4px; }
+        .totales strong { font-size:1.4rem; font-weight:800; }
+        .instrucciones { background:#f8fafc; padding:18px; border-radius:8px; border:1px solid #e2e8f0; margin:20px 0; line-height:1.6; font-size:0.92rem; }
+        .notas { background:#fffbeb; padding:14px; border-radius:8px; border:1px solid #fde68a; margin-bottom:20px; font-size:0.88rem; color:#78350f; }
+        .footer { text-align:center; margin-top:40px; font-size:0.73rem; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:18px; }
+    </style></head><body>
+    <button class="no-print" onclick="window.print()" style="padding:12px;background:#c084fc;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-bottom:20px;font-weight:bold;width:100%;">🖨️ Imprimir / Guardar PDF</button>
+    <div class="header">
+        <div>
+            <h1>SAGRADA DELICIA</h1>
+            <div class="sub">Ficha Técnica de Chef</div>
+        </div>
+        <div style="text-align:right;font-size:0.82rem;color:#64748b;">
+            <div>${fechaHoy}</div>
+        </div>
+    </div>
+    <h2 style="margin:0 0 16px;font-size:1.4rem;color:#0f172a;">${rec.nombre}</h2>
+    <div class="meta">
+        <div class="meta-item"><label>📦 Línea Destino</label><strong>${lineaLabel}</strong></div>
+        ${catMetaItem}
+        <div class="meta-item"><label>🍰 Rendimiento</label><strong>${rec.rendimiento} unidades</strong></div>
+        <div class="meta-item"><label>💰 Costo Unitario</label><strong style="color:#0284c7;">${_moneda(rec.costoPorPorcion)}</strong></div>
+    </div>
+    ${(rec.instrucciones || rec.desc) ? `<div class="instrucciones"><strong>📝 Instrucciones:</strong><br><br>${(rec.instrucciones || rec.desc).replace(/\n/g,'<br>')}</div>` : ''}
+    ${rec.notas ? `<div class="notas"><strong>🗒 Notas:</strong> ${rec.notas}</div>` : ''}
+    <table>
+        <thead><tr>
+            <th>Insumo Requerido</th>
+            <th style="text-align:center;">Cantidad</th>
+            <th style="text-align:center;">Unidad</th>
+            <th style="text-align:right;">Subtotal</th>
+        </tr></thead>
+        <tbody>${ingRows || '<tr><td colspan="4" style="padding:14px;text-align:center;font-style:italic;">Sin insumos</td></tr>'}</tbody>
+    </table>
+    <div class="totales">
+        <div><span>Costo Bruto del Batch</span><strong>${_moneda(rec.costoTotal)}</strong></div>
+        <div style="text-align:right;"><span>Costo por Porción / Unidad</span><strong style="color:#7dd3fc;">${_moneda(rec.costoPorPorcion)}</strong></div>
+    </div>
+    <div class="footer">Sagrada Delicia · Cali, Colombia · Diseñado por: Marto 🧠</div>
+    </body></html>`;
+
+    const win = window.open('','_blank','width=850,height=820');
+    win.document.write(html);
+    win.document.close();
+}
+
+/* ══════════════════════════════════════
+   EXPORTAR RECETARIO COMPLETO PDF
+══════════════════════════════════════ */
+function exportarRecetarioCompletoPDF() {
+    const lista = [...DB_RECETAS];
+    if (lista.length === 0) { window._mostrarToast('⚠️ No hay recetas para exportar','warn'); return; }
+
+    let bloquesHTML = '';
+    lista.forEach((r, idx) => {
+        const lineaLabel = (r.productoOrigen || '').replace(/_/g,' ').toUpperCase() || '—';
+        const cat = DB_CATEGORIAS_RECETAS.find(c => c.id === r.categoria); /* V1.3 */
+        let ingRows = '';
+        (r.ingredientes || []).forEach(i => {
+            ingRows += `<tr>
+                <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:0.9rem;">${i.nombre}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;">${i.cantidad}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center;">${i.unidad}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;color:#0284c7;font-weight:700;">${_moneda(i.subtotal)}</td>
+            </tr>`;
+        });
+
+        bloquesHTML += `<div class="receta-card">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+                <div>
+                    <div style="font-size:0.7rem;color:#c084fc;font-weight:700;text-transform:uppercase;margin-bottom:4px;">${idx+1}. ${lineaLabel}${cat ? ' · ' + cat.nombre : ''}</div>
+                    <h2 style="margin:0;font-size:1.2rem;color:#0f172a;border-left:4px solid #0284c7;padding-left:10px;">${r.nombre}</h2>
+                </div>
+                <div style="text-align:right;font-size:0.82rem;color:#64748b;">
+                    <div>Rendimiento: <strong>${r.rendimiento} uds</strong></div>
+                    <div>C. Bruto: <strong>${_moneda(r.costoTotal)}</strong></div>
+                    <div>C. U/P: <strong style="color:#0284c7;">${_moneda(r.costoPorPorcion)}</strong></div>
+                </div>
+            </div>
+            ${(r.instrucciones || r.desc) ? `<div style="background:#f8fafc;padding:14px;border-radius:6px;border:1px solid #e2e8f0;margin-bottom:14px;font-size:0.88rem;line-height:1.6;"><strong>📝 Instrucciones:</strong><br>${(r.instrucciones||r.desc).replace(/\n/g,'<br>')}</div>` : ''}
+            <table class="ing-table">
+                <thead><tr>
+                    <th>Insumo</th><th style="text-align:center;">Cantidad</th>
+                    <th style="text-align:center;">Unidad</th><th style="text-align:right;">Subtotal</th>
+                </tr></thead>
+                <tbody>${ingRows || '<tr><td colspan="4" style="padding:10px;text-align:center;font-style:italic;color:#94a3b8;">Sin insumos</td></tr>'}</tbody>
+            </table>
+        </div>`;
+    });
+
+    const fechaHoy = new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'});
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>Recetario Maestro — Sagrada Delicia</title>
+    <style>
+        body { font-family:sans-serif; padding:40px; max-width:850px; margin:0 auto; color:#0f172a; }
+        @media print { .no-print{display:none!important} .receta-card{page-break-inside:avoid;} }
+        .header { border-bottom:4px solid #0284c7; padding-bottom:20px; margin-bottom:30px; text-align:center; }
+        .header h1 { margin:0; font-size:1.8rem; letter-spacing:1px; }
+        .header .sub { color:#64748b; text-transform:uppercase; letter-spacing:2px; margin-top:4px; font-size:0.82rem; }
+        .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:28px; }
+        .sc { background:#f8fafc; padding:12px 16px; border-radius:8px; border:1px solid #e2e8f0; text-align:center; }
+        .sc strong { display:block; font-size:1.2rem; color:#0f172a; }
+        .sc span { font-size:0.68rem; color:#64748b; text-transform:uppercase; }
+        .receta-card { margin-bottom:40px; padding-bottom:20px; border-bottom:2px dashed #cbd5e1; }
+        .receta-card:last-child { border-bottom:none; }
+        .ing-table { width:100%; border-collapse:collapse; }
+        .ing-table th { background:#0284c7; color:#fff; padding:10px 12px; text-align:left; font-size:0.82rem; }
+        .footer { text-align:center; margin-top:50px; font-size:0.73rem; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:18px; }
+    </style></head><body>
+    <button class="no-print" onclick="window.print()" style="padding:12px;background:#0f172a;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-bottom:20px;font-weight:bold;width:100%;">🖨️ Imprimir / Guardar Recetario Completo</button>
+    <div class="header">
+        <h1>SAGRADA DELICIA</h1>
+        <div class="sub">Recetario Maestro e Ingeniería de Menú</div>
+        <div style="color:#94a3b8;font-size:0.75rem;margin-top:4px;">${fechaHoy}</div>
+    </div>
+    <div class="stats">
+        <div class="sc"><strong>${lista.length}</strong><span>Total Recetas</span></div>
+        <div class="sc"><strong>${[...new Set(lista.map(r=>r.productoOrigen||''))].filter(Boolean).length}</strong><span>Líneas</span></div>
+        <div class="sc"><strong>${_moneda(lista.reduce((a,r)=>a+(r.costoPorPorcion||0),0)/Math.max(lista.length,1))}</strong><span>Costo U/P Prom.</span></div>
+    </div>
+    <div>${bloquesHTML}</div>
+    <div class="footer">Sagrada Delicia · Cali, Colombia · Diseñado por: Marto 🧠</div>
+    </body></html>`;
+
+    const win = window.open('','_blank','width=850,height=820');
+    win.document.write(html);
+    win.document.close();
+}
+
+/* ══════════════════════════════════════
+   EXPORT / IMPORT JSON
+══════════════════════════════════════ */
+function exportarRecetasJSON() {
+    const blob = new Blob([JSON.stringify(DB_RECETAS, null, 2)], { type:'application/json' });
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = `SD_Recetario_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    window._mostrarToast && window._mostrarToast('💾 Archivo JSON descargado','ok');
+}
+
+function importarRecetasJSON(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (!Array.isArray(data)) { alert('❌ Formato inválido — se esperaba un array JSON.'); return; }
+            if (!confirm(`⚠️ Esto reemplazará las ${DB_RECETAS.length} recetas actuales por las ${data.length} del archivo.\n\n¿Continuar?`)) return;
+            DB_RECETAS = data;
+            guardarManual();
+            renderizarBiblioteca();
+            actualizarStats();
+            _poblarFiltroLinea();
+            renderizarGestorCategorias(); /* V1.3 */
+            window._mostrarToast && window._mostrarToast(`✅ ${DB_RECETAS.length} recetas importadas y sincronizadas`,'ok');
+        } catch(err) { alert('❌ Error al leer el JSON.'); }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+/* ══════════════════════════════════════
+   SYNC — LOCAL + CLOUD
+══════════════════════════════════════ */
+function guardarManual() {
+    clearTimeout(window._syncTO);
+    localStorage.setItem(LLAVE_RECETAS, JSON.stringify(DB_RECETAS));
+    _subirACloud();
+    _hayPendientes = false;
+}
+
+function _subirACloud() {
+    _lastCloudStr = JSON.stringify(DB_RECETAS.map(r => ({ id: r.id, nombre: r.nombre })));
+    if (typeof window.guardarRecetasEnCloud === 'function') {
+        window.guardarRecetasEnCloud(DB_RECETAS);
+    }
+}
+
+/* ══════════════════════════════════════
+   STATS
+══════════════════════════════════════ */
+function actualizarStats() {
+    const total   = DB_RECETAS.length;
+    const lineas  = [...new Set(DB_RECETAS.map(r => r.productoOrigen || ''))].filter(Boolean).length;
+    const conImg  = DB_RECETAS.filter(r => !!r.imagen_url).length;
+    const prom    = total ? DB_RECETAS.reduce((a,r) => a + (r.costoPorPorcion||0), 0) / total : 0;
+
+    document.getElementById('stat-total').textContent      = total || '—';
+    document.getElementById('stat-lineas').textContent     = lineas || '—';
+    document.getElementById('stat-porcion').textContent    = total ? _moneda(prom) : '—';
+    document.getElementById('stat-con-imagen').textContent = total ? conImg + ' / ' + total : '—';
+}
+
+/* ══════════════════════════════════════
+   POBLAR SELECTORES — LÍNEAS
+══════════════════════════════════════ */
+function _poblarSelectorLineas() {
+    const sel = document.getElementById('rec-linea');
+    if (!sel) return;
+    const actual = sel.value;
+    let html = '<option value="">— Seleccionar Línea —</option>';
+    Object.keys(CATALOGO_ACTIVO).forEach(k => {
+        const emoji = CATALOGO_ACTIVO[k]?.emoji ? CATALOGO_ACTIVO[k].emoji + ' ' : '';
+        html += `<option value="${_esc(k)}">${emoji}${k.replace(/_/g,' ').toUpperCase()}</option>`;
+    });
+    if (Object.keys(CATALOGO_ACTIVO).length === 0) {
+        html = '<option value="">⏳ Sin líneas en nube — conectando...</option>';
+    }
+    sel.innerHTML = html;
+    if (actual) sel.value = actual;
+}
+
+function _poblarFiltroLinea() {
+    const sel = document.getElementById('filtro-linea');
+    if (!sel) return;
+    const actual = sel.value;
+    const lineasEnUso = [...new Set(DB_RECETAS.map(r => r.productoOrigen || '').filter(Boolean))];
+    let html = '<option value="">📦 Todas las líneas</option>';
+    lineasEnUso.forEach(k => {
+        const emoji = CATALOGO_ACTIVO[k]?.emoji ? CATALOGO_ACTIVO[k].emoji + ' ' : '';
+        html += `<option value="${_esc(k)}">${emoji}${k.replace(/_/g,' ').toUpperCase()}</option>`;
+    });
+    sel.innerHTML = html;
+    if (actual) sel.value = actual;
+}
+
+/* ══════════════════════════════════════
+   V1.3 — GESTOR DE CATEGORÍAS
+══════════════════════════════════════ */
+
+function toggleGestorCategorias() {
+    _gestorCatsAbierto = !_gestorCatsAbierto;
+    const body  = document.getElementById('gestor-cats-body');
+    const arrow = document.getElementById('gestor-cats-arrow');
+    if (body)  body.classList.toggle('visible', _gestorCatsAbierto);
+    if (arrow) arrow.classList.toggle('abierto', _gestorCatsAbierto);
+}
+
+function renderizarGestorCategorias() {
+    const cont  = document.getElementById('gestor-cats-lista');
+    const count = document.getElementById('gestor-cats-count');
+    if (!cont) return;
+
+    const n = DB_CATEGORIAS_RECETAS.length;
+    if (count) count.textContent = n === 0 ? '— sin categorías' : `${n} categoría${n !== 1 ? 's' : ''}`;
+
+    if (n === 0) {
+        cont.innerHTML = '<span style="font-size:0.8rem; color:var(--color-subtitulos); font-style:italic;">Ninguna categoría creada aún.</span>';
+        return;
+    }
+
+    cont.innerHTML = DB_CATEGORIAS_RECETAS.map(cat => {
+        const enUso = DB_RECETAS.filter(r => r.categoria === cat.id).length;
+        return `<div class="gestor-cat-item" style="border-color:${cat.color}33;">
+            <span class="gestor-cat-dot" style="background:${cat.color};"></span>
+            <span class="gestor-cat-nombre">${_esc(cat.nombre)}</span>
+            <span class="gestor-cat-count">${enUso} receta${enUso !== 1 ? 's' : ''}</span>
+            <button class="gestor-cat-del" onclick="eliminarCategoria('${_esc(cat.id)}')" title="Eliminar categoría">✕</button>
+        </div>`;
+    }).join('');
+}
+
+function agregarCategoria() {
+    const nombre = document.getElementById('nueva-cat-nombre').value.trim();
+    if (!nombre) {
+        window._mostrarToast('⚠️ Escribe un nombre para la categoría','warn');
+        return;
+    }
+    if (DB_CATEGORIAS_RECETAS.find(c => c.nombre.toLowerCase() === nombre.toLowerCase())) {
+        window._mostrarToast('⚠️ Ya existe una categoría con ese nombre','warn');
+        return;
+    }
+    const color = document.getElementById('nueva-cat-color').value;
+    const nueva = { id: 'cat_' + Date.now(), nombre, color };
+    DB_CATEGORIAS_RECETAS.push(nueva);
+    guardarCategorias();
+    renderizarGestorCategorias();
+    _poblarSelectorCategorias();
+    document.getElementById('nueva-cat-nombre').value = '';
+    window._mostrarToast(`✅ Categoría "${nombre}" creada`,'ok');
+}
+
+function eliminarCategoria(id) {
+    const cat = DB_CATEGORIAS_RECETAS.find(c => c.id === id);
+    if (!cat) return;
+    const enUso = DB_RECETAS.filter(r => r.categoria === id).length;
+
+    if (enUso > 0) {
+        if (!confirm(`⚠️ La categoría "${cat.nombre}" está asignada a ${enUso} receta${enUso !== 1 ? 's' : ''}.\n\nSi la eliminas, esas recetas quedarán sin categoría.\n\n¿Continuar?`)) return;
+        /* Desasignar de recetas y guardar */
+        DB_RECETAS = DB_RECETAS.map(r => r.categoria === id ? { ...r, categoria: '' } : r);
+        guardarManual();
+        renderizarBiblioteca();
+    } else {
+        if (!confirm(`¿Eliminar la categoría "${cat.nombre}"?`)) return;
+    }
+
+    DB_CATEGORIAS_RECETAS = DB_CATEGORIAS_RECETAS.filter(c => c.id !== id);
+    guardarCategorias();
+    renderizarGestorCategorias();
+    _poblarSelectorCategorias();
+    window._mostrarToast('🗑 Categoría eliminada','warn');
+}
+
+function guardarCategorias() {
+    localStorage.setItem(LLAVE_CATEGORIAS, JSON.stringify(DB_CATEGORIAS_RECETAS));
+    if (typeof window.guardarCategoriasEnCloud === 'function') {
+        window.guardarCategoriasEnCloud(DB_CATEGORIAS_RECETAS);
+    }
+}
+
+/* ── Poblar selector del formulario y toolbar ── */
+function _poblarSelectorCategorias() {
+    /* Formulario: siempre todas las categorías */
+    const selForm = document.getElementById('rec-categoria');
+    if (selForm) {
+        const actual = selForm.value;
+        selForm.innerHTML = '<option value="">— Sin categoría —</option>';
+        DB_CATEGORIAS_RECETAS.forEach(cat => {
+            selForm.innerHTML += `<option value="${_esc(cat.id)}">${_esc(cat.nombre)}</option>`;
+        });
+        if (actual) selForm.value = actual;
+    }
+
+    /* Toolbar: versión completa (sin filtro de línea) — se refiltra en _actualizarFiltroCategoriaSegunLinea */
+    const selFiltro = document.getElementById('filtro-categoria');
+    if (selFiltro) {
+        const actual = selFiltro.value;
+        selFiltro.innerHTML = '<option value="">🏷 Todas las categorías</option>';
+        DB_CATEGORIAS_RECETAS.forEach(cat => {
+            selFiltro.innerHTML += `<option value="${_esc(cat.id)}">${_esc(cat.nombre)}</option>`;
+        });
+        if (actual && DB_CATEGORIAS_RECETAS.some(c => c.id === actual)) selFiltro.value = actual;
+    }
+}
+
+/* ── Filtrar opciones de categoría según línea seleccionada en toolbar ── */
+function _actualizarFiltroCategoriaSegunLinea() {
+    const selFiltro = document.getElementById('filtro-categoria');
+    if (!selFiltro) return;
+
+    const lineaF    = document.getElementById('filtro-linea')?.value || '';
+    const actualCat = selFiltro.value;
+
+    /* Sin filtro de línea → mostrar todas */
+    if (!lineaF) {
+        selFiltro.innerHTML = '<option value="">🏷 Todas las categorías</option>';
+        DB_CATEGORIAS_RECETAS.forEach(cat => {
+            selFiltro.innerHTML += `<option value="${_esc(cat.id)}">${_esc(cat.nombre)}</option>`;
+        });
+        if (actualCat && DB_CATEGORIAS_RECETAS.some(c => c.id === actualCat)) selFiltro.value = actualCat;
+        return;
+    }
+
+    /* Con filtro de línea → solo categorías que tienen recetas en esa línea */
+    const catIdsEnLinea = [...new Set(
+        DB_RECETAS
+            .filter(r => (r.productoOrigen || '') === lineaF && r.categoria)
+            .map(r => r.categoria)
+    )];
+
+    selFiltro.innerHTML = '<option value="">🏷 Todas las categorías</option>';
+    DB_CATEGORIAS_RECETAS.forEach(cat => {
+        if (catIdsEnLinea.includes(cat.id)) {
+            selFiltro.innerHTML += `<option value="${_esc(cat.id)}">${_esc(cat.nombre)}</option>`;
+        }
+    });
+
+    /* Si la categoría actual ya no aplica a esta línea, resetear */
+    const sigueValida = catIdsEnLinea.includes(actualCat);
+    if (actualCat && sigueValida) selFiltro.value = actualCat;
+    /* Si no sigue válida, el select queda en '' automáticamente */
+}
+
+/* ══════════════════════════════════════
+   IMAGEN CLOUDINARY
+══════════════════════════════════════ */
+async function subirImagenReceta(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    if (!CLOUDINARY_CLOUD_NAME || CLOUDINARY_CLOUD_NAME === 'TU_CLOUD_NAME') {
+        alert('⚠️ Configura las credenciales de Cloudinary en el código.');
+        return;
+    }
+
+    const status = document.getElementById('rec-imagen-status');
+    const prev   = document.getElementById('rec-imagen-preview');
+    status.textContent = '⏳ Subiendo imagen...';
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+        const resp = await fetch(
+            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+            { method: 'POST', body: formData }
+        );
+        if (!resp.ok) throw new Error('Error de conexión a Cloudinary');
+        const datos = await resp.json();
+        const url   = datos.secure_url.replace('/upload/', '/upload/f_auto,q_auto,w_800/');
+        document.getElementById('rec-imagen-url').value = url;
+        prev.src = url; prev.style.display = 'block';
+        status.textContent = '✅ Imagen lista';
+        window._mostrarToast('📸 Imagen subida a Cloudinary','ok');
+    } catch(err) {
+        console.error(err);
+        status.textContent = '❌ Error al subir. Verifica conexión y Cloudinary.';
+        window._mostrarToast('❌ Fallo al subir imagen','error',5000);
+    }
+}
+
+/* ══════════════════════════════════════
+   KILL-SWITCH SYNC
+══════════════════════════════════════ */
+function actualizarBtnSync() {
+    const btn = document.getElementById('btn-toggle-sync');
+    if (!btn) return;
+    const activo = localStorage.getItem(LLAVE_SYNC) !== 'false';
+    btn.textContent        = activo ? '🔔 Sync ON' : '🔕 Sync OFF';
+    btn.style.borderColor  = activo ? 'var(--accent-success)' : 'var(--color-alerta-media)';
+    btn.style.color        = activo ? 'var(--accent-success)' : 'var(--color-alerta-media)';
+    btn.style.background   = activo ? 'rgba(34,197,94,0.07)'  : 'rgba(253,224,71,0.07)';
+    if (!activo) {
+        const badge = document.getElementById('badge-cloud-sync');
+        if (badge) { badge.className = 'sync-offline'; badge.innerHTML = '🔕 Sync desactivado'; }
+    }
+}
+
+function toggleSync() {
+    const activo = localStorage.getItem(LLAVE_SYNC) !== 'false';
+    localStorage.setItem(LLAVE_SYNC, activo ? 'false' : 'true');
+    actualizarBtnSync();
+    if (!activo) {
+        window._mostrarToast && window._mostrarToast('🔔 Sync reactivado. Conectando...','ok');
+        typeof window._iniciarListener === 'function' && window._iniciarListener();
+    } else {
+        window._mostrarToast && window._mostrarToast('🔕 Sync pausado — trabajando en modo local','warn');
+        typeof window._detenerListener === 'function' && window._detenerListener();
+    }
+}
+
+/* ══════════════════════════════════════
+   UTILS
+══════════════════════════════════════ */
+function _moneda(val) {
+    return new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0}).format(val||0);
+}
+function _esc(str) {
+    return String(str||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* Advertir al salir con cambios sin guardar */
+window.addEventListener('beforeunload', e => {
+    if (_hayPendientes) { e.preventDefault(); e.returnValue = ''; }
+});
+
+/* Cerrar modal con Escape */
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') cerrarModal(null, true);
+});
+
+/* ══════════════════════════════════════════════════
+   TUTORIAL SYSTEM — SD Recetario V1.9
+   ══════════════════════════════════════════════════ */
+const _TUT_LLAVE = 'sd_tutorial_recetario_v1';
+let _tutPaso = 0;
+
+const _TUT_PASOS = [
+    { target: null,                   emoji:'🎉', titulo:'¡Bienvenido al Recetario!',              texto:'Aquí se crean y gestionan todas las fichas técnicas de Sagrada Delicia. Cada receta vincula insumos reales de la base de datos y calcula costos automáticamente. Puedes saltar esta guía y relanzarla con el botón 🎓 Guía del encabezado.' },
+    { target:'.nav-ecosistema',       emoji:'🗺️', titulo:'Navegación del Ecosistema',              texto:'Accede a todos los módulos: Cotizador, Insumos, Líneas, Costos, Pedidos, Catálogo y Sobre Nosotros. El Recetario alimenta directamente al Cotizador: cada línea de producto usa sus recetas para calcular costos de ingredientes.' },
+    { target:'.stats-bar',            emoji:'📊', titulo:'Resumen del Recetario',                  texto:'4 indicadores en tiempo real: total de recetas guardadas, cantidad de líneas de producto activas, costo unitario por porción promedio del catálogo, y cuántas recetas tienen foto subida a Cloudinary.' },
+    { target:'#gestor-cats-body',     emoji:'🏷️', titulo:'Gestor de Categorías',                   texto:'Panel colapsable para organizar las recetas por tipo. Haz clic en "🏷 Gestor de Categorías" para expandirlo o contraerlo. Cada categoría tiene un nombre y un color identificador. Se sincronizan como DB_CATEGORIAS_RECETAS en Firebase.' },
+    { target:'.gestor-nueva-fila',    emoji:'🎨', titulo:'Nueva Categoría',                        texto:'Escribe el nombre de la categoría (ej: Tortas Gourmet, Sin Gluten, Buffet) y elige un color. Presiona "➕ Añadir" o Enter para crear. Desde la lista puedes eliminar las que no estén en uso.' },
+    { target:'#form-panel-body',      emoji:'🍳', titulo:'Panel Ficha Técnica',                    texto:'Panel colapsable donde construyes cada receta. Haz clic en "🍳 Nueva Ficha Técnica" para expandirlo. Al editar una receta desde la biblioteca, este panel se abre automáticamente con sus datos cargados.' },
+    { target:'.form-grid-4',          emoji:'📝', titulo:'Metadatos de la Receta',                 texto:'4 campos clave: Nombre de la receta o variante, Línea de destino (vincula la receta a una línea de producto del Cotizador), Categoría (para organización), y Rendimiento (cuántas porciones o unidades produce el batch completo).' },
+    { target:'.seccion-bloque',       emoji:'🍎', titulo:'Ingredientes con Autocomplete',          texto:'Agrega los insumos de la receta uno a uno. El campo verde tiene autocomplete: escribe parte del nombre y selecciona el insumo de la lista desplegable. El sistema trae automáticamente el costo unitario desde la base de Insumos y calcula el subtotal de cada ítem.' },
+    { target:'.totales-receta',       emoji:'💰', titulo:'Totales del Batch',                      texto:'Se calculan en tiempo real: Costo Bruto del Batch (suma total de ingredientes) y Costo Unitario por Porción (costo bruto ÷ rendimiento). Este costo por porción es el que usa el Cotizador como base de ingredientes para esa línea.' },
+    { target:'section.panel:last-of-type .toolbar', emoji:'🔧', titulo:'Toolbar de la Biblioteca', texto:'Filtra recetas por Línea de producto, por Categoría, y ordénalas por fecha, nombre o costo. La búsqueda es instantánea y busca en nombre, línea, categoría e incluso en los ingredientes de cada receta.' },
+    { target:'#buscador-recetas',     emoji:'🔍', titulo:'Buscador Inteligente',                   texto:'Escribe cualquier término para filtrar la biblioteca: nombre de receta, línea, categoría o incluso el nombre de un ingrediente. Combínalo con los filtros de línea y categoría para búsquedas muy precisas.' },
+    { target:'#lista-recetas',        emoji:'📋', titulo:'Biblioteca de Tarjetas',                 texto:'Cada tarjeta muestra la foto, nombre, línea, categoría, costo por porción y rendimiento. Desde allí puedes: ver la Ficha Chef completa, editar la receta (carga el formulario), duplicarla o eliminarla. La paginación mantiene el rendimiento con catálogos grandes.' },
+    { target:'#badge-cloud-sync',     emoji:'☁️', titulo:'Sincronización Cloud',                   texto:'El Recetario escribe exclusivamente DB_RECETAS y DB_CATEGORIAS_RECETAS en Firebase. Lee DB_INSUMOS (para el autocomplete de ingredientes) y CATALOGO_ACTIVO, pero nunca los modifica. Usa ☁️ Sync para reconectar y 🔔 Sync ON/OFF para pausar.' },
+];
+
+function iniciarTutorial(forzar = false) {
+    const visto = localStorage.getItem(_TUT_LLAVE);
+    if (visto && !forzar) return;
+    _tutPaso = 0;
+    document.getElementById('tutorial-overlay').classList.remove('oculto');
+    _renderTutPaso();
+}
+
+function _renderTutPaso() {
+    const paso  = _TUT_PASOS[_tutPaso];
+    const total = _TUT_PASOS.length;
+    const ring  = document.getElementById('tutorial-spotlight-ring');
+    const card  = document.getElementById('tutorial-card');
+
+    card.classList.remove('animando');
+    void card.offsetWidth;
+    card.classList.add('animando');
+
+    document.getElementById('tut-progress-bar').innerHTML =
+        _TUT_PASOS.map((_, i) =>
+            `<div class="tut-pip ${i < _tutPaso ? 'hecho' : i === _tutPaso ? 'activo' : ''}"></div>`
+        ).join('');
+
+    document.getElementById('tutorial-emoji').textContent  = paso.emoji;
+    document.getElementById('tutorial-titulo').textContent = paso.titulo;
+    document.getElementById('tutorial-texto').textContent  = paso.texto;
+    document.getElementById('tut-step-label').textContent  = `${_tutPaso + 1} / ${total}`;
+
+    document.getElementById('btn-tut-ant').style.visibility = _tutPaso === 0 ? 'hidden' : 'visible';
+    document.getElementById('btn-tut-sig').textContent = _tutPaso === total - 1 ? '✅ Finalizar' : 'Siguiente →';
+
+    if (paso.target) {
+        const el = document.querySelector(paso.target);
+        if (el) {
+            el.scrollIntoView({ behavior:'smooth', block:'center' });
+            setTimeout(() => _posicionarTutorial(el, card, ring), 400);
+        } else {
+            ring.style.display = 'none';
+            _centrarCard(card);
+        }
+    } else {
+        ring.style.display = 'none';
+        _centrarCard(card);
+    }
+}
+
+function _posicionarTutorial(el, card, ring) {
+    const rect  = el.getBoundingClientRect();
+    const pad   = 8;
+    const vp    = { w: window.innerWidth, h: window.innerHeight };
+    const cardW = 320, cardH = 272;
+
+    ring.style.display = 'block';
+    ring.style.top     = (rect.top    - pad) + 'px';
+    ring.style.left    = (rect.left   - pad) + 'px';
+    ring.style.width   = (rect.width  + pad * 2) + 'px';
+    ring.style.height  = (rect.height + pad * 2) + 'px';
+
+    let top;
+    if (rect.bottom + cardH + 20 < vp.h)    top = rect.bottom + 16;
+    else if (rect.top - cardH - 16 > 0)     top = rect.top - cardH - 16;
+    else                                     top = Math.max(12, (vp.h - cardH) / 2);
+
+    let left = rect.left + (rect.width / 2) - (cardW / 2);
+    left = Math.max(12, Math.min(left, vp.w - cardW - 12));
+
+    card.style.top       = top  + 'px';
+    card.style.left      = left + 'px';
+    card.style.transform = 'none';
+}
+
+function _centrarCard(card) {
+    card.style.top       = '50%';
+    card.style.left      = '50%';
+    card.style.transform = 'translate(-50%, -50%)';
+}
+
+function tutorialSiguiente() {
+    if (_tutPaso >= _TUT_PASOS.length - 1) { terminarTutorial(); return; }
+    _tutPaso++;
+    _renderTutPaso();
+}
+
+function tutorialAnterior() {
+    if (_tutPaso > 0) { _tutPaso--; _renderTutPaso(); }
+}
+
+function tutorialSaltar()   { terminarTutorial(); }
+
+function terminarTutorial() {
+    localStorage.setItem(_TUT_LLAVE, '1');
+    document.getElementById('tutorial-overlay').classList.add('oculto');
+    document.getElementById('tutorial-spotlight-ring').style.display = 'none';
+    window._mostrarToast && window._mostrarToast('🎓 Guía disponible en el botón del encabezado', 'info', 4000);
+}
+
+// Auto-trigger primera visita
+window.addEventListener('load', () => {
+    setTimeout(() => iniciarTutorial(false), 1000);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,2030 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sagrada Delicia — Maestro de Insumos V5.6</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍎</text></svg>">
+
+    <!-- ╔══════════════════════════════════════════════════════════════╗
+         ║  FIREBASE MODULE                                            ║
+         ║  onSnapshot  → escucha cambios en tiempo real              ║
+         ║  updateDoc   → escribe SOLO el campo indicado (anti-pisado) ║
+         ╚══════════════════════════════════════════════════════════════╝ -->
+    <script type="module">
+        import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, updateDoc, onSnapshot }
+            from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey:            "AIzaSyAeAWVCyu_qUSVo11uToAgGKqSYhdU1ABI",
+            authDomain:        "sagrada-delicia-central.firebaseapp.com",
+            projectId:         "sagrada-delicia-central",
+            storageBucket:     "sagrada-delicia-central.firebasestorage.app",
+            messagingSenderId: "474340023357",
+            appId:             "1:474340023357:web:bd7a643fa77733eaaede54"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db  = getFirestore(app);
+        const docTallerRef = doc(db, "operaciones", "taller");
+
+        let unsubscribe = null;
+
+        /* ── UI helpers ── */
+        function setBadge(estado, texto) {
+            const b = document.getElementById('badge-cloud-sync');
+            if (!b) return;
+            b.className = 'sync-' + estado;
+            b.innerHTML = texto;
+        }
+        function horaCorta(iso) {
+            try {
+                const d = new Date(iso);
+                return d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})
+                    + ' · ' + d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit'});
+            } catch(e){ return ''; }
+        }
+
+        window._mostrarToast = function(msg, tipo = 'info', dur = 3500) {
+            const cont = document.getElementById('toast-cloud');
+            if (!cont) return;
+            const el = document.createElement('div');
+            el.className = `toast-item t-${tipo}`;
+            el.textContent = msg;
+            cont.appendChild(el);
+            setTimeout(() => { el.classList.add('saliendo'); setTimeout(() => el.remove(), 400); }, dur);
+        };
+
+        function syncActivo() { return localStorage.getItem('sd_sync_activo') !== 'false'; }
+
+        /* ── LISTENER EN TIEMPO REAL ── */
+        function iniciarListenerTiempoReal() {
+            if (unsubscribe) return;
+            if (!syncActivo()) return;
+            setBadge('working', '<span class="dot-anim">☁️</span> Conectando...');
+
+            unsubscribe = onSnapshot(docTallerRef, (snap) => {
+                if (!snap.exists()) { setBadge('pending', '⚠️ Sin datos en nube'); return; }
+                const data = snap.data();
+
+                if (data.DB_INSUMOS && Array.isArray(data.DB_INSUMOS)) {
+                    const ts = data.ultimaActualizacion || new Date().toISOString();
+                    setBadge('ok', '✅ En vivo · ' + horaCorta(ts));
+                    if (typeof window._onInsumosUpdate === 'function') {
+                        window._onInsumosUpdate(data.DB_INSUMOS);
+                    }
+                }
+
+                /* ── V4: escucha DB_CATEGORIAS ── */
+                if (data.DB_CATEGORIAS && Array.isArray(data.DB_CATEGORIAS)) {
+                    if (typeof window._onCategoriasUpdate === 'function') {
+                        window._onCategoriasUpdate(data.DB_CATEGORIAS);
+                    }
+                }
+
+            }, (err) => {
+                console.error('onSnapshot error:', err);
+                setBadge('error', '❌ Error listener');
+                window._mostrarToast('❌ Error en listener Firebase', 'error', 5000);
+            });
+        }
+
+        function detenerListener() {
+            if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+        }
+
+        /* ── GUARDAR INSUMOS → Cloud (updateDoc solo DB_INSUMOS) ── */
+        window.guardarInsumosEnCloud = async function(insumos) {
+            if (!syncActivo()) { setBadge('offline','🔕 Sync desactivado'); return; }
+            if (!navigator.onLine) {
+                window._mostrarToast('💾 Local OK · Sin conexión cloud','warn');
+                setBadge('offline','🔌 Sin red');
+                return;
+            }
+            setBadge('working','<span class="dot-anim">☁️</span> Guardando...');
+            try {
+                await updateDoc(docTallerRef, {
+                    DB_INSUMOS: insumos,
+                    ultimaActualizacion: new Date().toISOString()
+                });
+                window._mostrarToast('✅ Insumos sincronizados con la nube','ok');
+            } catch(err) {
+                console.error('updateDoc error:', err);
+                setBadge('error','❌ Error sync');
+                window._mostrarToast('❌ No se pudo guardar en la nube','error',5000);
+            }
+        };
+
+        /* ── V4: GUARDAR CATEGORÍAS → Cloud (updateDoc solo DB_CATEGORIAS) ── */
+        window.guardarCategoriasEnCloud = async function(cats) {
+            if (!syncActivo()) return;
+            if (!navigator.onLine) {
+                window._mostrarToast('💾 Categorías: local OK · Sin conexión','warn');
+                return;
+            }
+            try {
+                await updateDoc(docTallerRef, {
+                    DB_CATEGORIAS: cats,
+                    ultimaActualizacion: new Date().toISOString()
+                });
+                window._mostrarToast('✅ Categorías sincronizadas','ok');
+            } catch(err) {
+                console.error('updateDoc categorias error:', err);
+                window._mostrarToast('❌ No se pudo guardar categorías','error',5000);
+            }
+        };
+
+        /* ── SYNC MANUAL (reconecta listener) ── */
+        window.forzarSyncManual = function() {
+            if (!navigator.onLine) { window._mostrarToast('⚠️ Sin conexión','warn'); return; }
+            detenerListener();
+            setTimeout(iniciarListenerTiempoReal, 300);
+            window._mostrarToast('☁️ Reconectando listener en tiempo real...','info');
+        };
+
+        /* Exponer para el toggle kill-switch */
+        window._iniciarListener  = iniciarListenerTiempoReal;
+        window._detenerListener  = detenerListener;
+
+        /* Online / offline */
+        window.addEventListener('online',  () => {
+            if (!syncActivo()) return;
+            window._mostrarToast('🌐 Conexión restaurada','info');
+            if (!unsubscribe) iniciarListenerTiempoReal();
+        });
+        window.addEventListener('offline', () => {
+            setBadge('offline','🔌 Sin red — modo local');
+            window._mostrarToast('⚠️ Sin conexión','warn',5000);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (navigator.onLine && syncActivo()) iniciarListenerTiempoReal();
+            else if (!navigator.onLine) setBadge('offline','🔌 Sin red — modo local');
+        });
+    </script>
+
+    <style>
+        /* ══════════════════════════════════════════
+           PALETA NOCTURNA — idéntica al control V23
+           ══════════════════════════════════════════ */
+        :root {
+            --bg-principal:      #0b111e;
+            --bg-card:           #151f32;
+            --bg-input:          #1e293b;
+            --border-color:      #2e3d56;
+            --color-texto:       #cbd5e1;
+            --color-titulos:     #f8fafc;
+            --color-subtitulos:  #94a3b8;
+            --accent-primario:   #7dd3fc;
+            --accent-secundario: #c084fc;
+            --accent-admin:      #fde047;
+            --accent-hover:      #38bdf8;
+            --accent-success:    #22c55e;
+            --color-alerta-critica: #fca5a5;
+            --color-alerta-media:   #fde047;
+            --color-alerta-ok:      #86efac;
+        }
+
+        /* ── Base ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: var(--bg-principal);
+            color: var(--color-texto);
+            padding: 28px 20px;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; line-height: 1.5;
+        }
+
+        /* ── Header ── */
+        header {
+            width: 100%; max-width: 1280px;
+            margin-bottom: 28px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 18px;
+            display: flex; flex-direction: column; gap: 14px;
+        }
+        .header-top {
+            display: flex; justify-content: space-between;
+            align-items: center; flex-wrap: wrap; gap: 10px;
+        }
+        .header-brand { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        h1 {
+            color: var(--color-titulos); font-size: 1.4rem;
+            font-weight: 700; letter-spacing: 1.5px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .chip-modulo {
+            background: rgba(192,132,252,0.12); color: var(--accent-secundario);
+            border: 1px solid rgba(192,132,252,0.3); border-radius: 20px;
+            font-size: 0.7rem; font-weight: 700; padding: 3px 10px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+
+        /* ── Botones ── */
+        .btn {
+            padding: 9px 16px; border-radius: 8px; font-size: 0.83rem;
+            font-weight: 600; cursor: pointer; border: 1px solid transparent;
+            transition: all 0.22s ease;
+            display: inline-flex; align-items: center; gap: 6px;
+            justify-content: center; text-decoration: none; background: none;
+        }
+        .btn-primario  { background: var(--accent-primario); color: #0b111e; border-color: var(--accent-primario); }
+        .btn-primario:hover { background: var(--accent-hover); box-shadow: 0 0 14px rgba(125,211,252,0.3); transform: translateY(-1px); }
+        .btn-secundario { background: rgba(192,132,252,0.12); color: var(--accent-secundario); border: 1px solid var(--accent-secundario); }
+        .btn-secundario:hover { background: var(--accent-secundario); color: #0b111e; transform: translateY(-1px); }
+        .btn-admin { background: transparent; color: var(--accent-admin); border: 1px solid var(--accent-admin); }
+        .btn-admin:hover { background: var(--accent-admin); color: #0b111e; }
+        .btn-success { background: rgba(34,197,94,0.12); color: var(--accent-success); border: 1px solid var(--accent-success); }
+        .btn-success:hover { background: var(--accent-success); color: #0b111e; }
+        .btn-danger { background: rgba(252,165,165,0.08); color: var(--color-alerta-critica); border: 1px solid var(--color-alerta-critica); padding: 5px 10px; font-size: 0.75rem; }
+        .btn-danger:hover { background: var(--color-alerta-critica); color: #0b111e; }
+
+        /* ── Navegación ecosistema ── */
+        .nav-ecosistema { display: flex; gap: 6px; flex-wrap: wrap; }
+        .btn-nav {
+            background: rgba(30,41,59,0.5); color: var(--color-subtitulos);
+            border: 1px solid var(--border-color); padding: 7px 11px; font-size: 0.76rem;
+        }
+        .btn-nav:hover { background: rgba(125,211,252,0.08); color: var(--color-titulos); border-color: rgba(125,211,252,0.3); }
+        .btn-nav.activo { background: rgba(192,132,252,0.1); color: var(--accent-secundario); border-color: var(--accent-secundario); }
+
+        /* ── Controles superiores ── */
+        .ctrl-sync { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+        /* ── Layout principal ── */
+        .contenedor { width: 100%; max-width: 1280px; display: flex; flex-direction: column; gap: 20px; }
+
+        /* ── Panel ── */
+        .panel {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 26px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+            animation: fadeIn 0.35s ease-out;
+        }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+        h2 {
+            color: var(--color-titulos); font-size: 1.1rem; font-weight: 600;
+            margin-bottom: 20px; border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+        }
+
+        /* ── Stats bar ── */
+        .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; }
+        .stat-card {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 16px 18px;
+            display: flex; flex-direction: column; gap: 4px;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+        .stat-card:hover { border-color: var(--accent-primario); transform: translateY(-2px); }
+        .stat-valor { font-size: 1.35rem; font-weight: 800; color: var(--color-titulos); line-height: 1; }
+        .stat-label { font-size: 0.67rem; color: var(--color-subtitulos); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+        /* ── Toolbar ── */
+        .toolbar {
+            display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+            background: rgba(30,41,59,0.35); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 13px 15px; margin-bottom: 16px;
+        }
+        .toolbar-buscador {
+            flex: 1; min-width: 200px;
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 9px 13px; border-radius: 8px;
+            font-size: 0.87rem; outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .toolbar-buscador:focus { border-color: var(--accent-primario); box-shadow: 0 0 0 3px rgba(125,211,252,0.1); }
+        .toolbar-select {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 9px 12px; border-radius: 8px;
+            font-size: 0.82rem; outline: none; min-width: 160px;
+        }
+        .toolbar-select:focus { border-color: var(--accent-primario); }
+        .toolbar-acciones { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+
+        /* ── Tabla ── */
+        .tabla-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border-color); }
+        table.tabla-ins { width: 100%; border-collapse: collapse; min-width: 780px; }
+        table.tabla-ins thead tr { background: rgba(30,41,59,0.7); }
+        table.tabla-ins th {
+            padding: 11px 13px; font-size: 0.7rem; color: var(--color-subtitulos);
+            text-transform: uppercase; letter-spacing: 0.5px;
+            text-align: left; border-bottom: 2px solid var(--border-color); white-space: nowrap;
+        }
+        table.tabla-ins td { padding: 9px 13px; border-bottom: 1px solid var(--border-color); font-size: 0.87rem; vertical-align: middle; }
+        table.tabla-ins tbody tr:hover td { background: rgba(125,211,252,0.03); }
+        table.tabla-ins tbody tr:last-child td { border-bottom: none; }
+
+        /* Inputs dentro de la tabla */
+        .td-inp {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 7px 9px; border-radius: 6px;
+            font-size: 0.84rem; outline: none; width: 100%;
+            transition: border-color 0.18s, box-shadow 0.18s;
+        }
+        .td-inp:focus { border-color: var(--accent-primario); box-shadow: 0 0 0 2px rgba(125,211,252,0.1); }
+        .td-sel {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 7px 9px; border-radius: 6px;
+            font-size: 0.78rem; outline: none; width: 100%;
+        }
+        .td-sel:focus { border-color: var(--accent-primario); }
+
+        /* Badge categoría */
+        .badge-cat {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 8px; border-radius: 12px;
+            font-size: 0.66rem; font-weight: 700; letter-spacing: 0.3px; white-space: nowrap;
+        }
+
+        /* Botón historial */
+        .btn-hist {
+            background: none; border: 1px solid var(--border-color);
+            color: var(--color-subtitulos); padding: 4px 9px;
+            border-radius: 6px; font-size: 0.72rem; cursor: pointer;
+            transition: all 0.18s; white-space: nowrap;
+        }
+        .btn-hist:hover { border-color: var(--accent-secundario); color: var(--accent-secundario); }
+        .btn-hist.con-datos {
+            border-color: rgba(192,132,252,0.4); color: var(--accent-secundario);
+            background: rgba(192,132,252,0.08);
+        }
+
+        /* Fila nueva */
+        .fila-nueva { animation: pulso-fila 1.2s ease; }
+        @keyframes pulso-fila { 0%,100%{outline:none;} 30%,70%{outline:2px solid var(--accent-primario);outline-offset:1px;} }
+
+        /* Pie de tabla */
+        .tabla-footer {
+            margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color);
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 10px;
+        }
+        .contador-vis { font-size: 0.77rem; color: var(--color-subtitulos); }
+
+        /* ── Estado vacío ── */
+        .estado-vacio td { text-align: center; padding: 50px 20px; color: var(--color-subtitulos); font-style: italic; }
+        .estado-vacio .ico { font-size: 2.2rem; display: block; margin-bottom: 10px; }
+
+        /* ── Modal historial de precios ── */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+            z-index: 1000; display: flex; align-items: center; justify-content: center;
+            padding: 20px; animation: fadeIn 0.2s;
+        }
+        .modal-box {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 14px; padding: 28px; max-width: 500px; width: 100%;
+            max-height: 80vh; overflow-y: auto;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+        }
+        .modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border-color);
+        }
+        .modal-header h3 { color: var(--color-titulos); font-size: 1rem; }
+        .hist-entry {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 14px; border-radius: 8px;
+            background: rgba(30,41,59,0.45); border: 1px solid var(--border-color);
+            margin-bottom: 8px; font-size: 0.82rem; gap: 12px; flex-wrap: wrap;
+        }
+        .hist-entry.reciente { border-color: rgba(192,132,252,0.4); }
+        .hist-fecha { font-size: 0.7rem; color: var(--color-subtitulos); margin-top: 3px; }
+
+        /* ── Sistema SYNC badge ── */
+        #badge-cloud-sync {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 12px; border-radius: 20px; font-size: 0.71rem;
+            font-weight: 700; letter-spacing: 0.3px; border: 1px solid;
+            transition: all 0.4s ease; cursor: default; white-space: nowrap;
+        }
+        #badge-cloud-sync.sync-ok      { color: var(--accent-success);       border-color: var(--accent-success);       background: rgba(34,197,94,0.08); }
+        #badge-cloud-sync.sync-pending { color: var(--accent-admin);          border-color: var(--accent-admin);          background: rgba(253,224,71,0.08); }
+        #badge-cloud-sync.sync-error   { color: var(--color-alerta-critica);  border-color: var(--color-alerta-critica);  background: rgba(252,165,165,0.08); }
+        #badge-cloud-sync.sync-offline { color: var(--color-subtitulos);      border-color: var(--border-color);          background: rgba(148,163,184,0.08); }
+        #badge-cloud-sync.sync-working { color: var(--accent-primario);       border-color: var(--accent-primario);       background: rgba(125,211,252,0.08); }
+        @keyframes pulse-sync { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        #badge-cloud-sync.sync-working .dot-anim { animation: pulse-sync 1s infinite; }
+
+        /* ── Toast ── */
+        #toast-cloud { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+        .toast-item { padding: 10px 16px; border-radius: 10px; font-size: 0.81rem; font-weight: 600; border: 1px solid; backdrop-filter: blur(8px); animation: toast-in 0.28s ease; pointer-events: none; max-width: 320px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        .toast-item.t-ok    { color:var(--accent-success);       border-color:var(--accent-success);       background:rgba(10,25,15,0.94); }
+        .toast-item.t-warn  { color:var(--accent-admin);         border-color:var(--accent-admin);         background:rgba(22,18,4,0.94); }
+        .toast-item.t-error { color:var(--color-alerta-critica); border-color:var(--color-alerta-critica); background:rgba(28,8,8,0.94); }
+        .toast-item.t-info  { color:var(--accent-primario);      border-color:var(--accent-primario);      background:rgba(4,16,28,0.94); }
+        .toast-item.saliendo { animation: toast-out 0.4s ease forwards; }
+        @keyframes toast-in  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes toast-out { from{opacity:1;transform:translateY(0)} to{opacity:0;transform:translateY(10px)} }
+
+        /* ── Pill LIVE ── */
+        .pill-live {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 0.67rem; font-weight: 700; color: var(--accent-success);
+            background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25);
+            border-radius: 20px; padding: 3px 9px;
+        }
+        .pill-live::before { content:'●'; animation: pulse-sync 1.4s infinite; }
+
+        /* ── Inputs genéricos ── */
+        select, input, textarea {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 10px 12px; border-radius: 8px;
+            font-size: 0.88rem; outline: none; transition: all 0.2s ease; width: 100%;
+        }
+        select:focus, input:focus { border-color: var(--accent-primario); box-shadow: 0 0 0 3px rgba(125,211,252,0.1); }
+        label { display: flex; align-items: center; font-size: 0.73rem; color: var(--color-subtitulos); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* ── Responsive ── */
+        @media (max-width: 900px) {
+            .stats-bar { grid-template-columns: repeat(2,1fr); }
+        }
+        @media (max-width: 700px) {
+            body { padding: 12px 10px; }
+            h1 { font-size: 1.1rem; }
+            .nav-ecosistema { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+            .btn-nav { padding: 8px 6px; font-size: 0.72rem; justify-content: center; }
+            .toolbar { flex-direction: column; }
+            .toolbar-buscador { width: 100%; }
+            .toolbar-acciones { width: 100%; justify-content: flex-start; }
+        }
+        @media (max-width: 480px) {
+            .nav-ecosistema { grid-template-columns: 1fr 1fr; }
+            .stats-bar { grid-template-columns: 1fr 1fr; }
+        }
+
+        /* ══════════════════════════════════════════
+           V4 — GESTOR DE CATEGORÍAS
+           ══════════════════════════════════════════ */
+        details#detalle-cats > summary {
+            list-style: none; cursor: pointer;
+            color: var(--color-titulos); font-size: 1.05rem; font-weight: 600;
+            display: flex; align-items: center; gap: 10px;
+            user-select: none;
+        }
+        details#detalle-cats > summary::-webkit-details-marker { display: none; }
+        details#detalle-cats > summary::after {
+            content: '▸'; margin-left: auto; font-size: 0.78rem;
+            color: var(--color-subtitulos); transition: transform 0.22s;
+        }
+        details#detalle-cats[open] > summary::after { transform: rotate(90deg); }
+        details#detalle-cats[open] > summary {
+            margin-bottom: 20px; padding-bottom: 14px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .cats-form {
+            display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+            margin-bottom: 18px;
+        }
+        .cats-form input { width: auto; }
+        .cats-form .inp-emoji {
+            max-width: 68px; text-align: center; font-size: 1.3rem;
+            padding: 8px; flex-shrink: 0;
+        }
+        .cats-form .inp-label { flex: 1; min-width: 160px; }
+        .cats-chips-grid {
+            display: flex; flex-wrap: wrap; gap: 8px; min-height: 36px;
+            margin-bottom: 14px;
+        }
+        .cat-chip {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 5px 11px; border-radius: 20px; font-size: 0.76rem;
+            font-weight: 700; border: 1px solid; letter-spacing: 0.2px;
+            white-space: nowrap;
+        }
+        .cat-chip-del {
+            background: none; border: none; cursor: pointer; color: inherit;
+            font-size: 1rem; line-height: 1; padding: 0 1px;
+            opacity: 0.5; transition: opacity 0.15s;
+        }
+        .cat-chip-del:hover { opacity: 1; }
+        .cat-chip-lock {
+            font-size: 0.62rem; opacity: 0.45; margin-left: 2px;
+        }
+        .cats-hint {
+            font-size: 0.73rem; color: var(--color-subtitulos);
+            border-top: 1px solid var(--border-color); padding-top: 10px;
+            line-height: 1.6;
+        }
+
+        /* ══════════════════════════════════════════
+           V5 — SELECCIÓN MÚLTIPLE + EDICIÓN CATEGORÍAS
+           ══════════════════════════════════════════ */
+
+        /* Override global para checkboxes */
+        input[type="checkbox"] {
+            width: auto !important;
+            padding: 0 !important;
+            background: none !important;
+            border: none !important;
+            box-shadow: none !important;
+            cursor: pointer;
+            accent-color: var(--accent-primario);
+            height: 16px;
+            transition: none !important;
+        }
+
+        /* Fila seleccionada */
+        .fila-seleccionada td {
+            background: rgba(125,211,252,0.07) !important;
+            border-bottom-color: rgba(125,211,252,0.15) !important;
+        }
+        .th-check, .td-check {
+            text-align: center !important;
+            padding-left: 10px !important;
+            padding-right: 6px !important;
+        }
+
+        /* Batch bar */
+        .batch-bar {
+            display: none;
+            background: rgba(125,211,252,0.05);
+            border: 1px solid rgba(125,211,252,0.22);
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            animation: fadeIn 0.2s ease;
+        }
+        .batch-bar.visible { display: flex; }
+        .batch-count {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--accent-primario);
+            white-space: nowrap;
+        }
+        .batch-sep {
+            width: 1px; height: 20px;
+            background: var(--border-color);
+            flex-shrink: 0;
+        }
+        .batch-sel {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 7px 10px; border-radius: 8px;
+            font-size: 0.8rem; outline: none; min-width: 190px; width: auto;
+        }
+        .batch-sel:focus { border-color: var(--accent-primario); }
+
+        /* Chip edición inline */
+        .cat-chip-edit-form {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(125,211,252,0.07);
+            border: 1px solid var(--accent-primario);
+            border-radius: 20px; padding: 4px 10px;
+            animation: fadeIn 0.18s ease;
+        }
+        .cat-chip-edit-form .inp-chip {
+            background: var(--bg-input) !important;
+            border: 1px solid var(--border-color) !important;
+            border-radius: 6px !important;
+            padding: 3px 6px !important;
+            font-size: 0.78rem !important;
+            width: auto !important;
+            outline: none !important;
+            box-shadow: none !important;
+            height: auto !important;
+            transition: border-color 0.18s !important;
+            cursor: text !important;
+        }
+        .cat-chip-edit-form .inp-chip:focus {
+            border-color: var(--accent-primario) !important;
+            box-shadow: none !important;
+        }
+        .inp-chip-emoji { width: 44px !important; text-align: center !important; font-size: 1.1rem !important; }
+        .inp-chip-label { min-width: 130px !important; }
+        .cat-chip-action {
+            background: none; border: none; cursor: pointer;
+            font-size: 0.82rem; padding: 0 2px;
+            opacity: 0.6; transition: opacity 0.15s;
+            line-height: 1; color: inherit;
+        }
+        .cat-chip-action:hover { opacity: 1; }
+        /* botón editar en chip normal */
+        .cat-chip-edit-btn {
+            background: none; border: none; cursor: pointer; color: inherit;
+            font-size: 0.8rem; line-height: 1; padding: 0 1px;
+            opacity: 0.45; transition: opacity 0.15s;
+        }
+        .cat-chip-edit-btn:hover { opacity: 1; }
+
+        /* ══ TUTORIAL SYSTEM ══ */
+        #tutorial-overlay { position:fixed; inset:0; z-index:9990; background:rgba(5,12,28,0.86); pointer-events:all; transition:opacity 0.3s; }
+        #tutorial-overlay.oculto { display:none !important; }
+        #tutorial-spotlight-ring { position:fixed; z-index:9995; border-radius:12px; box-shadow:0 0 0 3px var(--accent-primario),0 0 0 7px rgba(125,211,252,0.18),0 0 28px rgba(125,211,252,0.12); pointer-events:none; transition:top 0.35s cubic-bezier(0.4,0,0.2,1),left 0.35s cubic-bezier(0.4,0,0.2,1),width 0.35s cubic-bezier(0.4,0,0.2,1),height 0.35s cubic-bezier(0.4,0,0.2,1); }
+        #tutorial-card { position:fixed; z-index:10000; background:var(--bg-card); border:1px solid var(--accent-primario); border-radius:14px; padding:22px 22px 16px; width:316px; box-shadow:0 20px 60px rgba(0,0,0,0.75),0 0 0 1px rgba(125,211,252,0.07); }
+        #tutorial-card.animando { animation:tut-fade 0.26s ease; }
+        @keyframes tut-fade { from{opacity:0;transform:translateY(7px)} to{opacity:1;transform:translateY(0)} }
+        .tut-progress-bar { display:flex; gap:3px; margin-bottom:16px; }
+        .tut-pip { flex:1; height:3px; border-radius:3px; background:var(--border-color); transition:background 0.3s; }
+        .tut-pip.activo { background:var(--accent-primario); }
+        .tut-pip.hecho  { background:rgba(125,211,252,0.32); }
+        #tutorial-emoji { font-size:1.55rem; margin-bottom:8px; line-height:1; }
+        #tutorial-titulo { color:var(--color-titulos); font-size:0.98rem; font-weight:700; margin-bottom:9px; }
+        #tutorial-texto { color:var(--color-texto); font-size:0.81rem; line-height:1.65; margin-bottom:16px; }
+        .tut-nav-row { display:flex; gap:6px; align-items:center; justify-content:space-between; }
+        .tut-step-label { font-size:0.67rem; color:var(--color-subtitulos); font-weight:600; white-space:nowrap; }
+        .btn-tut-ant { background:none; border:1px solid var(--border-color); color:var(--color-subtitulos); padding:7px 11px; border-radius:8px; font-size:0.76rem; cursor:pointer; transition:all 0.18s; }
+        .btn-tut-ant:hover { border-color:var(--accent-primario); color:var(--accent-primario); }
+        .btn-tut-sig { background:var(--accent-primario); color:#0b111e; border:none; padding:7px 14px; border-radius:8px; font-size:0.76rem; font-weight:700; cursor:pointer; transition:all 0.18s; white-space:nowrap; }
+        .btn-tut-sig:hover { background:var(--accent-hover); transform:translateY(-1px); }
+        .btn-tut-saltar { background:none; border:none; color:var(--color-subtitulos); font-size:0.7rem; cursor:pointer; padding:4px 5px; transition:color 0.18s; white-space:nowrap; }
+        .btn-tut-saltar:hover { color:var(--color-alerta-critica); }
+        .btn-guia { background:rgba(125,211,252,0.07); color:var(--accent-primario); border:1px solid rgba(125,211,252,0.35); padding:8px 13px; border-radius:8px; font-size:0.78rem; font-weight:600; cursor:pointer; transition:all 0.2s; display:inline-flex; align-items:center; gap:5px; }
+        .btn-guia:hover { background:rgba(125,211,252,0.14); box-shadow:0 0 10px rgba(125,211,252,0.15); }
+    </style>
+</head>
+<body>
+
+<!-- ─── Toast container ─── -->
+<div id="toast-cloud"></div>
+
+<!-- Input importar oculto -->
+<input type="file" id="input-importar-insumos" style="display:none;" accept=".csv" onchange="importarInsumosCSV(event)">
+
+<!-- ══ TUTORIAL OVERLAY ══ -->
+<div id="tutorial-overlay" class="oculto">
+    <div id="tutorial-spotlight-ring" style="display:none;"></div>
+    <div id="tutorial-card">
+        <div class="tut-progress-bar" id="tut-progress-bar"></div>
+        <div id="tutorial-emoji"></div>
+        <div id="tutorial-titulo"></div>
+        <p id="tutorial-texto"></p>
+        <div class="tut-nav-row">
+            <button class="btn-tut-ant" id="btn-tut-ant" onclick="tutorialAnterior()">← Ant.</button>
+            <span class="tut-step-label" id="tut-step-label"></span>
+            <button class="btn-tut-saltar" onclick="tutorialSaltar()">✕ Saltar</button>
+            <button class="btn-tut-sig" id="btn-tut-sig" onclick="tutorialSiguiente()">Siguiente →</button>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════
+     HEADER
+════════════════════════════════════ -->
+<header>
+    <div class="header-top">
+        <div class="header-brand">
+            <h1>🍎 SAGRADA DELICIA</h1>
+            <span class="chip-modulo">Insumos V5.6</span>
+            <span id="badge-cloud-sync" class="sync-offline" title="Listener en tiempo real">⚫ Conectando...</span>
+            <span class="pill-live" id="pill-live" style="display:none;">EN VIVO</span>
+        </div>
+        <button class="btn-guia" onclick="iniciarTutorial(true)" title="Relanzar guía interactiva">🎓 Guía</button>
+        <button class="btn" onclick="guardarManual()"
+            style="border-color:#22c55e;color:#22c55e;background:rgba(34,197,94,0.1);padding:8px 18px;font-weight:600;">
+            💾 Guardar Insumos
+        </button>
+
+    </div>
+
+    <!-- NAVEGACIÓN ECOSISTEMA -->
+    <nav class="nav-ecosistema" aria-label="Páginas del sistema">
+        <a class="btn btn-nav" onclick="irA('cotizador')">← Cotizador</a>
+        <a class="btn btn-nav" onclick="irA('recetario')">🍳 Recetario</a>
+        <a class="btn btn-nav activo" aria-current="page">🍎 Insumos</a>
+        <a class="btn btn-nav" onclick="irA('lineas')">📦 Líneas</a>
+        <a class="btn btn-nav" onclick="irA('costoLinea')">💰 Costos</a>
+        <a class="btn btn-nav" onclick="irA('pedidos')">📋 Pedidos</a>
+        <a class="btn btn-nav" onclick="irA('catalogo')">📖 Catálogo &amp; Historial</a>
+        <a class="btn btn-nav" onclick="irA('sobreNosotros')">💌 Sobre Nosotros</a>
+    </nav>
+</header>
+
+<!-- ════════════════════════════════════
+     CONTENIDO PRINCIPAL
+════════════════════════════════════ -->
+<main class="contenedor">
+
+    <!-- STATS BAR -->
+    <div class="stats-bar">
+        <div class="stat-card">
+            <span class="stat-valor" id="stat-total">—</span>
+            <span class="stat-label">Total Insumos</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-valor" id="stat-min" style="color:var(--color-alerta-ok);">—</span>
+            <span class="stat-label">Costo Mínimo</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-valor" id="stat-max" style="color:var(--color-alerta-critica);">—</span>
+            <span class="stat-label">Costo Máximo</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-valor" id="stat-prom" style="color:var(--accent-primario);">—</span>
+            <span class="stat-label">Promedio</span>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         V4 — PANEL GESTOR DE CATEGORÍAS
+    ════════════════════════════════════ -->
+    <section class="panel">
+        <details id="detalle-cats">
+            <summary>
+                🗂 Gestión de Categorías
+                <span id="cats-count-badge" class="chip-modulo" style="font-size:0.65rem;">—</span>
+            </summary>
+
+            <!-- Formulario de nueva categoría -->
+            <div class="cats-form">
+                <input type="text" id="cat-emoji-new" class="inp-emoji"
+                    placeholder="🏷" maxlength="4" title="Emoji de la categoría">
+                <input type="text" id="cat-label-new" class="inp-label"
+                    placeholder="Nombre de la nueva categoría..."
+                    maxlength="40"
+                    onkeydown="if(event.key==='Enter') agregarCategoria()">
+                <button class="btn btn-primario" onclick="agregarCategoria()">➕ Agregar</button>
+            </div>
+
+            <!-- Chips de categorías existentes -->
+            <div id="gestor-cats-chips" class="cats-chips-grid"></div>
+
+            <p class="cats-hint">
+                Las categorías sin insumos asignados se pueden eliminar con ×. Usa ✏️ para renombrar o cambiar el emoji.
+                <strong style="color:var(--accent-admin);">"Otros"</strong> es la categoría fallback y no se puede eliminar.
+                Los cambios se sincronizan automáticamente con Firebase.
+            </p>
+        </details>
+    </section>
+
+    <!-- PANEL INSUMOS -->
+    <section class="panel">
+        <h2>
+            🍎 Catálogo Maestro de Insumos Base
+            
+        </h2>
+
+        <!-- TOOLBAR -->
+        <div class="toolbar">
+            
+            <select class="toolbar-select" id="filtro-categoria" onchange="renderizarTabla()">
+                <option value="">🗂 Todas las categorías</option>
+            </select>
+
+            <select class="toolbar-select" id="selector-orden" onchange="renderizarTabla()" style="min-width:170px;">
+                <option value="nombre-asc">🔤 Nombre A → Z</option>
+                <option value="nombre-desc">🔤 Nombre Z → A</option>
+                <option value="costo-asc">💰 Costo ↑ (menor)</option>
+                <option value="costo-desc">💰 Costo ↓ (mayor)</option>
+                <option value="categoria" selected>🗂 Por categoría</option>
+                <option value="reciente">🕐 Precio actualizado</option>
+            </select>
+
+<input type="search" class="toolbar-buscador" id="buscador-insumos"
+                placeholder="🔍 Buscar por nombre o unidad..."
+                oninput="renderizarTabla()">
+
+            <div class="toolbar-acciones">
+
+<button class="btn btn-primario" onclick="agregarNuevoInsumo()">➕ Nuevo Insumo</button>
+
+                <button class="btn btn-danger" onclick="exportarInsumosPDF()" title="Exportar a PDF imprimible">📄 PDF</button>
+                <button class="btn btn-primario" onclick="exportarInsumosJSON()" title="Descargar backup JSON">💾 JSON</button>
+                <button class="btn btn-secundario" onclick="document.getElementById('input-importar-insumos').click()" title="Importar desde CSV (Excel / Google Sheets)">📂 Importar CSV</button>
+            </div>
+        </div>
+
+        <!-- V5: BATCH BAR — visible solo con selección activa -->
+        <div class="batch-bar" id="batch-bar">
+            <span class="batch-count" id="batch-count">0 seleccionados</span>
+            <span class="batch-sep"></span>
+            <select class="batch-sel" id="batch-cat-sel">
+                <option value="">— Mover a categoría —</option>
+            </select>
+            <button class="btn btn-success" style="padding:7px 14px;" onclick="cambiarCategoriaLote()">✅ Aplicar</button>
+            <span class="batch-sep"></span>
+            <button class="btn btn-danger" onclick="eliminarLote()">🗑 Eliminar seleccionados</button>
+            <button class="btn" style="margin-left:auto;padding:7px 12px;color:var(--color-subtitulos);border-color:var(--border-color);"
+                onclick="limpiarSeleccion()">✕ Cancelar selección</button>
+        </div>
+
+        <!-- TABLA -->
+        <div class="tabla-wrapper">
+            <table class="tabla-ins" id="tabla-insumos">
+                <thead>
+                    <tr>
+                        <!-- V5: columna checkbox -->
+                        <th class="th-check" style="width:3%;">
+                            <input type="checkbox" id="chk-all" title="Seleccionar / deseleccionar todos"
+                                onchange="toggleSeleccionTodos()">
+                        </th>
+                        <th style="width:3%;">#</th>
+                        <th style="width:28%;">Insumo / Materia Prima</th>
+                        <th style="width:18%;">Categoría</th>
+                        <th style="width:15%;">Costo Base (COP)</th>
+                        <th style="width:8%;">Unidad</th>
+                        <th style="width:14%;">Proveedor</th>
+                        <th style="width:10%; text-align:center;">Últ. Act.</th>
+                        <th style="width:6%; text-align:center;">Recetas</th>
+                        <th style="width:10%; text-align:center;">Historial 📈</th>
+                        <th style="width:10%; text-align:center;">Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-insumos">
+                    <tr class="estado-vacio">
+                        <td colspan="11"><span class="ico">⏳</span>Cargando insumos desde la nube…</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- PIE DE TABLA -->
+        <div class="tabla-footer">
+            <span class="contador-vis" id="contador-visible"></span>
+            <button class="btn btn-primario" onclick="agregarNuevoInsumo()">➕ Nuevo Insumo</button>
+            <button class="btn btn-secundario" onclick="exportarCSV()" title="Exportar vista actual a CSV (Excel / Google Sheets)">📥 Exportar CSV</button>
+        </div>
+    </section>
+
+</main>
+
+<!-- ════════════════════════════════════
+     MODAL — HISTORIAL DE PRECIOS
+════════════════════════════════════ -->
+<div id="modal-historial" class="modal-overlay" style="display:none;"
+    onclick="cerrarModal(event)">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+        <div class="modal-header">
+            <h3 id="modal-titulo">📈 Historial de Precios</h3>
+            <button class="btn btn-danger" onclick="cerrarModal(null,true)">✕ Cerrar</button>
+        </div>
+        <div id="modal-insumo-nombre"
+            style="font-weight:700; color:var(--accent-primario); margin-bottom:16px; font-size:0.95rem;"></div>
+        <div id="modal-cuerpo"></div>
+    </div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     SCRIPT PRINCIPAL
+════════════════════════════════════ -->
+<script>
+/* ══════════════════════════════════════════════════════════
+   SAGRADA DELICIA — INSUMOS MAESTROS V5
+   Standalone · onSnapshot tiempo real · updateDoc anti-pisado
+   V4: Gestor de categorías dinámico con Firebase sync
+   V5: Filtro preservado · Selección múltiple · Edición categorías
+   Diseñado por: Marto 🧠
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Rutas del ecosistema ── */
+const RUTAS = {
+    cotizador:    'COTIZADOR.html',
+    recetario:    'RECETARIO.html',
+    lineas:       'LINEAS.html',
+    costoLinea:   'COSTOS.html',
+    pedidos:      'PEDIDOS.html',
+    catalogo:     'CATALOGO.html',
+    sobreNosotros:'NOSOTROSEDITOR.html'
+};
+
+function irA(clave) {
+    const ruta = RUTAS[clave];
+    if (ruta) {
+        window.location.href = ruta;
+    } else {
+        window._mostrarToast && window._mostrarToast('🚧 Página en construcción: ' + clave, 'warn');
+    }
+}
+
+/* ── Claves localStorage ── */
+const LLAVE_INSUMOS    = 'sd_insumos_base_v17';
+const LLAVE_CATEGORIAS = 'sd_categorias_v1';
+const LLAVE_SYNC       = 'sd_sync_activo';
+
+/* ── Catálogo de categorías (fallback — se sobrescribe desde localStorage / Firebase) ── */
+let CATEGORIAS = [
+    { id:'harinas',      emoji:'🌾', label:'Harinas & Almidones' },
+    { id:'lacteos',      emoji:'🥛', label:'Lácteos' },
+    { id:'azucares',     emoji:'🍯', label:'Azúcares & Endulzantes' },
+    { id:'huevos',       emoji:'🥚', label:'Huevos & Proteínas' },
+    { id:'grasas',       emoji:'🧈', label:'Grasas & Aceites' },
+    { id:'saborizantes', emoji:'🌿', label:'Saborizantes & Especias' },
+    { id:'colorantes',   emoji:'🎨', label:'Colorantes & Decoración' },
+    { id:'empaques',     emoji:'📦', label:'Empaques & Presentación' },
+    { id:'logistica',    emoji:'🚚', label:'Logística' },
+    { id:'otros',        emoji:'🔹', label:'Otros' }
+];
+
+/* ── Paleta de colores auto-asignada por índice ── */
+const PALETA_COLORES = [
+    { bg:'rgba(253,224,71,0.12)',  color:'#fde047' },
+    { bg:'rgba(125,211,252,0.12)', color:'#7dd3fc' },
+    { bg:'rgba(192,132,252,0.12)', color:'#c084fc' },
+    { bg:'rgba(251,191,36,0.12)',  color:'#fbbf24' },
+    { bg:'rgba(134,239,172,0.12)', color:'#86efac' },
+    { bg:'rgba(74,222,128,0.12)',  color:'#4ade80' },
+    { bg:'rgba(249,115,22,0.12)',  color:'#f97316' },
+    { bg:'rgba(148,163,184,0.12)', color:'#94a3b8' },
+    { bg:'rgba(96,165,250,0.12)',  color:'#60a5fa' },
+    { bg:'rgba(100,116,139,0.12)', color:'#64748b' },
+    { bg:'rgba(251,113,133,0.12)', color:'#fb7185' },
+    { bg:'rgba(52,211,153,0.12)',  color:'#34d399' }
+];
+
+function getCatColor(catId) {
+    const idx = CATEGORIAS.findIndex(c => c.id === catId);
+    if (idx === -1) return PALETA_COLORES[PALETA_COLORES.length - 1];
+    return PALETA_COLORES[idx % PALETA_COLORES.length];
+}
+
+/* ── Insumos de arranque (si la nube está vacía) ── */
+const PREDETERMINADOS = [
+    { id:'harina',      nombre:'Harina de Trigo Premium', costo:4500,  unidad:'kg',  categoria:'harinas',  historial_precios:[] },
+    { id:'mantequilla', nombre:'Mantequilla Especial',     costo:16000, unidad:'kg',  categoria:'grasas',   historial_precios:[] },
+    { id:'azucar',      nombre:'Azúcar Refinada',          costo:3200,  unidad:'kg',  categoria:'azucares', historial_precios:[] },
+    { id:'huevos',      nombre:'Huevos AA (Unidad)',        costo:600,   unidad:'und', categoria:'huevos',   historial_precios:[] }
+];
+
+/* ── Estado ── */
+let DB_INSUMOS        = [];
+let _lastCloudStr     = '';
+let _lastCatCloudStr  = '';
+let _hayPendientes    = false;
+let _selectedIds      = new Set();   /* V5: selección múltiple */
+let _listaFiltrada    = [];          /* V5.2: snapshot filtrado para CSV export */
+
+/* ══════════════════════════════════════
+   INIT
+══════════════════════════════════════ */
+window.onload = function() {
+    const catsLocal = localStorage.getItem(LLAVE_CATEGORIAS);
+    if (catsLocal) {
+        try { CATEGORIAS = JSON.parse(catsLocal); } catch(e) { /* usa fallback */ }
+    }
+
+    DB_INSUMOS = _migrar(JSON.parse(localStorage.getItem(LLAVE_INSUMOS)) || PREDETERMINADOS);
+    _poblarFiltroCategoria();
+    _renderGestorChips();
+    renderizarTabla();
+    actualizarStats();
+    actualizarBtnSync();
+};
+
+/* ── Migración: añadir campos nuevos a insumos antiguos ── */
+function _migrar(arr) {
+    return arr.map(ins => ({
+        ...ins,
+        id: ins.id || 'ins_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+        categoria: ins.categoria || 'otros',
+        proveedor: ins.proveedor || '',                                          /* V5.2 */
+        historial_precios: Array.isArray(ins.historial_precios) ? ins.historial_precios : []
+    }));
+}
+
+/* ── Callback Firebase — INSUMOS (onSnapshot) ── */
+window._onInsumosUpdate = function(insumosCloud) {
+    const cloudStr = JSON.stringify(insumosCloud.map(i => ({ id:i.id, costo:i.costo, nombre:i.nombre, unidad:i.unidad, proveedor:i.proveedor||'' })));
+    if (cloudStr === _lastCloudStr) return;
+    _lastCloudStr = cloudStr;
+
+    DB_INSUMOS = _migrar(insumosCloud);
+    localStorage.setItem(LLAVE_INSUMOS, JSON.stringify(DB_INSUMOS));
+    renderizarTabla();
+    actualizarStats();
+
+    const pill = document.getElementById('pill-live');
+    if (pill) {
+        pill.style.display = 'inline-flex';
+        clearTimeout(window._liveTO);
+        window._liveTO = setTimeout(() => { pill.style.display = 'none'; }, 3000);
+    }
+};
+
+/* ── V4: Callback Firebase — CATEGORÍAS (onSnapshot) ── */
+window._onCategoriasUpdate = function(catsCloud) {
+    const cloudStr = JSON.stringify(catsCloud);
+    if (cloudStr === _lastCatCloudStr) return;
+    _lastCatCloudStr = cloudStr;
+
+    CATEGORIAS = catsCloud;
+    localStorage.setItem(LLAVE_CATEGORIAS, JSON.stringify(CATEGORIAS));
+    _poblarFiltroCategoria();
+    _renderGestorChips();
+    renderizarTabla();
+};
+
+/* ══════════════════════════════════════
+   RENDER TABLA
+══════════════════════════════════════ */
+function renderizarTabla() {
+    const tbody   = document.getElementById('tbody-insumos');
+    if (!tbody) return;
+
+    const busq    = (document.getElementById('buscador-insumos')?.value || '').toLowerCase().trim();
+    const catFilt = document.getElementById('filtro-categoria')?.value || '';
+    const orden   = document.getElementById('selector-orden')?.value || 'nombre-asc';
+
+    let lista = [...DB_INSUMOS];
+
+    /* Filtros */
+    if (busq)    lista = lista.filter(i => i.nombre.toLowerCase().includes(busq) || i.unidad.toLowerCase().includes(busq));
+    if (catFilt) lista = lista.filter(i => (i.categoria || 'otros') === catFilt);
+
+    /* Ordenamiento */
+    switch (orden) {
+        case 'nombre-asc':  lista.sort((a,b) => a.nombre.localeCompare(b.nombre,'es')); break;
+        case 'nombre-desc': lista.sort((a,b) => b.nombre.localeCompare(a.nombre,'es')); break;
+        case 'costo-asc':   lista.sort((a,b) => a.costo - b.costo); break;
+        case 'costo-desc':  lista.sort((a,b) => b.costo - a.costo); break;
+        case 'categoria':   lista.sort((a,b) => (a.categoria||'otros').localeCompare(b.categoria||'otros')); break;
+        case 'reciente':    lista.sort((a,b) => {
+            const tA = (a.historial_precios||[]).slice(-1)[0]?.fecha || '0';
+            const tB = (b.historial_precios||[]).slice(-1)[0]?.fecha || '0';
+            return tB.localeCompare(tA);
+        }); break;
+    }
+
+    /* Tabla vacía */
+    if (lista.length === 0) {
+        tbody.innerHTML = `<tr class="estado-vacio"><td colspan="11">
+            <span class="ico">${busq || catFilt ? '🔍' : '🍎'}</span>
+            ${busq || catFilt ? 'Sin resultados — prueba con otros filtros.' : 'No hay insumos. Presiona ➕ Nuevo Insumo.'}
+        </td></tr>`;
+        document.getElementById('contador-visible').textContent = '0 insumos';
+        actualizarBatchBar();
+        return;
+    }
+
+    /* V5.2: guardar lista filtrada para export */
+    _listaFiltrada = lista;
+
+    /* Construir filas */
+    let html = '';
+    lista.forEach((ins, idx) => {
+        const cat        = CATEGORIAS.find(c => c.id === (ins.categoria || 'otros')) || CATEGORIAS.at(-1);
+        const col        = getCatColor(cat.id);
+        const nHist      = (ins.historial_precios || []).length;
+        const conCambio  = nHist > 0;
+        const ultimoCambio = conCambio ? ins.historial_precios.at(-1) : null;
+        const tendencia  = ultimoCambio
+            ? (ultimoCambio.costo_nuevo > ultimoCambio.costo_anterior ? '📈' : '📉')
+            : '';
+        const seleccionada = _selectedIds.has(ins.id);
+
+        html += `<tr id="fila-${_esc(ins.id)}" ${seleccionada ? 'class="fila-seleccionada"' : ''}>
+            <!-- V5: checkbox por fila -->
+            <td class="td-check">
+                <input type="checkbox" class="chk-ins" data-id="${_esc(ins.id)}"
+                    ${seleccionada ? 'checked' : ''}
+                    onchange="toggleSeleccion('${_esc(ins.id)}')">
+            </td>
+            <td style="color:var(--color-subtitulos);font-size:0.74rem;user-select:none;">${idx+1}</td>
+            <td>
+                <input class="td-inp" type="text" value="${_esc(ins.nombre)}"
+                    placeholder="Nombre del insumo"
+                    onchange="cambiarCampo('${_esc(ins.id)}','nombre',this.value)">
+            </td>
+            <td>
+                <select class="td-sel"
+                    onchange="cambiarCampo('${_esc(ins.id)}','categoria',this.value)">
+                    ${CATEGORIAS.map(c =>
+                        `<option value="${c.id}" ${(ins.categoria||'otros')===c.id?'selected':''}>${c.emoji} ${c.label}</option>`
+                    ).join('')}
+                </select>
+            </td>
+            <td>
+                <input class="td-inp" type="number" value="${ins.costo}" min="0" step="50"
+                    style="text-align:right;font-weight:700;color:var(--accent-admin);"
+                    onchange="cambiarCosto('${_esc(ins.id)}',this.value)">
+            </td>
+            <td>
+                <input class="td-inp" type="text" value="${_esc(ins.unidad)}"
+                    style="max-width:72px;"
+                    onchange="cambiarCampo('${_esc(ins.id)}','unidad',this.value)">
+            </td>
+            <td>
+                <input class="td-inp" type="text" value="${_esc(ins.proveedor||'')}"
+                    placeholder="Proveedor…"
+                    onchange="cambiarCampo('${_esc(ins.id)}','proveedor',this.value)">
+            </td>
+            <td style="text-align:center;font-size:0.75rem;color:var(--color-subtitulos);">
+                ${conCambio ? _fmtFecha(ins.historial_precios.at(-1).fecha) : '—'}
+            </td>
+            <td style="text-align:center;">
+                ${(()=>{ const n=_contarUsoRecetas(ins.id); return n>0
+                    ? `<span style="color:var(--accent-primario);font-weight:700;">${n}</span>`
+                    : `<span style="color:var(--color-subtitulos);">—</span>`; })()}
+            </td>
+            <td style="text-align:center;">
+                <button class="btn-hist ${conCambio?'con-datos':''}"
+                    onclick="abrirHistorial('${_esc(ins.id)}')"
+                    title="${conCambio ? nHist+' cambio(s) · clic para ver' : 'Sin cambios registrados'}">
+                    ${tendencia} ${conCambio ? nHist : '—'}
+                </button>
+            </td>
+            <td style="text-align:center;">
+                <button class="btn btn-danger" style="padding:4px 8px;"
+                    onclick="eliminarInsumo('${_esc(ins.id)}')" title="Eliminar insumo">🗑</button>
+            </td>
+        </tr>`;
+    });
+
+    tbody.innerHTML = html;
+    document.getElementById('contador-visible').textContent =
+        `${lista.length} de ${DB_INSUMOS.length} insumo${DB_INSUMOS.length!==1?'s':''}`;
+
+    /* V5: sincronizar estado del batch bar y chk-all */
+    actualizarBatchBar();
+}
+
+/* ══════════════════════════════════════
+   CRUD INSUMOS
+══════════════════════════════════════ */
+function cambiarCampo(id, campo, valor) {
+    const ins = DB_INSUMOS.find(x => x.id === id);
+    if (!ins) return;
+    ins[campo] = valor;
+    _hayPendientes = true;
+    _syncDebounce();
+    actualizarStats();
+}
+
+function cambiarCosto(id, nuevoStr) {
+    const ins = DB_INSUMOS.find(x => x.id === id);
+    if (!ins) return;
+    const nuevo    = parseFloat(nuevoStr) || 0;
+    const anterior = ins.costo;
+
+    if (nuevo !== anterior && anterior >= 0) {
+        if (!ins.historial_precios) ins.historial_precios = [];
+        ins.historial_precios.push({
+            fecha:          new Date().toISOString(),
+            costo_anterior: anterior,
+            costo_nuevo:    nuevo
+        });
+    }
+
+    ins.costo = nuevo;
+    _hayPendientes = true;
+    _syncDebounce();
+    actualizarStats();
+}
+
+function agregarNuevoInsumo() {
+    const nuevo = {
+        id:               'ins_' + Date.now(),
+        nombre:           'Nuevo Insumo',
+        costo:            0,
+        unidad:           'und',
+        categoria:        'otros',
+        proveedor:        '',                /* V5.2 */
+        historial_precios:[]
+    };
+    DB_INSUMOS.push(nuevo);
+    renderizarTabla();
+    actualizarStats();
+
+    setTimeout(() => {
+        const fila = document.getElementById('fila-' + nuevo.id);
+        if (fila) {
+            fila.classList.add('fila-nueva');
+            fila.scrollIntoView({ behavior:'smooth', block:'center' });
+            fila.querySelector('.td-inp')?.focus();
+        }
+    }, 80);
+
+    _hayPendientes = true;
+    _syncDebounce();
+    window._mostrarToast && window._mostrarToast('➕ Insumo añadido · Edita los campos inline','info');
+}
+
+function eliminarInsumo(id) {
+    const ins = DB_INSUMOS.find(x => x.id === id);
+    if (!ins) return;
+    if (!confirm(`⚠️ ¿Eliminar "${ins.nombre}"?\n\nLas recetas existentes que lo referencian no se borrarán, pero su costo ya no se recalculará.`)) return;
+    DB_INSUMOS = DB_INSUMOS.filter(x => x.id !== id);
+    _selectedIds.delete(id);   /* V5: limpiar de selección si estaba */
+    renderizarTabla();
+    actualizarStats();
+    _hayPendientes = true;
+    _syncDebounce();
+    window._mostrarToast && window._mostrarToast(`🗑 "${ins.nombre}" eliminado`,'warn');
+}
+
+/* ══════════════════════════════════════
+   V5 — SELECCIÓN MÚLTIPLE
+══════════════════════════════════════ */
+
+/* Toggle individual por checkbox */
+function toggleSeleccion(id) {
+    if (_selectedIds.has(id)) _selectedIds.delete(id);
+    else _selectedIds.add(id);
+
+    const fila = document.getElementById('fila-' + id);
+    if (fila) fila.classList.toggle('fila-seleccionada', _selectedIds.has(id));
+    actualizarBatchBar();
+}
+
+/* Seleccionar / deseleccionar todos (sigue estado del chk-all) */
+function toggleSeleccionTodos() {
+    const chkAll   = document.getElementById('chk-all');
+    const tbody    = document.getElementById('tbody-insumos');
+    const chks     = tbody ? [...tbody.querySelectorAll('.chk-ins')] : [];
+    const activar  = chkAll?.checked ?? true;
+
+    chks.forEach(c => {
+        c.checked = activar;
+        const rowId = c.dataset.id;
+        if (activar) _selectedIds.add(rowId);
+        else _selectedIds.delete(rowId);
+        const fila = document.getElementById('fila-' + rowId);
+        if (fila) fila.classList.toggle('fila-seleccionada', activar);
+    });
+    actualizarBatchBar();
+}
+
+/* Sincroniza visual: batch bar + estado del chk-all */
+function actualizarBatchBar() {
+    const bar  = document.getElementById('batch-bar');
+    const cnt  = document.getElementById('batch-count');
+    const n    = _selectedIds.size;
+
+    if (bar) bar.classList.toggle('visible', n > 0);
+    if (cnt) cnt.textContent = n + ' insumo' + (n !== 1 ? 's' : '') + ' seleccionado' + (n !== 1 ? 's' : '');
+
+    /* Estado del chk-all: desmarcado / indeterminate / marcado */
+    const tbody = document.getElementById('tbody-insumos');
+    const total = tbody?.querySelectorAll('.chk-ins')?.length || 0;
+    const chkAll = document.getElementById('chk-all');
+    if (chkAll) {
+        chkAll.checked       = n > 0 && n === total;
+        chkAll.indeterminate = n > 0 && n < total;
+    }
+}
+
+/* Deselecciona todo sin re-render completo */
+function limpiarSeleccion() {
+    _selectedIds.clear();
+    const tbody = document.getElementById('tbody-insumos');
+    if (tbody) {
+        tbody.querySelectorAll('.chk-ins').forEach(c => c.checked = false);
+        tbody.querySelectorAll('.fila-seleccionada').forEach(tr => tr.classList.remove('fila-seleccionada'));
+    }
+    const chkAll = document.getElementById('chk-all');
+    if (chkAll) { chkAll.checked = false; chkAll.indeterminate = false; }
+    actualizarBatchBar();
+}
+
+/* Aplicar categoría a todos los seleccionados */
+function cambiarCategoriaLote() {
+    const sel   = document.getElementById('batch-cat-sel');
+    const catId = sel?.value;
+
+    if (!catId) {
+        window._mostrarToast && window._mostrarToast('⚠️ Selecciona una categoría destino', 'warn');
+        return;
+    }
+    if (_selectedIds.size === 0) return;
+
+    const cat = CATEGORIAS.find(c => c.id === catId);
+    if (!cat) return;
+
+    const n = _selectedIds.size;
+    DB_INSUMOS.forEach(ins => {
+        if (_selectedIds.has(ins.id)) ins.categoria = catId;
+    });
+
+    if (sel) sel.value = '';   /* reset select del batch */
+    renderizarTabla();
+    _hayPendientes = true;
+    _syncDebounce();
+    window._mostrarToast && window._mostrarToast(`✅ ${n} insumo(s) → ${cat.emoji} ${cat.label}`, 'ok');
+}
+
+/* Eliminar todos los seleccionados */
+function eliminarLote() {
+    if (_selectedIds.size === 0) return;
+    const n      = _selectedIds.size;
+    const lista  = DB_INSUMOS.filter(x => _selectedIds.has(x.id)).map(x => `"${x.nombre}"`);
+    const resumen = lista.length > 4
+        ? lista.slice(0,4).join(', ') + ` y ${lista.length - 4} más...`
+        : lista.join(', ');
+
+    if (!confirm(`⚠️ ¿Eliminar ${n} insumo(s)?\n${resumen}`)) return;
+
+    DB_INSUMOS = DB_INSUMOS.filter(x => !_selectedIds.has(x.id));
+    _selectedIds.clear();
+    renderizarTabla();
+    actualizarStats();
+    _hayPendientes = true;
+    _syncDebounce();
+    window._mostrarToast && window._mostrarToast(`🗑 ${n} insumo(s) eliminado(s)`, 'warn');
+}
+
+/* ══════════════════════════════════════
+   SYNC INSUMOS — LOCAL + CLOUD
+══════════════════════════════════════ */
+function _syncDebounce() {
+    localStorage.setItem(LLAVE_INSUMOS, JSON.stringify(DB_INSUMOS));
+    clearTimeout(window._syncTO);
+    window._syncTO = setTimeout(() => {
+        _subirACloud();
+    }, 1400);
+}
+
+function _subirACloud() {
+    _lastCloudStr = JSON.stringify(DB_INSUMOS.map(i => ({ id:i.id, costo:i.costo, nombre:i.nombre, unidad:i.unidad, proveedor:i.proveedor||'' })));
+    if (typeof window.guardarInsumosEnCloud === 'function') {
+        window.guardarInsumosEnCloud(DB_INSUMOS);
+    }
+}
+
+function guardarManual() {
+    clearTimeout(window._syncTO);
+    localStorage.setItem(LLAVE_INSUMOS, JSON.stringify(DB_INSUMOS));
+    _subirACloud();
+    _hayPendientes = false;
+}
+
+/* ══════════════════════════════════════
+   V5.2 — USO EN RECETAS + EXPORT CSV
+══════════════════════════════════════ */
+function _contarUsoRecetas(insId) {
+    try {
+        const recetas = JSON.parse(localStorage.getItem('sagrada_delicia_recetas_v17')) || [];
+        return recetas.filter(r => (r.ingredientes || []).some(i => i.insumoId === insId)).length;
+    } catch { return 0; }
+}
+
+function _fmtFecha(isoStr) {
+    if (!isoStr) return '—';
+    try {
+        const d = new Date(isoStr);
+        return d.toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'numeric' });
+    } catch { return '—'; }
+}
+
+function exportarCSV() {
+    if (!_listaFiltrada.length) {
+        window._mostrarToast && window._mostrarToast('⚠️ No hay insumos para exportar','warn');
+        return;
+    }
+    const encabezado = ['ID','Nombre','Categoría','Costo (COP)','Unidad','Proveedor','Últ. Actualización','Cambios de Precio','En Recetas'];
+    const filas = _listaFiltrada.map(ins => {
+        const cat      = CATEGORIAS.find(c => c.id === (ins.categoria || 'otros'))?.label || ins.categoria || '—';
+        const ultFecha = (ins.historial_precios||[]).length
+            ? _fmtFecha(ins.historial_precios.at(-1).fecha) : '—';
+        const nHist    = (ins.historial_precios||[]).length;
+        const enRec    = _contarUsoRecetas(ins.id);
+        return [
+            `"${ins.id}"`,
+            `"${(ins.nombre||'').replace(/"/g,'""')}"`,
+            `"${cat}"`,
+            ins.costo,
+            `"${ins.unidad||''}"`,
+            `"${(ins.proveedor||'').replace(/"/g,'""')}"`,
+            `"${ultFecha}"`,
+            nHist,
+            enRec
+        ].join(',');
+    });
+    const csv  = [encabezado.join(','), ...filas].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type:'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `insumos_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    window._mostrarToast && window._mostrarToast('📥 CSV exportado correctamente','ok');
+}
+
+/* ══════════════════════════════════════
+   V4 — CRUD CATEGORÍAS (agregar / eliminar)
+══════════════════════════════════════ */
+function agregarCategoria() {
+    const emojiEl = document.getElementById('cat-emoji-new');
+    const labelEl = document.getElementById('cat-label-new');
+    const emoji   = (emojiEl.value || '').trim() || '🔹';
+    const label   = (labelEl.value || '').trim();
+
+    if (!label) {
+        window._mostrarToast && window._mostrarToast('⚠️ Escribe un nombre para la categoría','warn');
+        labelEl.focus();
+        return;
+    }
+
+    const id = 'cat_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,4);
+    CATEGORIAS.push({ id, emoji, label });
+    emojiEl.value = '';
+    labelEl.value = '';
+    labelEl.focus();
+
+    _guardarCategorias();
+    _poblarFiltroCategoria();
+    _renderGestorChips();
+    renderizarTabla();
+    window._mostrarToast && window._mostrarToast(`✅ Categoría "${label}" creada`,'ok');
+}
+
+function eliminarCategoria(id) {
+    const cat = CATEGORIAS.find(c => c.id === id);
+    if (!cat) return;
+
+    if (id === 'otros') {
+        window._mostrarToast && window._mostrarToast('⚠️ "Otros" es la categoría fallback y no se puede eliminar','warn');
+        return;
+    }
+
+    const enUso = DB_INSUMOS.filter(i => (i.categoria || 'otros') === id).length;
+    if (enUso > 0) {
+        window._mostrarToast && window._mostrarToast(
+            `⚠️ "${cat.label}" está en uso por ${enUso} insumo(s) — reasígnalos primero`,
+            'warn', 5000
+        );
+        return;
+    }
+
+    if (!confirm(`¿Eliminar la categoría "${cat.label}"?\n\nNo tiene insumos asignados.`)) return;
+
+    CATEGORIAS = CATEGORIAS.filter(c => c.id !== id);
+    _guardarCategorias();
+    _poblarFiltroCategoria();
+    _renderGestorChips();
+    renderizarTabla();
+    window._mostrarToast && window._mostrarToast(`🗑 Categoría "${cat.label}" eliminada`,'warn');
+}
+
+/* ══════════════════════════════════════
+   V5 — EDICIÓN DE CATEGORÍAS EXISTENTES
+══════════════════════════════════════ */
+
+/* Activa el modo edición inline en el chip */
+function editarCategoria(id) {
+    const cat  = CATEGORIAS.find(c => c.id === id);
+    if (!cat) return;
+    const cont = document.getElementById('gestor-cats-chips');
+    if (!cont) return;
+    const chip = cont.querySelector(`[data-cat-id="${id}"]`);
+    if (!chip) return;
+
+    chip.outerHTML = `<span class="cat-chip-edit-form" data-cat-id="${id}">
+        <input class="inp-chip inp-chip-emoji" id="edit-emoji-${id}"
+            value="${_esc(cat.emoji)}" maxlength="4"
+            onkeydown="if(event.key==='Enter') confirmarEdicionCategoria('${id}'); if(event.key==='Escape') cancelarEdicionCategoria('${id}')">
+        <input class="inp-chip inp-chip-label" id="edit-label-${id}"
+            value="${_esc(cat.label)}" maxlength="40"
+            onkeydown="if(event.key==='Enter') confirmarEdicionCategoria('${id}'); if(event.key==='Escape') cancelarEdicionCategoria('${id}')">
+        <button class="cat-chip-action" onclick="confirmarEdicionCategoria('${id}')" title="Guardar (Enter)">✅</button>
+        <button class="cat-chip-action" onclick="cancelarEdicionCategoria('${id}')" title="Cancelar (Escape)">✕</button>
+    </span>`;
+
+    /* Foco en el campo label */
+    setTimeout(() => {
+        const inp = document.getElementById(`edit-label-${id}`);
+        if (inp) { inp.focus(); inp.select(); }
+    }, 20);
+}
+
+/* Confirmar edición: valida, aplica, sincroniza */
+function confirmarEdicionCategoria(id) {
+    const emoji = (document.getElementById(`edit-emoji-${id}`)?.value || '').trim() || '🔹';
+    const label = (document.getElementById(`edit-label-${id}`)?.value || '').trim();
+
+    if (!label) {
+        window._mostrarToast && window._mostrarToast('⚠️ El nombre no puede estar vacío','warn');
+        document.getElementById(`edit-label-${id}`)?.focus();
+        return;
+    }
+
+    const cat = CATEGORIAS.find(c => c.id === id);
+    if (!cat) return;
+
+    cat.emoji = emoji;
+    cat.label = label;
+
+    _guardarCategorias();
+    _poblarFiltroCategoria();
+    _renderGestorChips();
+    renderizarTabla();   /* actualiza selects de la tabla */
+    window._mostrarToast && window._mostrarToast(`✅ Categoría actualizada: ${emoji} ${label}`, 'ok');
+}
+
+/* Cancelar edición: re-renderiza chips */
+function cancelarEdicionCategoria(id) {
+    _renderGestorChips();
+}
+
+/* ══════════════════════════════════════
+   GUARDAR CATEGORÍAS
+══════════════════════════════════════ */
+function _guardarCategorias() {
+    localStorage.setItem(LLAVE_CATEGORIAS, JSON.stringify(CATEGORIAS));
+    _lastCatCloudStr = JSON.stringify(CATEGORIAS);
+    if (typeof window.guardarCategoriasEnCloud === 'function') {
+        window.guardarCategoriasEnCloud(CATEGORIAS);
+    }
+}
+
+/* ══════════════════════════════════════
+   RENDER CHIPS DEL GESTOR
+   V5: añade data-cat-id + botón ✏️
+══════════════════════════════════════ */
+function _renderGestorChips() {
+    const cont  = document.getElementById('gestor-cats-chips');
+    const badge = document.getElementById('cats-count-badge');
+    if (!cont) return;
+
+    if (badge) badge.textContent = CATEGORIAS.length + ' categorías';
+
+    cont.innerHTML = CATEGORIAS.map(c => {
+        const col     = getCatColor(c.id);
+        const esOtros = c.id === 'otros';
+        const enUso   = DB_INSUMOS.filter(i => (i.categoria||'otros') === c.id).length;
+        return `<span class="cat-chip" data-cat-id="${c.id}"
+            style="background:${col.bg};color:${col.color};border-color:${col.color}40;"
+            title="${enUso} insumo(s) asignado(s)">
+            ${c.emoji} ${c.label}
+            ${esOtros
+                ? `<span class="cat-chip-lock">🔒</span>`
+                : `<button class="cat-chip-edit-btn" onclick="editarCategoria('${c.id}')" title="Editar categoría">✏️</button>
+                   <button class="cat-chip-del"      onclick="eliminarCategoria('${c.id}')" title="Eliminar categoría">×</button>`
+            }
+        </span>`;
+    }).join('');
+}
+
+/* ══════════════════════════════════════
+   STATS
+══════════════════════════════════════ */
+function actualizarStats() {
+    if (DB_INSUMOS.length === 0) {
+        ['stat-total','stat-min','stat-max','stat-prom'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.textContent = '—';
+        });
+        return;
+    }
+    const costos = DB_INSUMOS.map(i => i.costo || 0);
+    document.getElementById('stat-total').textContent = DB_INSUMOS.length;
+    document.getElementById('stat-min').textContent   = _moneda(Math.min(...costos));
+    document.getElementById('stat-max').textContent   = _moneda(Math.max(...costos));
+    document.getElementById('stat-prom').textContent  = _moneda(Math.round(costos.reduce((a,b)=>a+b,0)/costos.length));
+}
+
+/* ══════════════════════════════════════
+   FILTRO CATEGORÍA
+   V5: preserva selección + popula batch-cat-sel
+══════════════════════════════════════ */
+function _poblarFiltroCategoria() {
+    const sel      = document.getElementById('filtro-categoria');
+    const batchSel = document.getElementById('batch-cat-sel');
+
+    if (sel) {
+        const valorActual = sel.value;   /* V5: guardar selección actual */
+        let html = '<option value="">🗂 Todas las categorías</option>';
+        CATEGORIAS.forEach(c => { html += `<option value="${c.id}">${c.emoji} ${c.label}</option>`; });
+        sel.innerHTML = html;
+        /* V5: restaurar si la categoría sigue existiendo */
+        if (valorActual && CATEGORIAS.find(c => c.id === valorActual)) {
+            sel.value = valorActual;
+        }
+    }
+
+    if (batchSel) {
+        let html = '<option value="">— Mover a categoría —</option>';
+        CATEGORIAS.forEach(c => { html += `<option value="${c.id}">${c.emoji} ${c.label}</option>`; });
+        batchSel.innerHTML = html;
+    }
+}
+
+/* ══════════════════════════════════════
+   MODAL — HISTORIAL DE PRECIOS
+══════════════════════════════════════ */
+function abrirHistorial(id) {
+    const ins  = DB_INSUMOS.find(x => x.id === id);
+    if (!ins) return;
+
+    document.getElementById('modal-insumo-nombre').textContent = `🍎 ${ins.nombre}  ·  ${ins.unidad}  ·  Costo actual: ${_moneda(ins.costo)}`;
+
+    const hist = (ins.historial_precios || []).slice().reverse();
+    let html   = '';
+
+    if (hist.length === 0) {
+        html = `<div style="text-align:center;padding:28px 10px;">
+            <div style="font-size:2rem;margin-bottom:10px;">📊</div>
+            <p style="color:var(--color-subtitulos);font-style:italic;font-size:0.88rem;">
+                Sin cambios registrados aún.<br>
+                <span style="font-size:0.78rem;">Los cambios se capturan automáticamente al editar el costo.</span>
+            </p>
+        </div>`;
+    } else {
+        html = hist.map((h, i) => {
+            const fecha   = new Date(h.fecha).toLocaleString('es-CO',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+            const subio   = h.costo_nuevo >= h.costo_anterior;
+            const icono   = subio ? '📈' : '📉';
+            const color   = subio ? 'var(--color-alerta-critica)' : 'var(--color-alerta-ok)';
+            const pct     = h.costo_anterior > 0
+                ? Math.round(((h.costo_nuevo - h.costo_anterior) / h.costo_anterior) * 100)
+                : 0;
+
+            return `<div class="hist-entry ${i===0?'reciente':''}">
+                <div>
+                    <div style="font-weight:700;color:var(--color-texto);">
+                        ${icono}
+                        <span style="text-decoration:line-through;opacity:0.6;margin-right:6px;">${_moneda(h.costo_anterior)}</span>
+                        <span style="color:${color};">${_moneda(h.costo_nuevo)}</span>
+                    </div>
+                    <div class="hist-fecha">${fecha}${i===0?' · <strong style="color:var(--accent-secundario);">último</strong>':''}</div>
+                </div>
+                <span style="font-size:1rem;font-weight:800;color:${color};">${subio?'+':''}${pct}%</span>
+            </div>`;
+        }).join('');
+
+        html += `<button class="btn btn-danger" style="width:100%;margin-top:14px;"
+            onclick="borrarHistorial('${_esc(id)}')">🗑 Borrar historial de precios</button>`;
+    }
+
+    document.getElementById('modal-cuerpo').innerHTML = html;
+    document.getElementById('modal-historial').style.display = 'flex';
+}
+
+function cerrarModal(event, forzar = false) {
+    if (forzar || event?.target === document.getElementById('modal-historial')) {
+        document.getElementById('modal-historial').style.display = 'none';
+    }
+}
+
+function borrarHistorial(id) {
+    if (!confirm('¿Borrar todo el historial de precios de este insumo?')) return;
+    const ins = DB_INSUMOS.find(x => x.id === id);
+    if (!ins) return;
+    ins.historial_precios = [];
+    guardarManual();
+    abrirHistorial(id);
+    window._mostrarToast && window._mostrarToast('🗑 Historial borrado','warn');
+}
+
+/* ══════════════════════════════════════
+   EXPORT — PDF
+══════════════════════════════════════ */
+function exportarInsumosPDF() {
+    const orden = document.getElementById('selector-orden')?.value || 'nombre-asc';
+    let lista = [...DB_INSUMOS];
+    switch (orden) {
+        case 'nombre-desc': lista.sort((a,b)=>b.nombre.localeCompare(a.nombre,'es')); break;
+        case 'costo-asc':   lista.sort((a,b)=>a.costo-b.costo); break;
+        case 'costo-desc':  lista.sort((a,b)=>b.costo-a.costo); break;
+        case 'categoria':   lista.sort((a,b)=>(a.categoria||'').localeCompare(b.categoria||'')); break;
+        default:            lista.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+    }
+
+    let catActual = null;
+    let filas     = '';
+    lista.forEach(ins => {
+        const cat  = CATEGORIAS.find(c => c.id === (ins.categoria||'otros')) || CATEGORIAS.at(-1);
+        if (cat.label !== catActual) {
+            catActual = cat.label;
+            filas += `<tr class="cat-row"><td colspan="4">${cat.emoji} ${cat.label}</td></tr>`;
+        }
+        const nHist = (ins.historial_precios||[]).length;
+        filas += `<tr>
+            <td>${_esc(ins.nombre)}</td>
+            <td style="text-align:center;">${_esc(ins.unidad)}</td>
+            <td style="text-align:right;font-weight:700;">${_moneda(ins.costo)}</td>
+            <td style="text-align:center;font-size:0.78rem;color:#64748b;">${nHist > 0 ? '📈 '+nHist : '—'}</td>
+        </tr>`;
+    });
+
+    const costos = DB_INSUMOS.map(i=>i.costo||0);
+    const prom   = costos.length ? Math.round(costos.reduce((a,b)=>a+b,0)/costos.length) : 0;
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>Maestro de Insumos — Sagrada Delicia</title>
+    <style>
+        body { font-family: sans-serif; padding:40px; max-width:800px; margin:0 auto; color:#0f172a; }
+        @media print { .no-print{display:none!important} }
+        .header { border-bottom:4px solid #c084fc; padding-bottom:20px; margin-bottom:28px; text-align:center; }
+        .header h1 { margin:0; font-size:1.8rem; letter-spacing:1px; }
+        .header .sub { color:#64748b; text-transform:uppercase; letter-spacing:2px; margin-top:4px; font-size:0.82rem; }
+        .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px; }
+        .sc { background:#f8fafc; padding:12px 16px; border-radius:8px; border:1px solid #e2e8f0; }
+        .sc strong { display:block; font-size:1.2rem; color:#0f172a; }
+        .sc span { font-size:0.68rem; color:#64748b; text-transform:uppercase; }
+        table { width:100%; border-collapse:collapse; margin-top:8px; }
+        th { background:#0b111e; color:#7dd3fc; padding:11px 12px; text-align:left; font-size:0.8rem; text-transform:uppercase; }
+        td { padding:9px 12px; border-bottom:1px solid #e2e8f0; font-size:0.9rem; }
+        .cat-row td { background:#f1f5f9; font-weight:800; font-size:0.78rem; text-transform:uppercase; color:#334155; letter-spacing:0.5px; padding:8px 12px; border-bottom:none; }
+        .footer { text-align:center; margin-top:40px; font-size:0.75rem; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:18px; }
+    </style></head><body>
+    <button class="no-print" onclick="window.print()" style="padding:12px;background:#c084fc;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-bottom:20px;font-weight:bold;width:100%;">🖨️ Imprimir / Guardar PDF</button>
+    <div class="header">
+        <h1>SAGRADA DELICIA</h1>
+        <div class="sub">Catálogo Maestro de Insumos Base — V5</div>
+        <div style="color:#94a3b8;font-size:0.75rem;margin-top:4px;">${new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'})}</div>
+    </div>
+    <div class="stats">
+        <div class="sc"><strong>${DB_INSUMOS.length}</strong><span>Total</span></div>
+        <div class="sc"><strong>${costos.length?_moneda(Math.min(...costos)):'—'}</strong><span>Mínimo</span></div>
+        <div class="sc"><strong>${costos.length?_moneda(Math.max(...costos)):'—'}</strong><span>Máximo</span></div>
+        <div class="sc"><strong>${_moneda(prom)}</strong><span>Promedio</span></div>
+    </div>
+    <table>
+        <thead><tr><th>Insumo / Materia Prima</th><th style="text-align:center;">Unidad</th><th style="text-align:right;">Costo Base</th><th style="text-align:center;">Historial</th></tr></thead>
+        <tbody>${filas}</tbody>
+    </table>
+    <div class="footer">Sagrada Delicia · Cali, Colombia · Diseñado por: Marto 🧠</div>
+    </body></html>`;
+
+    const win = window.open('','_blank','width=850,height=820');
+    win.document.write(html);
+    win.document.close();
+}
+
+/* ══════════════════════════════════════
+   EXPORT / IMPORT JSON
+══════════════════════════════════════ */
+function exportarInsumosJSON() {
+    const blob = new Blob([JSON.stringify(DB_INSUMOS, null, 2)], { type:'application/json' });
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = `SD_Insumos_Master_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    window._mostrarToast && window._mostrarToast('💾 Archivo JSON descargado','ok');
+}
+
+function importarInsumosCSV(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const lineas = e.target.result
+                .replace(/\r\n/g,'\n').replace(/\r/g,'\n')
+                .split('\n').filter(l => l.trim());
+            if (lineas.length < 2) { alert('❌ CSV vacío o sin datos.'); return; }
+
+            /* Parser de columnas respetando comillas */
+            const _parseCols = row => {
+                const cols = []; let cur = ''; let dentro = false;
+                for (let i = 0; i < row.length; i++) {
+                    const ch = row[i];
+                    if (ch === '"') { dentro = !dentro; }
+                    else if (ch === ',' && !dentro) { cols.push(cur.trim()); cur = ''; }
+                    else { cur += ch; }
+                }
+                cols.push(cur.trim());
+                return cols;
+            };
+
+            const encabezado = _parseCols(lineas[0]).map(h => h.toLowerCase());
+            const iId        = encabezado.findIndex(h => h === 'id');
+            const iNombre    = encabezado.findIndex(h => h.includes('nombre'));
+            const iCategoria = encabezado.findIndex(h => h.includes('categor'));
+            const iCosto     = encabezado.findIndex(h => h.includes('costo'));
+            const iUnidad    = encabezado.findIndex(h => h.includes('unidad'));
+            const iProveedor = encabezado.findIndex(h => h.includes('proveedor'));
+
+            if (iNombre === -1 || iCosto === -1) {
+                alert('❌ El CSV debe tener al menos columnas "Nombre" y "Costo".');
+                return;
+            }
+
+            /* Construir mapa actual para fusión */
+            const mapaActual = new Map(DB_INSUMOS.map(ins => [ins.id, ins]));
+            let actualizados = 0, nuevos = 0;
+
+            const filasCsv = lineas.slice(1).map(linea => {
+                const cols      = _parseCols(linea);
+                const idCsv     = iId >= 0 ? (cols[iId] || '').replace(/^"|"$/g,'') : '';
+                const nombre    = iNombre    >= 0 ? cols[iNombre]    || '' : '';
+                const catLabel  = iCategoria >= 0 ? cols[iCategoria] || '' : '';
+                const catId     = CATEGORIAS.find(c => c.label.toLowerCase() === catLabel.toLowerCase())?.id || 'otros';
+                const costo     = iCosto     >= 0 ? parseFloat(cols[iCosto])  || 0 : 0;
+                const unidad    = iUnidad    >= 0 ? cols[iUnidad]    || 'und' : 'und';
+                const proveedor = iProveedor >= 0 ? cols[iProveedor] || '' : '';
+                if (!nombre) return null;
+
+                const existente = idCsv ? mapaActual.get(idCsv) : null;
+                if (existente) {
+                    /* Fusión: actualiza campos editables, preserva historial y todo lo demás */
+                    actualizados++;
+                    return { ...existente, nombre, categoria: catId, costo, unidad, proveedor };
+                } else {
+                    /* Insumo nuevo */
+                    nuevos++;
+                    return { nombre, categoria: catId, costo, unidad, proveedor, historial_precios: [] };
+                }
+            }).filter(Boolean);
+
+            if (!filasCsv.length) { alert('❌ No se encontraron filas válidas.'); return; }
+
+            /* Insumos no presentes en el CSV → se conservan intactos */
+            const idsCsv     = new Set(filasCsv.map(f => f.id).filter(Boolean));
+            const noTocados  = DB_INSUMOS.filter(ins => !idsCsv.has(ins.id) && !filasCsv.find(f => f.id === ins.id));
+            const totalFinal = filasCsv.length + noTocados.length;
+
+            if (!confirm(
+                `📥 Resumen del import:\n` +
+                `• ${actualizados} insumo(s) actualizados (historial conservado)\n` +
+                `• ${nuevos} insumo(s) nuevos agregados\n` +
+                `• ${noTocados.length} insumo(s) sin tocar\n\n` +
+                `Total final: ${totalFinal} insumos.\n\n¿Continuar?`
+            )) return;
+
+            DB_INSUMOS = _migrar([...filasCsv, ...noTocados]);
+            _selectedIds.clear();
+            guardarManual();
+            renderizarTabla();
+            actualizarStats();
+            window._mostrarToast && window._mostrarToast(
+                `✅ ${actualizados} actualizados · ${nuevos} nuevos · ${noTocados.length} sin cambios`, 'ok'
+            );
+        } catch(err) {
+            alert('❌ Error al leer el CSV: ' + err.message);
+        }
+    };
+    reader.readAsText(file, 'UTF-8');
+    event.target.value = '';
+}
+
+/* ══════════════════════════════════════
+   SYNC KILL-SWITCH
+══════════════════════════════════════ */
+function actualizarBtnSync() {
+    const btn    = document.getElementById('btn-toggle-sync');
+    if (!btn) return;
+    const activo = localStorage.getItem(LLAVE_SYNC) !== 'false';
+    btn.textContent        = activo ? '🔔 Sync ON' : '🔕 Sync OFF';
+    btn.style.borderColor  = activo ? 'var(--accent-success)' : 'var(--color-alerta-media)';
+    btn.style.color        = activo ? 'var(--accent-success)' : 'var(--color-alerta-media)';
+    btn.style.background   = activo ? 'rgba(34,197,94,0.07)'  : 'rgba(253,224,71,0.07)';
+    if (!activo) {
+        const badge = document.getElementById('badge-cloud-sync');
+        if (badge) { badge.className = 'sync-offline'; badge.innerHTML = '🔕 Sync desactivado'; }
+    }
+}
+
+function toggleSync() {
+    const activo = localStorage.getItem(LLAVE_SYNC) !== 'false';
+    localStorage.setItem(LLAVE_SYNC, activo ? 'false' : 'true');
+    actualizarBtnSync();
+    if (!activo) {
+        window._mostrarToast && window._mostrarToast('🔔 Sync reactivado. Conectando...','ok');
+        typeof window._iniciarListener === 'function' && window._iniciarListener();
+    } else {
+        window._mostrarToast && window._mostrarToast('🔕 Sync pausado — trabajando en modo local','warn');
+        typeof window._detenerListener === 'function' && window._detenerListener();
+    }
+}
+
+/* ══════════════════════════════════════
+   UTILS
+══════════════════════════════════════ */
+function _moneda(val) {
+    return new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0}).format(val||0);
+}
+function _esc(str) {
+    return String(str||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* Advertir al salir con cambios sin guardar */
+window.addEventListener('beforeunload', e => {
+    if (_hayPendientes) { e.preventDefault(); e.returnValue=''; }
+});
+
+/* Cerrar modal con Escape */
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') cerrarModal(null, true);
+});
+
+/* ══════════════════════════════════════════════════
+   TUTORIAL SYSTEM — SD Insumos V5.6
+   ══════════════════════════════════════════════════ */
+const _TUT_LLAVE = 'sd_tutorial_insumos_v1';
+let _tutPaso = 0;
+
+const _TUT_PASOS = [
+    { target: null,               emoji:'🎉', titulo:'¡Bienvenido al Maestro de Insumos!',   texto:'Esta guía te mostrará cómo gestionar la base de materias primas de Sagrada Delicia. Puedes saltarla ahora y relanzarla cuando quieras con el botón 🎓 Guía del encabezado.' },
+    { target:'.nav-ecosistema',   emoji:'🗺️', titulo:'Navegación del Ecosistema',             texto:'Desde aquí accedes a todos los módulos: Cotizador, Recetario, Líneas, Costos, Pedidos, Catálogo y Sobre Nosotros. Los Insumos son la base de datos que alimenta las recetas y los cálculos de costo.' },
+    { target:'.stats-bar',        emoji:'📊', titulo:'Resumen Estadístico',                   texto:'4 indicadores actualizados en tiempo real: el total de insumos registrados, el costo mínimo y máximo del catálogo, y el costo promedio. Útiles para detectar variaciones de precio rápidamente.' },
+    { target:'#detalle-cats',     emoji:'🗂️', titulo:'Panel de Categorías',                   texto:'Panel colapsable para organizar los insumos por tipo. Haz clic en "Gestión de Categorías" para expandirlo. Desde aquí puedes crear, editar (emoji + nombre) y eliminar categorías. Los cambios se sincronizan automáticamente con Firebase.' },
+    { target:'.cats-form',        emoji:'➕', titulo:'Agregar Nueva Categoría',               texto:'Escribe un emoji y el nombre de la nueva categoría, luego presiona "Agregar". Cada categoría recibe un color automático de la paleta del sistema. La categoría "Otros" es el fallback y no se puede eliminar.' },
+    { target:'#filtro-categoria', emoji:'🔽', titulo:'Filtro por Categoría',                  texto:'Filtra la tabla mostrando solo los insumos de la categoría seleccionada. El filtro se mantiene activo aunque actualices precios o agregues insumos. Combínalo con el buscador para búsquedas precisas.' },
+    { target:'#buscador-insumos', emoji:'🔍', titulo:'Buscador en Tiempo Real',               texto:'Escribe cualquier parte del nombre o la unidad del insumo para filtrar la tabla al instante. Funciona en conjunto con el filtro de categoría y el selector de orden.' },
+    { target:'.toolbar-acciones', emoji:'📤', titulo:'Exportar e Importar',                   texto:'PDF: genera un listado imprimible del catálogo. JSON: descarga un backup completo con historial de precios. Importar CSV: carga insumos desde Excel o Google Sheets. El sistema fusiona inteligentemente, conservando el historial de los insumos existentes.' },
+    { target:'.tabla-wrapper',    emoji:'📋', titulo:'Tabla Maestra de Insumos',              texto:'Cada fila es un insumo editable directamente: nombre, categoría, costo en COP, unidad de medida y proveedor. Los cambios se marcan como pendientes hasta que presiones 💾 Guardar. La columna "Recetas" muestra en cuántas fórmulas activas se usa ese insumo.' },
+    { target:'#chk-all',          emoji:'☑️', titulo:'Selección Múltiple',                    texto:'Marca el checkbox del encabezado para seleccionar todos los insumos visibles, o selecciona filas individualmente. Aparecerá la barra de lote donde puedes mover todos los seleccionados a otra categoría, o eliminarlos en bloque.' },
+    { target: null,               emoji:'📈', titulo:'Historial de Precios',                  texto:'Cada insumo guarda un registro histórico de sus cambios de precio. Presiona el botón 📈 en cualquier fila para ver la evolución temporal con gráfica y tabla detallada. Ideal para negociar con proveedores o detectar inflación de ingredientes.' },
+    { target:'#badge-cloud-sync', emoji:'☁️', titulo:'Estado de Sincronización Cloud',        texto:'✅ Verde: escuchando cambios en tiempo real desde Firebase. 🟡 Amarillo: pendiente. ❌ Rojo: error de conexión. ⚫ Gris: sin red o sync desactivado. Usa el botón Sync ON/OFF para controlar la conexión manualmente.' },
+];
+
+function iniciarTutorial(forzar = false) {
+    const visto = localStorage.getItem(_TUT_LLAVE);
+    if (visto && !forzar) return;
+    _tutPaso = 0;
+    document.getElementById('tutorial-overlay').classList.remove('oculto');
+    _renderTutPaso();
+}
+
+function _renderTutPaso() {
+    const paso  = _TUT_PASOS[_tutPaso];
+    const total = _TUT_PASOS.length;
+    const ring  = document.getElementById('tutorial-spotlight-ring');
+    const card  = document.getElementById('tutorial-card');
+
+    card.classList.remove('animando');
+    void card.offsetWidth;
+    card.classList.add('animando');
+
+    document.getElementById('tut-progress-bar').innerHTML =
+        _TUT_PASOS.map((_, i) =>
+            `<div class="tut-pip ${i < _tutPaso ? 'hecho' : i === _tutPaso ? 'activo' : ''}"></div>`
+        ).join('');
+
+    document.getElementById('tutorial-emoji').textContent  = paso.emoji;
+    document.getElementById('tutorial-titulo').textContent = paso.titulo;
+    document.getElementById('tutorial-texto').textContent  = paso.texto;
+    document.getElementById('tut-step-label').textContent  = `${_tutPaso + 1} / ${total}`;
+
+    document.getElementById('btn-tut-ant').style.visibility = _tutPaso === 0 ? 'hidden' : 'visible';
+    document.getElementById('btn-tut-sig').textContent = _tutPaso === total - 1 ? '✅ Finalizar' : 'Siguiente →';
+
+    if (paso.target) {
+        const el = document.querySelector(paso.target);
+        if (el) {
+            el.scrollIntoView({ behavior:'smooth', block:'center' });
+            setTimeout(() => _posicionarTutorial(el, card, ring), 400);
+        } else {
+            ring.style.display = 'none';
+            _centrarCard(card);
+        }
+    } else {
+        ring.style.display = 'none';
+        _centrarCard(card);
+    }
+}
+
+function _posicionarTutorial(el, card, ring) {
+    const rect  = el.getBoundingClientRect();
+    const pad   = 8;
+    const vp    = { w: window.innerWidth, h: window.innerHeight };
+    const cardW = 320, cardH = 272;
+
+    ring.style.display = 'block';
+    ring.style.top     = (rect.top    - pad) + 'px';
+    ring.style.left    = (rect.left   - pad) + 'px';
+    ring.style.width   = (rect.width  + pad * 2) + 'px';
+    ring.style.height  = (rect.height + pad * 2) + 'px';
+
+    let top;
+    if (rect.bottom + cardH + 20 < vp.h)    top = rect.bottom + 16;
+    else if (rect.top - cardH - 16 > 0)     top = rect.top - cardH - 16;
+    else                                     top = Math.max(12, (vp.h - cardH) / 2);
+
+    let left = rect.left + (rect.width / 2) - (cardW / 2);
+    left = Math.max(12, Math.min(left, vp.w - cardW - 12));
+
+    card.style.top       = top  + 'px';
+    card.style.left      = left + 'px';
+    card.style.transform = 'none';
+}
+
+function _centrarCard(card) {
+    card.style.top       = '50%';
+    card.style.left      = '50%';
+    card.style.transform = 'translate(-50%, -50%)';
+}
+
+function tutorialSiguiente() {
+    if (_tutPaso >= _TUT_PASOS.length - 1) { terminarTutorial(); return; }
+    _tutPaso++;
+    _renderTutPaso();
+}
+
+function tutorialAnterior() {
+    if (_tutPaso > 0) { _tutPaso--; _renderTutPaso(); }
+}
+
+function tutorialSaltar()   { terminarTutorial(); }
+
+function terminarTutorial() {
+    localStorage.setItem(_TUT_LLAVE, '1');
+    document.getElementById('tutorial-overlay').classList.add('oculto');
+    document.getElementById('tutorial-spotlight-ring').style.display = 'none';
+    window._mostrarToast && window._mostrarToast('🎓 Guía disponible en el botón del encabezado', 'info', 4000);
+}
+
+// Auto-trigger primera visita
+window.addEventListener('load', () => {
+    setTimeout(() => iniciarTutorial(false), 1000);
+});
+</script>
+
+<!-- ════════════════════════════════════
+     BARRA INFERIOR — GUARDAR
+════════════════════════════════════ -->
+<div style="position:sticky;bottom:0;z-index:200;background:var(--color-fondo-panel);border-top:1px solid rgba(34,197,94,0.25);padding:12px 24px;display:flex;justify-content:flex-end;">
+    <button class="btn" onclick="guardarManual()"
+        style="border-color:#22c55e;color:#22c55e;background:rgba(34,197,94,0.1);padding:8px 18px;font-weight:600;">
+        💾 Guardar Insumos
+    </button>
+</div>
+</body>
+</html>
