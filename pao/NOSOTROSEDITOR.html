@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sagrada Delicia — Editor Nosotras v1.2.0</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💌</text></svg>">
+
+    <!-- ╔══════════════════════════════════════════════════════════════╗
+         ║  FIREBASE MODULE — NOSOTRAS_EDITOR v1.1.0                  ║
+         ║  onSnapshot  → escucha operaciones/taller                  ║
+         ║  updateDoc   → escribe SOLO nosotras_config (anti-pisado)  ║
+         ╚══════════════════════════════════════════════════════════════╝ -->
+    <script type="module">
+        import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, updateDoc, onSnapshot }
+            from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey:            "AIzaSyAeAWVCyu_qUSVo11uToAgGKqSYhdU1ABI",
+            authDomain:        "sagrada-delicia-central.firebaseapp.com",
+            projectId:         "sagrada-delicia-central",
+            storageBucket:     "sagrada-delicia-central.firebasestorage.app",
+            messagingSenderId: "474340023357",
+            appId:             "1:474340023357:web:bd7a643fa77733eaaede54"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db  = getFirestore(app);
+        const docTallerRef = doc(db, "operaciones", "taller");
+
+        let unsubscribe = null;
+
+        /* ── UI helpers ── */
+        function setBadge(estado, texto) {
+            const b = document.getElementById('badge-cloud-sync');
+            if (!b) return;
+            b.className = 'sync-' + estado;
+            b.innerHTML = texto;
+        }
+        function horaCorta(iso) {
+            try {
+                const d = new Date(iso);
+                return d.toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit' })
+                    + ' · ' + d.toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit' });
+            } catch(e) { return ''; }
+        }
+
+        window._mostrarToast = function(msg, tipo = 'info', dur = 3500) {
+            const cont = document.getElementById('toast-cloud');
+            if (!cont) return;
+            const el = document.createElement('div');
+            el.className = `toast-item t-${tipo}`;
+            el.textContent = msg;
+            cont.appendChild(el);
+            setTimeout(() => { el.classList.add('saliendo'); setTimeout(() => el.remove(), 400); }, dur);
+        };
+
+        function syncActivo() { return localStorage.getItem('sd_sync_activo') !== 'false'; }
+
+        /* ── LISTENER EN TIEMPO REAL ── */
+        function iniciarListenerTiempoReal() {
+            if (unsubscribe) return;
+            if (!syncActivo()) return;
+            setBadge('working', '<span class="dot-anim">☁️</span> Conectando...');
+
+            unsubscribe = onSnapshot(docTallerRef, (snap) => {
+                if (!snap.exists()) { setBadge('pending', '⚠️ Sin datos en nube'); return; }
+                const data = snap.data();
+                const ts = data.ultimaActualizacion || new Date().toISOString();
+                setBadge('ok', '✅ En vivo · ' + horaCorta(ts));
+
+                const pill = document.getElementById('pill-live');
+                if (pill) { pill.style.display = 'inline-flex'; setTimeout(() => { pill.style.display = 'none'; }, 2800); }
+
+                /* Cargar nosotras_config si existe y aún no se cargó */
+                if (data.nosotras_config && typeof window._onNosotrasLoad === 'function') {
+                    window._onNosotrasLoad(data.nosotras_config);
+                }
+            }, (err) => {
+                console.error('onSnapshot error:', err);
+                setBadge('error', '❌ Error listener');
+                window._mostrarToast('❌ Error en listener Firebase', 'error', 5000);
+            });
+        }
+
+        function detenerListener() {
+            if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+        }
+
+        /* ── GUARDAR nosotras_config → Cloud (updateDoc SOLO este campo) ── */
+        window.guardarNosotrasEnCloud = async function(config) {
+            if (!syncActivo()) { setBadge('offline', '🔕 Sync desactivado'); return; }
+            if (!navigator.onLine) {
+                window._mostrarToast('💾 Local OK · Sin conexión cloud', 'warn');
+                setBadge('offline', '🔌 Sin red');
+                return;
+            }
+            setBadge('working', '<span class="dot-anim">☁️</span> Guardando...');
+            try {
+                /* updateDoc → toca SOLO nosotras_config; todos los demás campos quedan intactos */
+                await updateDoc(docTallerRef, {
+                    nosotras_config:     config,
+                    ultimaActualizacion: new Date().toISOString()
+                });
+                setBadge('ok', '✅ Guardado · ' + horaCorta(new Date().toISOString()));
+                window._mostrarToast('✅ Nosotras guardado en la nube', 'ok');
+            } catch(err) {
+                console.error('updateDoc error:', err);
+                setBadge('error', '❌ Error sync');
+                window._mostrarToast('❌ No se pudo guardar en la nube', 'error', 5000);
+            }
+        };
+
+        /* ── SYNC MANUAL ── */
+        window.forzarSyncManual = function() {
+            if (!navigator.onLine) { window._mostrarToast('⚠️ Sin conexión', 'warn'); return; }
+            detenerListener();
+            setTimeout(iniciarListenerTiempoReal, 300);
+            window._mostrarToast('☁️ Reconectando listener...', 'info');
+        };
+
+        window._iniciarListener = iniciarListenerTiempoReal;
+        window._detenerListener = detenerListener;
+
+        window.addEventListener('online', () => {
+            if (!syncActivo()) return;
+            window._mostrarToast('🌐 Conexión restaurada', 'info');
+            if (!unsubscribe) iniciarListenerTiempoReal();
+        });
+        window.addEventListener('offline', () => {
+            setBadge('offline', '🔌 Sin red — modo local');
+            window._mostrarToast('⚠️ Sin conexión', 'warn', 5000);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (navigator.onLine && syncActivo()) iniciarListenerTiempoReal();
+            else if (!navigator.onLine) setBadge('offline', '🔌 Sin red — modo local');
+        });
+    </script>
+
+    <style>
+        /* ══════════════════════════════════════════
+           PALETA NOCTURNA — idéntica al ecosistema
+           ══════════════════════════════════════════ */
+        :root {
+            --bg-principal:      #0b111e;
+            --bg-card:           #151f32;
+            --bg-input:          #1e293b;
+            --border-color:      #2e3d56;
+            --color-texto:       #cbd5e1;
+            --color-titulos:     #f8fafc;
+            --color-subtitulos:  #94a3b8;
+            --accent-primario:   #7dd3fc;
+            --accent-secundario: #c084fc;
+            --accent-admin:      #fde047;
+            --accent-hover:      #38bdf8;
+            --accent-success:    #22c55e;
+            --accent-rose:       #fb7185;
+            --color-alerta-critica: #fca5a5;
+            --color-alerta-media:   #fde047;
+            --color-alerta-ok:      #86efac;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: var(--bg-principal);
+            color: var(--color-texto);
+            padding: 28px 20px 100px;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; line-height: 1.5;
+        }
+
+        /* ── Header ── */
+        header {
+            width: 100%; max-width: 1100px;
+            margin-bottom: 28px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 18px;
+            display: flex; flex-direction: column; gap: 14px;
+        }
+        .header-top {
+            display: flex; justify-content: space-between;
+            align-items: center; flex-wrap: wrap; gap: 10px;
+        }
+        .header-brand { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        h1 {
+            color: var(--color-titulos); font-size: 1.4rem;
+            font-weight: 700; letter-spacing: 1.5px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .chip-modulo {
+            background: rgba(251,113,133,0.12); color: var(--accent-rose);
+            border: 1px solid rgba(251,113,133,0.3); border-radius: 20px;
+            font-size: 0.7rem; font-weight: 700; padding: 3px 10px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+
+        /* ── Badge sync ── */
+        #badge-cloud-sync {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 12px; border-radius: 20px; font-size: 0.71rem;
+            font-weight: 700; letter-spacing: 0.3px; border: 1px solid;
+            transition: all 0.4s ease; cursor: default; white-space: nowrap;
+        }
+        #badge-cloud-sync.sync-ok      { color: var(--accent-success);       border-color: var(--accent-success);       background: rgba(34,197,94,0.08); }
+        #badge-cloud-sync.sync-pending { color: var(--accent-admin);          border-color: var(--accent-admin);          background: rgba(253,224,71,0.08); }
+        #badge-cloud-sync.sync-error   { color: var(--color-alerta-critica);  border-color: var(--color-alerta-critica);  background: rgba(252,165,165,0.08); }
+        #badge-cloud-sync.sync-working { color: var(--accent-primario);       border-color: var(--accent-primario);       background: rgba(125,211,252,0.08); }
+        #badge-cloud-sync.sync-offline { color: var(--color-subtitulos);      border-color: var(--border-color);          background: rgba(30,41,59,0.5); }
+        .dot-anim { animation: blink 1s infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+        /* ── Pill live ── */
+        .pill-live {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 0.67rem; font-weight: 700; color: var(--accent-success);
+            background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25);
+            border-radius: 20px; padding: 3px 9px; animation: fadeIn 0.3s ease;
+        }
+        .pill-live::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--accent-success); display:inline-block; animation:blink 1.2s infinite; }
+
+        /* ── Botones ── */
+        .btn {
+            padding: 9px 16px; border-radius: 8px; font-size: 0.83rem;
+            font-weight: 600; cursor: pointer; border: 1px solid transparent;
+            transition: all 0.22s ease;
+            display: inline-flex; align-items: center; gap: 6px;
+            justify-content: center; text-decoration: none; background: none;
+        }
+        .btn-primario  { background: var(--accent-primario); color: #0b111e; border-color: var(--accent-primario); }
+        .btn-primario:hover  { background: var(--accent-hover); box-shadow: 0 0 14px rgba(125,211,252,0.3); transform: translateY(-1px); }
+        .btn-secundario { background: rgba(192,132,252,0.12); color: var(--accent-secundario); border: 1px solid var(--accent-secundario); }
+        .btn-secundario:hover { background: var(--accent-secundario); color: #0b111e; transform: translateY(-1px); }
+        .btn-admin { background: transparent; color: var(--accent-admin); border: 1px solid var(--accent-admin); }
+        .btn-admin:hover { background: var(--accent-admin); color: #0b111e; }
+        .btn-success { background: rgba(34,197,94,0.12); color: var(--accent-success); border: 1px solid var(--accent-success); }
+        .btn-success:hover { background: var(--accent-success); color: #0b111e; }
+        .btn-rose { background: rgba(251,113,133,0.10); color: var(--accent-rose); border: 1px solid var(--accent-rose); }
+        .btn-rose:hover { background: var(--accent-rose); color: #0b111e; }
+
+        /* ── Navegación ecosistema ── */
+        .nav-ecosistema { display: flex; gap: 6px; flex-wrap: wrap; }
+        .btn-nav {
+            background: rgba(30,41,59,0.5); color: var(--color-subtitulos);
+            border: 1px solid var(--border-color); padding: 7px 11px; font-size: 0.76rem;
+        }
+        .btn-nav:hover { background: rgba(125,211,252,0.08); color: var(--color-titulos); border-color: rgba(125,211,252,0.3); }
+        .btn-nav.activo { background: rgba(251,113,133,0.1); color: var(--accent-rose); border-color: var(--accent-rose); }
+
+        /* ── Controles superiores ── */
+        .ctrl-sync { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+        /* ── Layout principal ── */
+        .contenedor { width: 100%; max-width: 1100px; display: flex; flex-direction: column; gap: 20px; }
+
+        /* ── Panel ── */
+        .panel {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 26px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+            animation: fadeIn 0.35s ease-out;
+        }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+        .panel-titulo {
+            color: var(--color-titulos); font-size: 1.05rem; font-weight: 600;
+            margin-bottom: 20px; border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 10px;
+        }
+        .panel-titulo .chip-seccion {
+            font-size: 0.68rem; font-weight: 700; padding: 3px 9px;
+            border-radius: 12px; border: 1px solid var(--border-color);
+            color: var(--color-subtitulos); text-transform: uppercase; letter-spacing: 0.5px;
+        }
+
+        /* ── Grilla de campos ── */
+        .campos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 16px;
+        }
+        .campos-grid.one-col { grid-template-columns: 1fr; }
+        .campos-grid.two-col { grid-template-columns: 1fr 1fr; }
+
+        /* ── Campo individual ── */
+        .campo {
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .campo label {
+            font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.5px; color: var(--color-subtitulos);
+        }
+        .campo input,
+        .campo textarea {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 10px 13px; border-radius: 8px;
+            font-size: 0.87rem; outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            font-family: inherit; resize: vertical;
+        }
+        .campo input:focus,
+        .campo textarea:focus {
+            border-color: var(--accent-primario);
+            box-shadow: 0 0 0 3px rgba(125,211,252,0.1);
+        }
+        .campo textarea { min-height: 80px; line-height: 1.6; }
+        .campo textarea.tall { min-height: 120px; }
+        .campo .hint {
+            font-size: 0.68rem; color: var(--color-subtitulos); opacity: 0.7;
+        }
+
+        /* ── Separador pilar ── */
+        .pilar-header {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 14px; margin-top: 6px;
+        }
+        .pilar-num {
+            width: 26px; height: 26px; border-radius: 50%;
+            background: rgba(251,113,133,0.12); border: 1px solid var(--accent-rose);
+            color: var(--accent-rose); font-size: 0.75rem; font-weight: 700;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .pilar-label { font-size: 0.8rem; font-weight: 600; color: var(--color-titulos); }
+
+        /* ── Toast ── */
+        #toast-cloud {
+            position: fixed; bottom: 22px; right: 22px;
+            display: flex; flex-direction: column; gap: 8px; z-index: 1000;
+            pointer-events: none;
+        }
+        .toast-item {
+            padding: 10px 16px; border-radius: 10px; font-size: 0.81rem;
+            font-weight: 600; border: 1px solid; backdrop-filter: blur(8px);
+            animation: toast-in 0.28s ease; pointer-events: none;
+            max-width: 320px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+        .toast-item.t-ok    { color:var(--accent-success);       border-color:var(--accent-success);       background:rgba(10,25,15,0.94); }
+        .toast-item.t-warn  { color:var(--accent-admin);         border-color:var(--accent-admin);         background:rgba(22,18,4,0.94); }
+        .toast-item.t-error { color:var(--color-alerta-critica); border-color:var(--color-alerta-critica); background:rgba(28,8,8,0.94); }
+        .toast-item.t-info  { color:var(--accent-primario);      border-color:var(--accent-primario);      background:rgba(4,14,28,0.94); }
+        .toast-item.saliendo { animation: toast-out 0.35s forwards; }
+        @keyframes toast-in  { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
+        @keyframes toast-out { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(20px); } }
+
+        /* ── Barra de acción fija (inferior) ── */
+        .barra-accion {
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 500;
+            background: rgba(11,17,30,0.96); border-top: 1px solid var(--border-color);
+            backdrop-filter: blur(12px);
+            display: flex; align-items: center; justify-content: center;
+            gap: 12px; padding: 14px 24px; flex-wrap: wrap;
+        }
+        .barra-accion .info-cambios {
+            font-size: 0.75rem; color: var(--color-subtitulos);
+            margin-right: auto;
+        }
+
+        /* ── Preview imagen ── */
+        .img-preview-wrap {
+            margin-top: 8px; border-radius: 8px; overflow: hidden;
+            border: 1px solid var(--border-color);
+            background: var(--bg-input);
+            max-width: 200px;
+        }
+        .img-preview-wrap img {
+            width: 100%; display: block;
+            aspect-ratio: 4/5; object-fit: cover;
+        }
+        .img-preview-wrap.contacto-preview img {
+            aspect-ratio: 9/16; max-width: 160px;
+        }
+
+        /* ── Estado no cargado ── */
+        .estado-cargando {
+            text-align: center; padding: 40px; color: var(--color-subtitulos);
+            font-style: italic; font-size: 0.88rem;
+        }
+
+        /* ── Divider interno ── */
+        .inner-divider {
+            border: none; border-top: 1px solid var(--border-color);
+            margin: 20px 0;
+        }
+
+        @media (max-width: 640px) {
+            .campos-grid.two-col { grid-template-columns: 1fr; }
+            .barra-accion { flex-direction: column; }
+            .barra-accion .info-cambios { margin-right: 0; text-align: center; }
+        }
+        @media print {
+            #toast-cloud, .ctrl-sync, .nav-ecosistema, .barra-accion { display: none !important; }
+        }
+
+        /* ══ TUTORIAL SYSTEM ══ */
+        #tutorial-overlay { position:fixed; inset:0; z-index:9990; background:rgba(5,12,28,0.86); pointer-events:all; transition:opacity 0.3s; }
+        #tutorial-overlay.oculto { display:none !important; }
+        #tutorial-spotlight-ring { position:fixed; z-index:9995; border-radius:12px; box-shadow:0 0 0 3px var(--accent-rose),0 0 0 7px rgba(251,113,133,0.18),0 0 28px rgba(251,113,133,0.10); pointer-events:none; transition:top 0.35s cubic-bezier(0.4,0,0.2,1),left 0.35s cubic-bezier(0.4,0,0.2,1),width 0.35s cubic-bezier(0.4,0,0.2,1),height 0.35s cubic-bezier(0.4,0,0.2,1); }
+        #tutorial-card { position:fixed; z-index:10000; background:var(--bg-card); border:1px solid var(--accent-rose); border-radius:14px; padding:22px 22px 16px; width:316px; box-shadow:0 20px 60px rgba(0,0,0,0.75),0 0 0 1px rgba(251,113,133,0.07); }
+        #tutorial-card.animando { animation:tut-fade 0.26s ease; }
+        @keyframes tut-fade { from{opacity:0;transform:translateY(7px)} to{opacity:1;transform:translateY(0)} }
+        .tut-progress-bar { display:flex; gap:3px; margin-bottom:16px; }
+        .tut-pip { flex:1; height:3px; border-radius:3px; background:var(--border-color); transition:background 0.3s; }
+        .tut-pip.activo { background:var(--accent-rose); }
+        .tut-pip.hecho  { background:rgba(251,113,133,0.32); }
+        #tutorial-emoji { font-size:1.55rem; margin-bottom:8px; line-height:1; }
+        #tutorial-titulo { color:var(--color-titulos); font-size:0.98rem; font-weight:700; margin-bottom:9px; }
+        #tutorial-texto { color:var(--color-texto); font-size:0.81rem; line-height:1.65; margin-bottom:16px; }
+        .tut-nav-row { display:flex; gap:6px; align-items:center; justify-content:space-between; }
+        .tut-step-label { font-size:0.67rem; color:var(--color-subtitulos); font-weight:600; white-space:nowrap; }
+        .btn-tut-ant { background:none; border:1px solid var(--border-color); color:var(--color-subtitulos); padding:7px 11px; border-radius:8px; font-size:0.76rem; cursor:pointer; transition:all 0.18s; }
+        .btn-tut-ant:hover { border-color:var(--accent-rose); color:var(--accent-rose); }
+        .btn-tut-sig { background:var(--accent-rose); color:#0b111e; border:none; padding:7px 14px; border-radius:8px; font-size:0.76rem; font-weight:700; cursor:pointer; transition:all 0.18s; white-space:nowrap; }
+        .btn-tut-sig:hover { filter:brightness(1.12); transform:translateY(-1px); }
+        .btn-tut-saltar { background:none; border:none; color:var(--color-subtitulos); font-size:0.7rem; cursor:pointer; padding:4px 5px; transition:color 0.18s; white-space:nowrap; }
+        .btn-tut-saltar:hover { color:var(--color-alerta-critica); }
+        .btn-guia { background:rgba(251,113,133,0.07); color:var(--accent-rose); border:1px solid rgba(251,113,133,0.35); padding:8px 13px; border-radius:8px; font-size:0.78rem; font-weight:600; cursor:pointer; transition:all 0.2s; display:inline-flex; align-items:center; gap:5px; }
+        .btn-guia:hover { background:rgba(251,113,133,0.14); box-shadow:0 0 10px rgba(251,113,133,0.12); }
+    </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════
+     HEADER
+════════════════════════════════════ -->
+<header>
+    <div class="header-top">
+        <div class="header-brand">
+            <h1>💌 SAGRADA DELICIA</h1>
+            <span class="chip-modulo">Editor Nosotras v1.2.0</span>
+            <span id="badge-cloud-sync" class="sync-offline" title="Listener en tiempo real">⚫ Conectando...</span>
+            <span class="pill-live" id="pill-live" style="display:none;">EN VIVO</span>
+        </div>
+        <div class="ctrl-sync">
+            <button class="btn-guia" onclick="iniciarTutorial(true)" title="Relanzar guía interactiva">🎓 Guía</button>
+            <button class="btn" style="border-color:var(--accent-success);color:var(--accent-success);background:rgba(34,197,94,0.07);padding:8px 14px;"
+                onclick="forzarSyncManual()">☁️ Sync</button>
+        </div>
+    </div>
+    <nav class="nav-ecosistema">
+        <a class="btn btn-nav" onclick="irA('cotizador')">🧁 Cotizador</a>
+        <a class="btn btn-nav" onclick="irA('recetario')">🍳 Recetario</a>
+        <a class="btn btn-nav" onclick="irA('insumos')">🍎 Insumos</a>
+        <a class="btn btn-nav" onclick="irA('lineas')">📦 Líneas</a>
+        <a class="btn btn-nav" onclick="irA('costoLinea')">💰 Costo de Línea</a>
+        <a class="btn btn-nav" onclick="irA('pedidos')">📋 Pedidos</a>
+        <a class="btn btn-nav" onclick="irA('catalogo')">📖 Catálogo</a>
+        <a class="btn btn-nav activo" aria-current="page">💌 Sobre Nosotras</a>
+    </nav>
+</header>
+
+<!-- ════════════════════════════════════
+     CONTENEDOR PRINCIPAL
+════════════════════════════════════ -->
+<div class="contenedor">
+
+    <!-- ── SECCIÓN 1: HEADER DE NOSOTRAS ── -->
+    <div class="panel">
+        <div class="panel-titulo">
+            🏷️ Header de la página
+            <span class="chip-seccion">Sección 1</span>
+        </div>
+        <div class="campos-grid">
+            <div class="campo">
+                <label>Eyebrow (texto pequeño superior)</label>
+                <input type="text" id="h_eyebrow" placeholder="Repostería Fina · Cali, Colombia" />
+            </div>
+            <div class="campo">
+                <label>Título principal</label>
+                <input type="text" id="h_titulo" placeholder="Sobre Nosotras" />
+            </div>
+            <div class="campo">
+                <label>Subtítulo (debajo de los diamantes)</label>
+                <input type="text" id="h_subtitulo" placeholder="Madre e hija · Con amor desde el primer día" />
+            </div>
+        </div>
+    </div>
+
+    <!-- ── SECCIÓN 2: QUIÉNES SOMOS ── -->
+    <div class="panel">
+        <div class="panel-titulo">
+            📸 Quiénes somos — Foto + Texto
+            <span class="chip-seccion">Sección 2</span>
+        </div>
+        <div class="campos-grid two-col">
+            <!-- Columna foto -->
+            <div style="display:flex;flex-direction:column;gap:14px;">
+                <div class="campo">
+                    <label>URL de la foto principal (Luz Marina y Paola)</label>
+                    <input type="url" id="q_foto_url"
+                        placeholder="https://res.cloudinary.com/... o FOTO_LUZ_MARINA_PAOLA.jpg"
+                        oninput="actualizarPreviewFoto()" />
+                    <span class="hint">Acepta URL de Cloudinary o ruta local relativa</span>
+                </div>
+                <div class="img-preview-wrap" id="preview-foto-wrap" style="display:none;">
+                    <img id="preview-foto" src="" alt="Preview" onerror="this.parentElement.style.display='none'" />
+                </div>
+                <div class="campo">
+                    <label>Texto del sello circular</label>
+                    <input type="text" id="q_sello" placeholder="Repostería Fina" />
+                    <span class="hint">Aparece en el sello dorado sobre la foto</span>
+                </div>
+            </div>
+            <!-- Columna texto -->
+            <div style="display:flex;flex-direction:column;gap:14px;">
+                <div class="campo">
+                    <label>Eyebrow sección</label>
+                    <input type="text" id="q_eyebrow" placeholder="Nuestra historia" />
+                </div>
+                <div class="campo">
+                    <label>Título (línea 1)</label>
+                    <input type="text" id="q_titulo1" placeholder="Hola, somos" />
+                </div>
+                <div class="campo">
+                    <label>Título (línea 2 — aparece en dorado itálico)</label>
+                    <input type="text" id="q_titulo2" placeholder="Luz Marina y Paola" />
+                </div>
+                <div class="campo">
+                    <label>Párrafo 1</label>
+                    <textarea id="q_p1" class="tall" placeholder="Madre e hija, amantes de la repostería..."></textarea>
+                </div>
+                <div class="campo">
+                    <label>Párrafo 2</label>
+                    <textarea id="q_p2" placeholder="Nuestros postres y pasteles están hechos..."></textarea>
+                </div>
+                <div class="campo">
+                    <label>Firma (texto script dorado)</label>
+                    <input type="text" id="q_firma" placeholder="Luz Marina & Paola ✦" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── SECCIÓN 3: LO QUE NOS MUEVE (3 PILARES) ── -->
+    <div class="panel">
+        <div class="panel-titulo">
+            ✦ Lo que nos mueve — 3 pilares
+            <span class="chip-seccion">Sección 3</span>
+        </div>
+
+        <!-- Encabezado de sección -->
+        <div class="campos-grid two-col" style="margin-bottom:20px;">
+            <div class="campo">
+                <label>Eyebrow de sección</label>
+                <input type="text" id="fil_eyebrow" placeholder="Lo que nos mueve" />
+            </div>
+            <div class="campo">
+                <label>Título de sección (con comillas)</label>
+                <input type="text" id="fil_titulo" placeholder="&quot;Cada pieza, una promesa&quot;" />
+            </div>
+        </div>
+        <hr class="inner-divider">
+
+        <!-- Pilar 1 -->
+        <div class="pilar-header">
+            <span class="pilar-num">1</span>
+            <span class="pilar-label">Pilar 1</span>
+        </div>
+        <div class="campos-grid" style="margin-bottom:20px;">
+            <div class="campo">
+                <label>Ícono / Emoji</label>
+                <input type="text" id="p1_icono" placeholder="🌾" />
+            </div>
+            <div class="campo">
+                <label>Nombre del pilar</label>
+                <input type="text" id="p1_nombre" placeholder="Ingredientes de verdad" />
+            </div>
+            <div class="campo">
+                <label>Descripción</label>
+                <textarea id="p1_desc" placeholder="Sin atajos ni sustitutos..."></textarea>
+            </div>
+        </div>
+        <hr class="inner-divider">
+
+        <!-- Pilar 2 -->
+        <div class="pilar-header">
+            <span class="pilar-num">2</span>
+            <span class="pilar-label">Pilar 2</span>
+        </div>
+        <div class="campos-grid" style="margin-bottom:20px;">
+            <div class="campo">
+                <label>Ícono / Emoji</label>
+                <input type="text" id="p2_icono" placeholder="✦" />
+            </div>
+            <div class="campo">
+                <label>Nombre del pilar</label>
+                <input type="text" id="p2_nombre" placeholder="Técnica en evolución" />
+            </div>
+            <div class="campo">
+                <label>Descripción</label>
+                <textarea id="p2_desc" placeholder="Nos formamos continuamente..."></textarea>
+            </div>
+        </div>
+        <hr class="inner-divider">
+
+        <!-- Pilar 3 -->
+        <div class="pilar-header">
+            <span class="pilar-num">3</span>
+            <span class="pilar-label">Pilar 3</span>
+        </div>
+        <div class="campos-grid">
+            <div class="campo">
+                <label>Ícono / Emoji</label>
+                <input type="text" id="p3_icono" placeholder="🏠" />
+            </div>
+            <div class="campo">
+                <label>Nombre del pilar</label>
+                <input type="text" id="p3_nombre" placeholder="Sabor de hogar" />
+            </div>
+            <div class="campo">
+                <label>Descripción</label>
+                <textarea id="p3_desc" placeholder="Ese recuerdo dulce..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── SECCIÓN 4: EL SABOR ESPECIAL ── -->
+    <div class="panel">
+        <div class="panel-titulo">
+            🎂 El Sabor Especial de la Casa
+            <span class="chip-seccion">Sección 4</span>
+        </div>
+        <div class="campos-grid">
+            <div class="campo">
+                <label>Badge (etiqueta pequeña)</label>
+                <input type="text" id="sab_badge" placeholder="Nuestra joya" />
+            </div>
+            <div class="campo">
+                <label>Título línea 1</label>
+                <input type="text" id="sab_titulo1" placeholder="El Sabor Especial" />
+            </div>
+            <div class="campo">
+                <label>Título línea 2</label>
+                <input type="text" id="sab_titulo2" placeholder="de la Casa" />
+            </div>
+            <div class="campo">
+                <label>Subtítulo (script dorado)</label>
+                <input type="text" id="sab_subtitulo" placeholder="Torta Envinada Sagrada Delicia" />
+            </div>
+            <div class="campo" style="grid-column:1/-1;">
+                <label>Texto descriptivo</label>
+                <textarea id="sab_texto" class="tall" placeholder="Una receta tradicional elevada al nivel gourmet..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── SECCIÓN 5: CONTACTO ── -->
+    <div class="panel">
+        <div class="panel-titulo">
+            📞 Información de Contacto
+            <span class="chip-seccion">Sección 5</span>
+        </div>
+        <div class="campos-grid two-col">
+            <div style="display:flex;flex-direction:column;gap:14px;">
+                <div class="campo">
+                    <label>Correo electrónico</label>
+                    <input type="email" id="ct_email" placeholder="Reposteriasagradadelicia@gmail.com" />
+                </div>
+                <div class="campo">
+                    <label>Número de teléfono / WhatsApp</label>
+                    <input type="text" id="ct_telefono" placeholder="3183110524" />
+                    <span class="hint">Sin espacios ni guiones. Incluir código de país para WA: 573183110524</span>
+                </div>
+                <div class="campo">
+                    <label>Número completo WhatsApp (con 57)</label>
+                    <input type="text" id="ct_wa_numero" placeholder="573183110524" />
+                    <span class="hint">Se usa para el enlace wa.me/...</span>
+                </div>
+                <div class="campo">
+                    <label>Handle redes sociales</label>
+                    <input type="text" id="ct_handle" placeholder="@reposteriasagradadelicia" />
+                    <span class="hint">Aplica a TikTok, Instagram y Facebook</span>
+                </div>
+                <div class="campo">
+                    <label>Dirección</label>
+                    <input type="text" id="ct_direccion" placeholder="Cra 18 # 43-89" />
+                </div>
+                <div class="campo">
+                    <label>Barrio / Ciudad</label>
+                    <input type="text" id="ct_barrio" placeholder="B/Santa fe · Cali, Colombia" />
+                </div>
+            </div>
+            <!-- Preview imagen referencia -->
+            <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start;">
+                <span style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--color-subtitulos);">Referencia visual de contacto</span>
+                <div class="img-preview-wrap contacto-preview">
+                    <img src="" id="img-contacto-ref"
+                        onerror="this.parentElement.style.display='none'"
+                        style="display:none;" />
+                </div>
+                <p style="font-size:0.75rem;color:var(--color-subtitulos);line-height:1.6;">
+                    Esta sección edita los datos que aparecen<br/>
+                    en la imagen de contacto del catálogo público.<br/>
+                    Los cambios se reflejan cuando NOSOTRAS.html<br/>
+                    lea el campo <code style="color:var(--accent-primario);font-size:0.7rem;">nosotras_config</code> de Firebase.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── SECCIÓN 6: CTA + FOOTER ── -->
+    <div class="panel">
+        <div class="panel-titulo">
+            💬 CTA WhatsApp + Footer
+            <span class="chip-seccion">Sección 6</span>
+        </div>
+        <div class="campos-grid">
+            <div class="campo">
+                <label>Label del CTA (texto pequeño superior al botón)</label>
+                <input type="text" id="cta_label" placeholder="¿Lista para pedir?" />
+            </div>
+            <div class="campo">
+                <label>Texto del botón WhatsApp</label>
+                <input type="text" id="cta_btn_texto" placeholder="Escríbenos al WhatsApp" />
+            </div>
+            <div class="campo">
+                <label>Mensaje de WhatsApp (URL encoded)</label>
+                <input type="text" id="cta_wa_msg" placeholder="¡Hola Sagrada Delicia! ✨ Quiero hacer un pedido." />
+                <span class="hint">Escribe el mensaje normal, se codificará automáticamente al guardar</span>
+            </div>
+        </div>
+        <hr class="inner-divider">
+        <div class="campos-grid">
+            <div class="campo">
+                <label>Ciudad en footer</label>
+                <input type="text" id="ft_ciudad" placeholder="Cali, Colombia" />
+            </div>
+            <div class="campo">
+                <label>Año y texto de copyright</label>
+                <input type="text" id="ft_copyright" placeholder="© 2025 Sagrada Delicia. Todos los derechos reservados." />
+            </div>
+            <div class="campo">
+                <label>Crédito de diseño</label>
+                <input type="text" id="ft_credito" placeholder="Diseñado por: Marto 🧠 · martowave@gmail.com" />
+            </div>
+        </div>
+    </div>
+
+</div><!-- /contenedor -->
+
+<!-- ════════════════════════════════════
+     BARRA DE ACCIÓN FIJA INFERIOR
+════════════════════════════════════ -->
+<div class="barra-accion">
+    <span class="info-cambios" id="lbl-cambios">Cargando datos desde Firebase...</span>
+    <button class="btn btn-secundario" onclick="cargarDefaults()">↩ Resetear defaults</button>
+    <button class="btn btn-admin" onclick="verJSON()">{ } Ver JSON</button>
+    <button class="btn btn-success" onclick="guardarTodo()" style="padding:11px 28px;font-size:0.9rem;">
+        💾 Guardar en Firebase
+    </button>
+</div>
+
+<!-- ════════════════════════════════════
+     TOAST
+════════════════════════════════════ -->
+<div id="toast-cloud"></div>
+
+<!-- ══ TUTORIAL OVERLAY ══ -->
+<div id="tutorial-overlay" class="oculto">
+    <div id="tutorial-spotlight-ring" style="display:none;"></div>
+    <div id="tutorial-card">
+        <div class="tut-progress-bar" id="tut-progress-bar"></div>
+        <div id="tutorial-emoji"></div>
+        <div id="tutorial-titulo"></div>
+        <p id="tutorial-texto"></p>
+        <div class="tut-nav-row">
+            <button class="btn-tut-ant" id="btn-tut-ant" onclick="tutorialAnterior()">← Ant.</button>
+            <span class="tut-step-label" id="tut-step-label"></span>
+            <button class="btn-tut-saltar" onclick="tutorialSaltar()">✕ Saltar</button>
+            <button class="btn-tut-sig" id="btn-tut-sig" onclick="tutorialSiguiente()">Siguiente →</button>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════
+     MODAL JSON
+════════════════════════════════════ -->
+<div id="modal-json" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;align-items:center;justify-content:center;">
+    <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:14px;padding:28px;max-width:700px;width:95%;max-height:80vh;display:flex;flex-direction:column;gap:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:700;color:var(--color-titulos);">{ } nosotras_config · JSON actual</span>
+            <button class="btn" style="padding:6px 12px;border-color:var(--border-color);color:var(--color-subtitulos);"
+                onclick="document.getElementById('modal-json').style.display='none'">✕ Cerrar</button>
+        </div>
+        <textarea id="json-output" readonly
+            style="flex:1;min-height:320px;background:var(--bg-input);border:1px solid var(--border-color);color:var(--accent-primario);padding:14px;border-radius:8px;font-size:0.78rem;font-family:monospace;resize:vertical;"></textarea>
+        <button class="btn btn-primario" onclick="copiarJSON()">📋 Copiar JSON</button>
+    </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════
+   NOSOTRAS_EDITOR v1.1.0 — Lógica principal
+════════════════════════════════════════════════════ */
+
+const RUTAS = {
+    cotizador:    'COTIZADOR.html',
+    insumos:      'INSUMOS.html',
+    recetario:    'RECETARIO.html',
+    lineas:       'LINEAS.html',
+    costoLinea:   'COSTOS.html',
+    pedidos:      'PEDIDOS.html',
+    catalogo:     'CATALOGO.html',
+    catalogoPublico: 'CATALOGO_PUBLICO.html'
+};
+
+/* Valores por defecto — espejo de NOSOTRAS.html actual */
+const DEFAULTS = {
+    header: {
+        eyebrow:   'Repostería Fina · Cali, Colombia',
+        titulo:    'Sobre Nosotras',
+        subtitulo: 'Madre e hija · Con amor desde el primer día'
+    },
+    quienes: {
+        foto_url: 'FOTO_LUZ_MARINA_PAOLA.jpg',
+        sello:    'Repostería\nFina',
+        eyebrow:  'Nuestra historia',
+        titulo1:  'Hola, somos',
+        titulo2:  'Luz Marina y Paola',
+        p1: 'Madre e hija, amantes de la repostería. Llevamos muchos años trabajando juntas, capacitándonos constantemente en las nuevas técnicas de decoración, recetas y sabores que van a la vanguardia — para llevar siempre lo mejor a sus hogares.',
+        p2: 'Nuestros postres y pasteles están hechos con los mejores ingredientes y con el sabor casero que todos prefieren.',
+        firma: 'Luz Marina & Paola ✦'
+    },
+    filosofia: {
+        eyebrow: 'Lo que nos mueve',
+        titulo:  '"Cada pieza, una promesa"',
+        pilares: [
+            { icono: '🌾', nombre: 'Ingredientes de verdad', desc: 'Sin atajos ni sustitutos. Todo lo que entra en nuestras preparaciones se siente en cada bocado.' },
+            { icono: '✦',  nombre: 'Técnica en evolución',  desc: 'Nos formamos continuamente para traerte lo más actual de la repostería sin perder la esencia artesanal.' },
+            { icono: '🏠', nombre: 'Sabor de hogar',        desc: 'Ese recuerdo dulce que buscas cuando quieres compartir algo especial con quienes más quieres.' }
+        ]
+    },
+    sabor: {
+        badge:     'Nuestra joya',
+        titulo1:   'El Sabor Especial',
+        titulo2:   'de la Casa',
+        subtitulo: 'Torta Envinada Sagrada Delicia',
+        texto:     'Una receta tradicional elevada al nivel gourmet. Horneada lentamente para lograr una textura húmeda y suave, infusionada con licor fino y especias aromáticas que realzan su sabor profundo y elegante. Perfecta para quienes disfrutan de los placeres auténticos de la repostería artesanal.'
+    },
+    contacto: {
+        email:      'Reposteriasagradadelicia@gmail.com',
+        telefono:   '3183110524',
+        wa_numero:  '573183110524',
+        handle:     '@reposteriasagradadelicia',
+        direccion:  'Cra 18 # 43-89',
+        barrio:     'B/Santa fe · Cali, Colombia'
+    },
+    cta: {
+        label:    '¿Lista para pedir?',
+        btn_texto: 'Escríbenos al WhatsApp',
+        wa_msg:   '¡Hola Sagrada Delicia! ✨ Quiero hacer un pedido.'
+    },
+    footer: {
+        ciudad:    'Cali, Colombia',
+        copyright: '© 2025 Sagrada Delicia. Todos los derechos reservados.',
+        credito:   'Diseñado por: Marto 🧠 · martowave@gmail.com'
+    }
+};
+
+/* ── Mapa campo → id DOM ── */
+const CAMPOS_MAP = {
+    'header.eyebrow':       'h_eyebrow',
+    'header.titulo':        'h_titulo',
+    'header.subtitulo':     'h_subtitulo',
+    'quienes.foto_url':     'q_foto_url',
+    'quienes.sello':        'q_sello',
+    'quienes.eyebrow':      'q_eyebrow',
+    'quienes.titulo1':      'q_titulo1',
+    'quienes.titulo2':      'q_titulo2',
+    'quienes.p1':           'q_p1',
+    'quienes.p2':           'q_p2',
+    'quienes.firma':        'q_firma',
+    'filosofia.eyebrow':    'fil_eyebrow',
+    'filosofia.titulo':     'fil_titulo',
+    'filosofia.pilares.0.icono':  'p1_icono',
+    'filosofia.pilares.0.nombre': 'p1_nombre',
+    'filosofia.pilares.0.desc':   'p1_desc',
+    'filosofia.pilares.1.icono':  'p2_icono',
+    'filosofia.pilares.1.nombre': 'p2_nombre',
+    'filosofia.pilares.1.desc':   'p2_desc',
+    'filosofia.pilares.2.icono':  'p3_icono',
+    'filosofia.pilares.2.nombre': 'p3_nombre',
+    'filosofia.pilares.2.desc':   'p3_desc',
+    'sabor.badge':          'sab_badge',
+    'sabor.titulo1':        'sab_titulo1',
+    'sabor.titulo2':        'sab_titulo2',
+    'sabor.subtitulo':      'sab_subtitulo',
+    'sabor.texto':          'sab_texto',
+    'contacto.email':       'ct_email',
+    'contacto.telefono':    'ct_telefono',
+    'contacto.wa_numero':   'ct_wa_numero',
+    'contacto.handle':      'ct_handle',
+    'contacto.direccion':   'ct_direccion',
+    'contacto.barrio':      'ct_barrio',
+    'cta.label':            'cta_label',
+    'cta.btn_texto':        'cta_btn_texto',
+    'cta.wa_msg':           'cta_wa_msg',
+    'footer.ciudad':        'ft_ciudad',
+    'footer.copyright':     'ft_copyright',
+    'footer.credito':       'ft_credito'
+};
+
+/* ── Helpers de lectura profunda ── */
+function _getDeep(obj, path) {
+    return path.split('.').reduce((acc, k) => {
+        if (acc === undefined || acc === null) return undefined;
+        return isNaN(k) ? acc[k] : acc[parseInt(k)];
+    }, obj);
+}
+
+/* ── Poblar formulario desde un objeto config ── */
+function poblarFormulario(config) {
+    Object.entries(CAMPOS_MAP).forEach(([path, id]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const val = _getDeep(config, path);
+        if (val !== undefined && val !== null) {
+            el.value = val;
+        }
+    });
+    actualizarPreviewFoto();
+    document.getElementById('lbl-cambios').textContent = 'Datos cargados · ' + _horaCorta();
+}
+
+/* ── Recolectar formulario → objeto config ── */
+function recolectarConfig() {
+    const v = id => (document.getElementById(id)?.value || '').trim();
+    return {
+        header: {
+            eyebrow:   v('h_eyebrow'),
+            titulo:    v('h_titulo'),
+            subtitulo: v('h_subtitulo')
+        },
+        quienes: {
+            foto_url: v('q_foto_url'),
+            sello:    v('q_sello'),
+            eyebrow:  v('q_eyebrow'),
+            titulo1:  v('q_titulo1'),
+            titulo2:  v('q_titulo2'),
+            p1:       v('q_p1'),
+            p2:       v('q_p2'),
+            firma:    v('q_firma')
+        },
+        filosofia: {
+            eyebrow: v('fil_eyebrow'),
+            titulo:  v('fil_titulo'),
+            pilares: [
+                { icono: v('p1_icono'), nombre: v('p1_nombre'), desc: v('p1_desc') },
+                { icono: v('p2_icono'), nombre: v('p2_nombre'), desc: v('p2_desc') },
+                { icono: v('p3_icono'), nombre: v('p3_nombre'), desc: v('p3_desc') }
+            ]
+        },
+        sabor: {
+            badge:     v('sab_badge'),
+            titulo1:   v('sab_titulo1'),
+            titulo2:   v('sab_titulo2'),
+            subtitulo: v('sab_subtitulo'),
+            texto:     v('sab_texto')
+        },
+        contacto: {
+            email:     v('ct_email'),
+            telefono:  v('ct_telefono'),
+            wa_numero: v('ct_wa_numero'),
+            handle:    v('ct_handle'),
+            direccion: v('ct_direccion'),
+            barrio:    v('ct_barrio')
+        },
+        cta: {
+            label:     v('cta_label'),
+            btn_texto: v('cta_btn_texto'),
+            wa_msg:    v('cta_wa_msg')
+        },
+        footer: {
+            ciudad:    v('ft_ciudad'),
+            copyright: v('ft_copyright'),
+            credito:   v('ft_credito')
+        },
+        _actualizadoEn: new Date().toISOString()
+    };
+}
+
+/* ── Guardar todo en Firebase ── */
+async function guardarTodo() {
+    const config = recolectarConfig();
+    if (typeof window.guardarNosotrasEnCloud === 'function') {
+        await window.guardarNosotrasEnCloud(config);
+        document.getElementById('lbl-cambios').textContent = 'Guardado en Firebase · ' + _horaCorta();
+    } else {
+        window._mostrarToast && window._mostrarToast('⚠️ Firebase no está listo todavía', 'warn');
+    }
+}
+
+/* ── Cargar defaults ── */
+function cargarDefaults() {
+    if (!confirm('¿Resetear todos los campos a los valores por defecto de NOSOTRAS.html?')) return;
+    poblarFormulario(DEFAULTS);
+    window._mostrarToast && window._mostrarToast('↩ Campos reseteados a defaults', 'info');
+}
+
+/* ── Preview foto ── */
+function actualizarPreviewFoto() {
+    const url = (document.getElementById('q_foto_url')?.value || '').trim();
+    const wrap = document.getElementById('preview-foto-wrap');
+    const img  = document.getElementById('preview-foto');
+    if (url) {
+        img.src = url;
+        wrap.style.display = 'block';
+    } else {
+        wrap.style.display = 'none';
+    }
+}
+
+/* ── Ver JSON ── */
+function verJSON() {
+    const config = recolectarConfig();
+    document.getElementById('json-output').value = JSON.stringify(config, null, 2);
+    document.getElementById('modal-json').style.display = 'flex';
+}
+
+function copiarJSON() {
+    const ta = document.getElementById('json-output');
+    ta.select();
+    document.execCommand('copy');
+    window._mostrarToast && window._mostrarToast('📋 JSON copiado', 'ok');
+}
+
+/* ── Navegar ecosistema ── */
+function irA(clave) {
+    const ruta = RUTAS[clave];
+    if (ruta) { window.location.href = ruta; }
+    else { window._mostrarToast && window._mostrarToast('🚧 Ruta no definida: ' + clave, 'warn'); }
+}
+
+/* ── Hora corta helper ── */
+function _horaCorta() {
+    try {
+        const d = new Date();
+        return d.toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit' })
+            + ' · ' + d.toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit' });
+    } catch(e) { return ''; }
+}
+
+/* ── Callback Firebase: al recibir nosotras_config de la nube ── */
+let _yaSeCargoDesdeCloud = false;
+window._onNosotrasLoad = function(config) {
+    if (_yaSeCargoDesdeCloud) return; // solo carga una vez por sesión
+    _yaSeCargoDesdeCloud = true;
+    poblarFormulario(config);
+    window._mostrarToast && window._mostrarToast('☁️ Datos cargados desde Firebase', 'info');
+};
+
+/* ── Init: cargar defaults mientras espera Firebase ── */
+document.addEventListener('DOMContentLoaded', () => {
+    poblarFormulario(DEFAULTS);
+    document.getElementById('lbl-cambios').textContent = 'Defaults cargados · Esperando Firebase...';
+
+    /* Cerrar modal JSON con Escape */
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') document.getElementById('modal-json').style.display = 'none';
+    });
+});
+
+/* ══════════════════════════════════════════════════
+   TUTORIAL SYSTEM — SD Editor Nosotras v1.2.0
+   ══════════════════════════════════════════════════ */
+const _TUT_LLAVE = 'sd_tutorial_nosotros_v1';
+let _tutPaso = 0;
+
+const _TUT_PASOS = [
+    { target: null,                    emoji:'💌', titulo:'¡Bienvenida al Editor Nosotras!',          texto:'Aquí editas todo el contenido de la página pública "Sobre Nosotras" de Sagrada Delicia. Los cambios se guardan en Firebase y la página pública los lee automáticamente — sin tocar código. Puedes saltar y relanzar con 🎓 Guía.' },
+    { target:'.nav-ecosistema',        emoji:'🗺️', titulo:'Posición en el Ecosistema',               texto:'El Editor Nosotras es el módulo de contenido editorial. Es el único que escribe el campo nosotras_config en Firebase. Los demás módulos no tocan este campo, por lo que los cambios aquí nunca interfieren con cotizaciones, recetas ni pedidos.' },
+    { target:'.panel:nth-of-type(1)',  emoji:'🏷️', titulo:'Sección 1 — Header de la Página',         texto:'Define el texto del encabezado de la página pública: el eyebrow (texto pequeño superior, ej: "Repostería Fina · Cali"), el título principal y el subtítulo que aparece debajo del separador de diamantes.' },
+    { target:'.panel:nth-of-type(2)',  emoji:'📸', titulo:'Sección 2 — Quiénes Somos',               texto:'La sección más personal. Aquí defines: URL de la foto principal de Luz Marina y Paola (Cloudinary o ruta local), el texto del sello dorado circular sobre la foto, los títulos de la sección y los dos párrafos de historia. La firma aparece en tipografía script dorada al final.' },
+    { target:'.panel:nth-of-type(3)',  emoji:'✦',  titulo:'Sección 3 — Los 3 Pilares Filosóficos',   texto:'Define la filosofía de la marca en 3 pilares: cada uno tiene un emoji/ícono, un nombre corto y una descripción de 1-2 oraciones. En la página pública aparecen como tarjetas destacadas. Estos pilares comunican los valores diferenciadores de Sagrada Delicia.' },
+    { target:'.panel:nth-of-type(4)',  emoji:'🎂', titulo:'Sección 4 — El Sabor Especial de la Casa', texto:'Sección dedicada al producto estrella (la Torta Envinada). Tiene badge, dos líneas de título, subtítulo en script dorado y un texto descriptivo largo. En la página pública aparece como una sección de destacado con fondo especial.' },
+    { target:'.panel:nth-of-type(5)',  emoji:'📞', titulo:'Sección 5 — Información de Contacto',     texto:'Todos los datos de contacto de la marca: email, teléfono, número de WhatsApp con código de país (para wa.me/...), handle de redes sociales (aplica a TikTok, Instagram y Facebook), dirección y barrio. Estos datos aparecen en la sección de contacto del catálogo público.' },
+    { target:'.panel:nth-of-type(6)',  emoji:'💬', titulo:'Sección 6 — CTA y Footer',               texto:'CTA: el llamado a la acción al final de la página — label, texto del botón de WhatsApp y el mensaje predeterminado que se enviará al abrir WhatsApp. Footer: ciudad, texto de copyright y crédito de diseño. El mensaje de WhatsApp se codifica automáticamente al guardar.' },
+    { target:'.barra-accion',          emoji:'⚡', titulo:'Barra de Acción',                         texto:'Tres acciones clave: ↩ Resetear defaults vuelve todos los campos a los valores originales de NOSOTRAS.html (requiere confirmación). { } Ver JSON muestra el objeto nosotras_config completo para inspección o copia manual. 💾 Guardar en Firebase escribe los cambios en la nube inmediatamente.' },
+    { target:'#badge-cloud-sync',      emoji:'☁️', titulo:'Sincronización Cloud',                    texto:'Este módulo escribe exclusivamente el campo nosotras_config en operaciones/taller. El listener detecta si otra sesión guardó cambios y ofrece cargarlos. Los datos se cargan automáticamente al abrir la página: primero los defaults, luego los de Firebase al conectar.' },
+];
+
+function iniciarTutorial(forzar = false) {
+    const visto = localStorage.getItem(_TUT_LLAVE);
+    if (visto && !forzar) return;
+    _tutPaso = 0;
+    document.getElementById('tutorial-overlay').classList.remove('oculto');
+    _renderTutPaso();
+}
+
+function _renderTutPaso() {
+    const paso  = _TUT_PASOS[_tutPaso];
+    const total = _TUT_PASOS.length;
+    const ring  = document.getElementById('tutorial-spotlight-ring');
+    const card  = document.getElementById('tutorial-card');
+
+    card.classList.remove('animando');
+    void card.offsetWidth;
+    card.classList.add('animando');
+
+    document.getElementById('tut-progress-bar').innerHTML =
+        _TUT_PASOS.map((_, i) =>
+            `<div class="tut-pip ${i < _tutPaso ? 'hecho' : i === _tutPaso ? 'activo' : ''}"></div>`
+        ).join('');
+
+    document.getElementById('tutorial-emoji').textContent  = paso.emoji;
+    document.getElementById('tutorial-titulo').textContent = paso.titulo;
+    document.getElementById('tutorial-texto').textContent  = paso.texto;
+    document.getElementById('tut-step-label').textContent  = `${_tutPaso + 1} / ${total}`;
+
+    document.getElementById('btn-tut-ant').style.visibility = _tutPaso === 0 ? 'hidden' : 'visible';
+    document.getElementById('btn-tut-sig').textContent = _tutPaso === total - 1 ? '✅ Finalizar' : 'Siguiente →';
+
+    if (paso.target) {
+        const el = document.querySelector(paso.target);
+        if (el) {
+            el.scrollIntoView({ behavior:'smooth', block:'center' });
+            setTimeout(() => _posicionarTutorial(el, card, ring), 400);
+        } else {
+            ring.style.display = 'none';
+            _centrarCard(card);
+        }
+    } else {
+        ring.style.display = 'none';
+        _centrarCard(card);
+    }
+}
+
+function _posicionarTutorial(el, card, ring) {
+    const rect  = el.getBoundingClientRect();
+    const pad   = 8;
+    const vp    = { w: window.innerWidth, h: window.innerHeight };
+    const cardW = 320, cardH = 272;
+
+    ring.style.display = 'block';
+    ring.style.top     = (rect.top    - pad) + 'px';
+    ring.style.left    = (rect.left   - pad) + 'px';
+    ring.style.width   = (rect.width  + pad * 2) + 'px';
+    ring.style.height  = (rect.height + pad * 2) + 'px';
+
+    let top;
+    if (rect.bottom + cardH + 20 < vp.h)    top = rect.bottom + 16;
+    else if (rect.top - cardH - 16 > 0)     top = rect.top - cardH - 16;
+    else                                     top = Math.max(12, (vp.h - cardH) / 2);
+
+    let left = rect.left + (rect.width / 2) - (cardW / 2);
+    left = Math.max(12, Math.min(left, vp.w - cardW - 12));
+
+    card.style.top       = top  + 'px';
+    card.style.left      = left + 'px';
+    card.style.transform = 'none';
+}
+
+function _centrarCard(card) {
+    card.style.top       = '50%';
+    card.style.left      = '50%';
+    card.style.transform = 'translate(-50%, -50%)';
+}
+
+function tutorialSiguiente() {
+    if (_tutPaso >= _TUT_PASOS.length - 1) { terminarTutorial(); return; }
+    _tutPaso++;
+    _renderTutPaso();
+}
+
+function tutorialAnterior() {
+    if (_tutPaso > 0) { _tutPaso--; _renderTutPaso(); }
+}
+
+function tutorialSaltar()   { terminarTutorial(); }
+
+function terminarTutorial() {
+    localStorage.setItem(_TUT_LLAVE, '1');
+    document.getElementById('tutorial-overlay').classList.add('oculto');
+    document.getElementById('tutorial-spotlight-ring').style.display = 'none';
+    window._mostrarToast && window._mostrarToast('🎓 Guía disponible en el botón del encabezado', 'info', 4000);
+}
+
+window.addEventListener('load', () => {
+    setTimeout(() => iniciarTutorial(false), 1000);
+});
+</script>
+
+</body>
+</html>
