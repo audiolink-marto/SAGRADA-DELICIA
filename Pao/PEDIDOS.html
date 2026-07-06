@@ -1,0 +1,1728 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sagrada Delicia — Pedidos V3.1</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📋</text></svg>">
+
+    <!-- ╔══════════════════════════════════════════════════════════════╗
+         ║  FIREBASE MODULE                                            ║
+         ║  onSnapshot  → escucha DB_SNAPSHOTS + CATALOGO_ACTIVO      ║
+         ║  updateDoc   → escribe SOLO DB_SNAPSHOTS (anti-pisado)     ║
+         ║  updateDoc   → escribe SOLO { ofertas } en publico/menu    ║
+         ╚══════════════════════════════════════════════════════════════╝ -->
+    <script type="module">
+        import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, updateDoc, onSnapshot }
+            from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey:            "AIzaSyAeAWVCyu_qUSVo11uToAgGKqSYhdU1ABI",
+            authDomain:        "sagrada-delicia-central.firebaseapp.com",
+            projectId:         "sagrada-delicia-central",
+            storageBucket:     "sagrada-delicia-central.firebasestorage.app",
+            messagingSenderId: "474340023357",
+            appId:             "1:474340023357:web:bd7a643fa77733eaaede54"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db  = getFirestore(app);
+        const docTallerRef  = doc(db, "operaciones", "taller");
+        const docPublicoRef = doc(db, "publico",     "menu");
+
+        let unsubscribe  = null;
+        let _pendingWrite = false;
+        let _pendingTimer = null;
+
+        /* ── UI helpers ── */
+        function setBadge(estado, texto) {
+            const b = document.getElementById('badge-cloud-sync');
+            if (!b) return;
+            b.className = 'sync-' + estado;
+            b.innerHTML = texto;
+        }
+        function horaCorta(iso) {
+            try {
+                const d = new Date(iso);
+                return d.toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit' })
+                    + ' · ' + d.toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit' });
+            } catch(e) { return ''; }
+        }
+
+        window._mostrarToast = function(msg, tipo = 'info', dur = 3500) {
+            const cont = document.getElementById('toast-cloud');
+            if (!cont) return;
+            const el = document.createElement('div');
+            el.className = `toast-item t-${tipo}`;
+            el.textContent = msg;
+            cont.appendChild(el);
+            setTimeout(() => { el.classList.add('saliendo'); setTimeout(() => el.remove(), 400); }, dur);
+        };
+
+        function syncActivo() { return localStorage.getItem('sd_sync_activo') !== 'false'; }
+
+        /* ── LISTENER EN TIEMPO REAL ── */
+        function iniciarListenerTiempoReal() {
+            if (unsubscribe) return;
+            if (!syncActivo()) return;
+            setBadge('working', '<span class="dot-anim">☁️</span> Conectando...');
+
+            unsubscribe = onSnapshot(docTallerRef, (snap) => {
+                if (!snap.exists()) { setBadge('pending', '⚠️ Sin datos en nube'); return; }
+                const data = snap.data();
+                const ts = data.ultimaActualizacion || new Date().toISOString();
+                setBadge('ok', '✅ En vivo · ' + horaCorta(ts));
+
+                /* pill-live */
+                const pill = document.getElementById('pill-live');
+                if (pill) { pill.style.display = 'inline-flex'; setTimeout(() => { pill.style.display = 'none'; }, 2800); }
+
+                if (!_pendingWrite && data.DB_SNAPSHOTS && Array.isArray(data.DB_SNAPSHOTS)) {
+                    localStorage.setItem('sagrada_delicia_snapshots_v17', JSON.stringify(data.DB_SNAPSHOTS));
+                }
+                if (data.CATALOGO_ACTIVO && typeof data.CATALOGO_ACTIVO === 'object') {
+                    localStorage.setItem('sagrada_delicia_framework_v17', JSON.stringify(data.CATALOGO_ACTIVO));
+                }
+                if (!_pendingWrite && typeof window._onPedidosUpdate === 'function') {
+                    window._onPedidosUpdate();
+                }
+            }, (err) => {
+                console.error('onSnapshot error:', err);
+                setBadge('error', '❌ Error listener');
+                window._mostrarToast('❌ Error en listener Firebase', 'error', 5000);
+            });
+        }
+
+        function detenerListener() {
+            if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+        }
+
+        /* ── GUARDAR SNAPSHOTS → Cloud (updateDoc solo DB_SNAPSHOTS) ── */
+        window.guardarSnapshotsEnCloud = async function(snapshots) {
+            if (!syncActivo()) { setBadge('offline', '🔕 Sync desactivado'); return; }
+            if (!navigator.onLine) {
+                window._mostrarToast('💾 Local OK · Sin conexión cloud', 'warn');
+                setBadge('offline', '🔌 Sin red');
+                return;
+            }
+            /* bloquear onSnapshot entrante durante 4s para evitar race condition */
+            _pendingWrite = true;
+            if (_pendingTimer) clearTimeout(_pendingTimer);
+            _pendingTimer = setTimeout(() => { _pendingWrite = false; }, 4000);
+
+            setBadge('working', '<span class="dot-anim">☁️</span> Guardando...');
+            try {
+                await updateDoc(docTallerRef, {
+                    DB_SNAPSHOTS:        snapshots,
+                    ultimaActualizacion: new Date().toISOString()
+                });
+                window._mostrarToast('✅ Pedidos sincronizados con la nube', 'ok');
+            } catch(err) {
+                console.error('updateDoc error:', err);
+                _pendingWrite = false;
+                setBadge('error', '❌ Error sync');
+                window._mostrarToast('❌ No se pudo guardar en la nube', 'error', 5000);
+            }
+        };
+
+        /* ── DOBLE WRITE: toggle publicado → actualiza también publico/menu.ofertas ── */
+        window.actualizarOfertasPublicas = async function(snapshots) {
+            if (!syncActivo() || !navigator.onLine) return;
+            try {
+                const ofertas = snapshots
+                    .filter(s => s.publicado_catalogo)
+                    .map(s => ({
+                        id:              s.id,
+                        nombre:          s.nombre,
+                        productoOrigen:  s.prod,
+                        precioVenta:     s.monto_total,
+                        descripcion:     s.receta ? `Fórmula: ${s.receta}` : '',
+                        imagen:          s.imagen_url || '',
+                        es_oferta:       s.es_oferta === true
+                    }));
+                /* updateDoc → toca SOLO el campo ofertas; menu y galeria quedan intactos */
+                await updateDoc(docPublicoRef, { ofertas });
+                window._mostrarToast(
+                    '📢 Catálogo público actualizado',
+                    'ok'
+                );
+            } catch(err) {
+                console.error('actualizarOfertasPublicas error:', err);
+                window._mostrarToast('⚠️ No se pudo actualizar catálogo público', 'warn', 4000);
+            }
+        };
+
+        /* ── SYNC MANUAL (reconecta listener) ── */
+        window.forzarSyncManual = function() {
+            if (!navigator.onLine) { window._mostrarToast('⚠️ Sin conexión', 'warn'); return; }
+            detenerListener();
+            setTimeout(iniciarListenerTiempoReal, 300);
+            window._mostrarToast('☁️ Reconectando listener en tiempo real...', 'info');
+        };
+
+        window._iniciarListener = iniciarListenerTiempoReal;
+        window._detenerListener = detenerListener;
+
+        window.addEventListener('online', () => {
+            if (!syncActivo()) return;
+            window._mostrarToast('🌐 Conexión restaurada', 'info');
+            if (!unsubscribe) iniciarListenerTiempoReal();
+        });
+        window.addEventListener('offline', () => {
+            setBadge('offline', '🔌 Sin red — modo local');
+            window._mostrarToast('⚠️ Sin conexión', 'warn', 5000);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (navigator.onLine && syncActivo()) iniciarListenerTiempoReal();
+            else if (!navigator.onLine) setBadge('offline', '🔌 Sin red — modo local');
+        });
+    </script>
+
+    <style>
+        /* ══════════════════════════════════════════
+           PALETA NOCTURNA — idéntica al control V23
+           ══════════════════════════════════════════ */
+        :root {
+            --bg-principal:      #0b111e;
+            --bg-card:           #151f32;
+            --bg-input:          #1e293b;
+            --border-color:      #2e3d56;
+            --color-texto:       #cbd5e1;
+            --color-titulos:     #f8fafc;
+            --color-subtitulos:  #94a3b8;
+            --accent-primario:   #7dd3fc;
+            --accent-secundario: #c084fc;
+            --accent-admin:      #fde047;
+            --accent-hover:      #38bdf8;
+            --accent-success:    #22c55e;
+            --color-alerta-critica: #fca5a5;
+            --color-alerta-media:   #fde047;
+            --color-alerta-ok:      #86efac;
+        }
+
+        /* ── Base ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: var(--bg-principal);
+            color: var(--color-texto);
+            padding: 28px 20px;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; line-height: 1.5;
+        }
+
+        /* ── Header ── */
+        header {
+            width: 100%; max-width: 1280px;
+            margin-bottom: 28px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 18px;
+            display: flex; flex-direction: column; gap: 14px;
+        }
+        .header-top {
+            display: flex; justify-content: space-between;
+            align-items: center; flex-wrap: wrap; gap: 10px;
+        }
+        .header-brand { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        h1 {
+            color: var(--color-titulos); font-size: 1.4rem;
+            font-weight: 700; letter-spacing: 1.5px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .chip-modulo {
+            background: rgba(192,132,252,0.12); color: var(--accent-secundario);
+            border: 1px solid rgba(192,132,252,0.3); border-radius: 20px;
+            font-size: 0.7rem; font-weight: 700; padding: 3px 10px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+
+        /* ── Badge sync ── */
+        #badge-cloud-sync {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 12px; border-radius: 20px; font-size: 0.71rem;
+            font-weight: 700; letter-spacing: 0.3px; border: 1px solid;
+            transition: all 0.4s ease; cursor: default; white-space: nowrap;
+        }
+        #badge-cloud-sync.sync-ok      { color: var(--accent-success);       border-color: var(--accent-success);       background: rgba(34,197,94,0.08); }
+        #badge-cloud-sync.sync-pending { color: var(--accent-admin);          border-color: var(--accent-admin);          background: rgba(253,224,71,0.08); }
+        #badge-cloud-sync.sync-error   { color: var(--color-alerta-critica);  border-color: var(--color-alerta-critica);  background: rgba(252,165,165,0.08); }
+        #badge-cloud-sync.sync-working { color: var(--accent-primario);       border-color: var(--accent-primario);       background: rgba(125,211,252,0.08); }
+        #badge-cloud-sync.sync-offline { color: var(--color-subtitulos);      border-color: var(--border-color);          background: rgba(30,41,59,0.5); }
+        .dot-anim { animation: blink 1s infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+        /* ── Pill live ── */
+        .pill-live {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 0.67rem; font-weight: 700; color: var(--accent-success);
+            background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25);
+            border-radius: 20px; padding: 3px 9px; animation: fadeIn 0.3s ease;
+        }
+        .pill-live::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--accent-success); display:inline-block; animation:blink 1.2s infinite; }
+
+        /* ── Botones ── */
+        .btn {
+            padding: 9px 16px; border-radius: 8px; font-size: 0.83rem;
+            font-weight: 600; cursor: pointer; border: 1px solid transparent;
+            transition: all 0.22s ease;
+            display: inline-flex; align-items: center; gap: 6px;
+            justify-content: center; text-decoration: none; background: none;
+        }
+        .btn-primario  { background: var(--accent-primario); color: #0b111e; border-color: var(--accent-primario); }
+        .btn-primario:hover  { background: var(--accent-hover); box-shadow: 0 0 14px rgba(125,211,252,0.3); transform: translateY(-1px); }
+        .btn-secundario { background: rgba(192,132,252,0.12); color: var(--accent-secundario); border: 1px solid var(--accent-secundario); }
+        .btn-secundario:hover { background: var(--accent-secundario); color: #0b111e; transform: translateY(-1px); }
+        .btn-admin { background: transparent; color: var(--accent-admin); border: 1px solid var(--accent-admin); }
+        .btn-admin:hover { background: var(--accent-admin); color: #0b111e; }
+        .btn-success { background: rgba(34,197,94,0.12); color: var(--accent-success); border: 1px solid var(--accent-success); }
+        .btn-success:hover { background: var(--accent-success); color: #0b111e; }
+        .btn-danger { background: rgba(252,165,165,0.08); color: var(--color-alerta-critica); border: 1px solid var(--color-alerta-critica); padding: 5px 10px; font-size: 0.75rem; }
+        .btn-danger:hover { background: var(--color-alerta-critica); color: #0b111e; }
+
+        /* ── Navegación ecosistema ── */
+        .nav-ecosistema { display: flex; gap: 6px; flex-wrap: wrap; }
+        .btn-nav {
+            background: rgba(30,41,59,0.5); color: var(--color-subtitulos);
+            border: 1px solid var(--border-color); padding: 7px 11px; font-size: 0.76rem;
+        }
+        .btn-nav:hover { background: rgba(125,211,252,0.08); color: var(--color-titulos); border-color: rgba(125,211,252,0.3); }
+        .btn-nav.activo { background: rgba(192,132,252,0.1); color: var(--accent-secundario); border-color: var(--accent-secundario); }
+
+        /* ── Controles superiores ── */
+        .ctrl-sync { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+        /* ── Layout principal ── */
+        .contenedor { width: 100%; max-width: 1280px; display: flex; flex-direction: column; gap: 20px; }
+
+        /* ── Panel ── */
+        .panel {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 26px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+            animation: fadeIn 0.35s ease-out;
+        }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+        h2 {
+            color: var(--color-titulos); font-size: 1.1rem; font-weight: 600;
+            margin-bottom: 20px; border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+        }
+
+        /* ── Stats bar ── */
+        .stats-bar { display: grid; grid-template-columns: repeat(5,1fr); gap: 14px; }
+        @media (max-width: 900px) { .stats-bar { grid-template-columns: repeat(3,1fr); } }
+        @media (max-width: 480px) { .stats-bar { grid-template-columns: repeat(2,1fr); } }
+        .stat-card {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 16px 18px;
+            display: flex; flex-direction: column; gap: 4px;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+        .stat-card:hover { border-color: var(--accent-primario); transform: translateY(-2px); }
+        .stat-valor { font-size: 1.35rem; font-weight: 800; color: var(--color-titulos); line-height: 1; }
+        .stat-label { font-size: 0.67rem; color: var(--color-subtitulos); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+        /* ── Toolbar ── */
+        .toolbar {
+            display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+            background: rgba(30,41,59,0.35); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 13px 15px; margin-bottom: 16px;
+        }
+        .toolbar-buscador {
+            flex: 1; min-width: 200px;
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 9px 13px; border-radius: 8px;
+            font-size: 0.87rem; outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .toolbar-buscador:focus { border-color: var(--accent-primario); box-shadow: 0 0 0 3px rgba(125,211,252,0.1); }
+        .toolbar-select {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 9px 12px; border-radius: 8px;
+            font-size: 0.82rem; outline: none; min-width: 155px;
+        }
+        .toolbar-select:focus { border-color: var(--accent-primario); }
+        .toolbar-acciones { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+
+        /* ── Módulo Pedidos ── */
+        .lista-pedidos { display: flex; flex-direction: column; gap: 12px; }
+
+        .card-pedido {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 12px; overflow: hidden;
+            display: flex; flex-direction: row; gap: 0;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card-pedido:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+
+        /* imagen lateral */
+        .card-pedido-img-wrap {
+            position: relative; flex-shrink: 0;
+            width: 120px; min-height: 100%;
+        }
+        .card-pedido-img {
+            width: 100%; height: 100%; object-fit: cover;
+            background: var(--bg-input); display: block; min-height: 120px;
+        }
+        .card-pedido-img-badge {
+            position: absolute; top: 8px; left: 8px;
+            font-size: 0.65rem; font-weight: 700; padding: 3px 8px;
+            border-radius: 12px; border: 1px solid; white-space: nowrap;
+            backdrop-filter: blur(4px);
+        }
+
+        /* cuerpo */
+        .card-pedido-body {
+            flex: 1; padding: 16px 18px;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .card-pedido-header-row {
+            display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap;
+        }
+        .card-pedido-meta {
+            display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+        }
+        .meta-chip {
+            font-size: 0.75rem; color: var(--color-subtitulos);
+        }
+        .card-pedido-monto-col {
+            text-align: right; display: flex; flex-direction: column; gap: 2px; align-items: flex-end; flex-shrink: 0;
+        }
+        .card-pedido-footer {
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 10px; padding-top: 10px;
+            border-top: 1px solid var(--border-color); flex-wrap: wrap;
+        }
+        .badge-estado-ped {
+            display: inline-flex; align-items: center;
+            font-size: 0.72rem; font-weight: 700; padding: 3px 10px;
+            border-radius: 20px; border: 1px solid; white-space: nowrap;
+        }
+
+        /* badge publicado */
+        .badge-publicado {
+            font-size: 0.7rem; font-weight: 700; padding: 3px 10px;
+            border-radius: 12px; border: 1px solid; cursor: pointer;
+            transition: all 0.2s; background: none;
+        }
+        .badge-publicado.on  { color: var(--accent-success);       border-color: rgba(34,197,94,0.4);       background: rgba(34,197,94,0.08); }
+        .badge-publicado.off { color: var(--color-subtitulos);     border-color: var(--border-color);        background: transparent; }
+        .badge-publicado:hover { opacity: 0.8; }
+
+        /* estado vacío */
+        .estado-vacio {
+            text-align: center; padding: 60px 20px;
+            color: var(--color-subtitulos); font-style: italic; font-size: 0.9rem;
+        }
+
+        /* ── Toast ── */
+        #toast-cloud {
+            position: fixed; bottom: 22px; right: 22px;
+            display: flex; flex-direction: column; gap: 8px; z-index: 1000;
+            pointer-events: none;
+        }
+        .toast-item {
+            padding: 10px 16px; border-radius: 10px; font-size: 0.81rem;
+            font-weight: 600; border: 1px solid; backdrop-filter: blur(8px);
+            animation: toast-in 0.28s ease; pointer-events: none;
+            max-width: 320px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+        .toast-item.t-ok    { color:var(--accent-success);       border-color:var(--accent-success);       background:rgba(10,25,15,0.94); }
+        .toast-item.t-warn  { color:var(--accent-admin);         border-color:var(--accent-admin);         background:rgba(22,18,4,0.94); }
+        .toast-item.t-error { color:var(--color-alerta-critica); border-color:var(--color-alerta-critica); background:rgba(28,8,8,0.94); }
+        .toast-item.t-info  { color:var(--accent-primario);      border-color:var(--accent-primario);      background:rgba(4,14,28,0.94); }
+        .toast-item.saliendo { animation: toast-out 0.35s forwards; }
+        @keyframes toast-in  { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
+        @keyframes toast-out { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(20px); } }
+
+        /* ── Contador visible ── */
+        .tabla-footer {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-top: 14px; flex-wrap: wrap; gap: 10px;
+        }
+        .contador-vis { font-size: 0.75rem; color: var(--color-subtitulos); }
+
+        /* ── Urgencia entrega ── */
+        .badge-urgencia {
+            display: inline-flex; align-items: center;
+            font-size: 0.67rem; font-weight: 700; padding: 2px 8px;
+            border-radius: 10px; border: 1px solid; white-space: nowrap;
+        }
+
+        /* ── Nota en card ── */
+        .card-pedido-nota {
+            font-size: 0.78rem; color: var(--color-subtitulos);
+            background: rgba(30,41,59,0.5); border-radius: 7px;
+            padding: 6px 10px; border-left: 2px solid var(--border-color);
+            font-style: italic; line-height: 1.45;
+        }
+
+        /* ── Date inputs ── */
+        input[type="date"].toolbar-select { color-scheme: dark; min-width: 135px; }
+
+        /* ── Vista compacta ── */
+        .lista-pedidos.compacta { gap: 6px; }
+        .lista-pedidos.compacta .card-pedido-img-wrap { display: none; }
+        .lista-pedidos.compacta .card-pedido-body { padding: 10px 14px; gap: 6px; }
+        .lista-pedidos.compacta .card-pedido-nota { display: none; }
+        .lista-pedidos.compacta .meta-chip-receta { display: none; }
+        .lista-pedidos.compacta .fecha-emision { display: none; }
+        .lista-pedidos.compacta .btn-hide-compact { display: none !important; }
+        .lista-pedidos.compacta .card-pedido-footer { padding-top: 6px; }
+
+        /* ── Panel de alertas semanales ── */
+        #panel-alertas {
+            border: 1px solid var(--color-alerta-media);
+            background: rgba(251,191,36,0.05);
+            border-radius: 10px;
+            padding: 14px 18px;
+            margin-bottom: 18px;
+        }
+        .alertas-header {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 12px;
+        }
+        .alertas-header strong {
+            flex: 1; font-size: 0.88rem; color: var(--accent-admin);
+        }
+        .alertas-header button {
+            background: none; border: none; cursor: pointer;
+            color: var(--color-subtitulos); font-size: 0.85rem; padding: 2px 8px;
+        }
+        .alertas-header button:hover { color: var(--color-titulos); }
+        .alerta-row {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            padding: 7px 10px; border-radius: 7px;
+            background: rgba(30,41,59,0.5);
+            margin-bottom: 6px; font-size: 0.8rem;
+        }
+        .alerta-row:last-child { margin-bottom: 0; }
+        .alerta-row .ar-nombre { font-weight: 700; color: var(--color-titulos); min-width: 120px; }
+        .alerta-row .ar-cliente { color: var(--color-subtitulos); }
+        .alerta-row .ar-fecha { color: var(--color-texto); margin-left: auto; white-space: nowrap; }
+
+        @media (max-width: 640px) {
+            .alerta-row { flex-direction: column; align-items: flex-start; }
+            .alerta-row .ar-fecha { margin-left: 0; }
+        }
+        @media print {
+            #toast-cloud, .ctrl-sync, .nav-ecosistema, .toolbar-acciones { display: none !important; }
+        }
+
+        /* ── Flash cambio de estado ── */
+        @keyframes flash-estado {
+            0%   { box-shadow: 0 0 0 3px var(--accent-secundario); }
+            100% { box-shadow: none; }
+        }
+        .estado-flash { animation: flash-estado 1.4s ease-out; }
+
+        /* ── Modal notas ── */
+        #modal-notas-pedido { display:none; position:fixed; inset:0; z-index:8000;
+            background:rgba(0,0,0,0.7); backdrop-filter:blur(4px);
+            align-items:center; justify-content:center; }
+        #modal-notas-pedido.abierto { display:flex; }
+        #modal-notas-textarea {
+            width:100%; min-height:100px; resize:vertical;
+            background:var(--bg-input); border:1px solid var(--border-color);
+            border-radius:8px; color:var(--color-texto); font-size:0.88rem;
+            padding:10px 12px; font-family:inherit; margin:12px 0; box-sizing:border-box;
+        }
+        #modal-notas-textarea:focus { border-color:var(--accent-primario); outline:none; }
+
+        /* ══ TUTORIAL SYSTEM ══ */
+        #tutorial-overlay { position:fixed; inset:0; z-index:9990; background:rgba(5,12,28,0.86); pointer-events:all; transition:opacity 0.3s; }
+        #tutorial-overlay.oculto { display:none !important; }
+        #tutorial-spotlight-ring { position:fixed; z-index:9995; border-radius:12px; box-shadow:0 0 0 3px var(--accent-secundario),0 0 0 7px rgba(192,132,252,0.18),0 0 28px rgba(192,132,252,0.10); pointer-events:none; transition:top 0.35s cubic-bezier(0.4,0,0.2,1),left 0.35s cubic-bezier(0.4,0,0.2,1),width 0.35s cubic-bezier(0.4,0,0.2,1),height 0.35s cubic-bezier(0.4,0,0.2,1); }
+        #tutorial-card { position:fixed; z-index:10000; background:var(--bg-card); border:1px solid var(--accent-secundario); border-radius:14px; padding:22px 22px 16px; width:316px; box-shadow:0 20px 60px rgba(0,0,0,0.75),0 0 0 1px rgba(192,132,252,0.07); }
+        #tutorial-card.animando { animation:tut-fade 0.26s ease; }
+        @keyframes tut-fade { from{opacity:0;transform:translateY(7px)} to{opacity:1;transform:translateY(0)} }
+        .tut-progress-bar { display:flex; gap:3px; margin-bottom:16px; }
+        .tut-pip { flex:1; height:3px; border-radius:3px; background:var(--border-color); transition:background 0.3s; }
+        .tut-pip.activo { background:var(--accent-secundario); }
+        .tut-pip.hecho  { background:rgba(192,132,252,0.32); }
+        #tutorial-emoji { font-size:1.55rem; margin-bottom:8px; line-height:1; }
+        #tutorial-titulo { color:var(--color-titulos); font-size:0.98rem; font-weight:700; margin-bottom:9px; }
+        #tutorial-texto { color:var(--color-texto); font-size:0.81rem; line-height:1.65; margin-bottom:16px; }
+        .tut-nav-row { display:flex; gap:6px; align-items:center; justify-content:space-between; }
+        .tut-step-label { font-size:0.67rem; color:var(--color-subtitulos); font-weight:600; white-space:nowrap; }
+        .btn-tut-ant { background:none; border:1px solid var(--border-color); color:var(--color-subtitulos); padding:7px 11px; border-radius:8px; font-size:0.76rem; cursor:pointer; transition:all 0.18s; }
+        .btn-tut-ant:hover { border-color:var(--accent-secundario); color:var(--accent-secundario); }
+        .btn-tut-sig { background:var(--accent-secundario); color:#0b111e; border:none; padding:7px 14px; border-radius:8px; font-size:0.76rem; font-weight:700; cursor:pointer; transition:all 0.18s; white-space:nowrap; }
+        .btn-tut-sig:hover { filter:brightness(1.12); transform:translateY(-1px); }
+        .btn-tut-saltar { background:none; border:none; color:var(--color-subtitulos); font-size:0.7rem; cursor:pointer; padding:4px 5px; transition:color 0.18s; white-space:nowrap; }
+        .btn-tut-saltar:hover { color:var(--color-alerta-critica); }
+        .btn-guia { background:rgba(192,132,252,0.07); color:var(--accent-secundario); border:1px solid rgba(192,132,252,0.35); padding:8px 13px; border-radius:8px; font-size:0.78rem; font-weight:600; cursor:pointer; transition:all 0.2s; display:inline-flex; align-items:center; gap:5px; }
+        .btn-guia:hover { background:rgba(192,132,252,0.14); box-shadow:0 0 10px rgba(192,132,252,0.12); }
+    </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════
+     HEADER
+════════════════════════════════════ -->
+<header>
+    <div class="header-top">
+        <div class="header-brand">
+            <h1>📋 SAGRADA DELICIA</h1>
+            <span class="chip-modulo">Pedidos V3.1</span>
+            <span id="badge-cloud-sync" class="sync-offline" title="Listener en tiempo real">⚫ Conectando...</span>
+        </div>
+        <div class="ctrl-sync">
+            <button class="btn-guia" onclick="iniciarTutorial(true)" title="Relanzar guía interactiva">🎓 Guía</button>
+            <button class="btn" id="btn-guardar-pedidos"
+                style="border-color:var(--accent-secundario);color:var(--accent-secundario);background:rgba(52,211,153,0.08);padding:8px 18px;font-weight:600;"
+                onclick="guardarPedidosManual()" title="Guardar y sincronizar pedidos en la nube">💾 Guardar en Nube</button>
+        </div>
+    </div>
+
+    <!-- NAVEGACIÓN ECOSISTEMA -->
+    <nav class="nav-ecosistema" aria-label="Páginas del sistema">
+        <a class="btn btn-nav" onclick="irA('cotizador')">🧁 Cotizador</a>
+        <a class="btn btn-nav" onclick="irA('recetario')">🍳 Recetario</a>
+        <a class="btn btn-nav" onclick="irA('insumos')">🍎 Insumos</a>
+       
+        <a class="btn btn-nav" onclick="irA('lineas')">📦 Líneas</a>
+        <a class="btn btn-nav" onclick="irA('costoLinea')">💰 Costo de Línea</a>
+        <a class="btn btn-nav activo" aria-current="page">📋 Pedidos</a>
+        <a class="btn btn-nav" onclick="irA('catalogo')">📖 Catálogo</a>
+        <a class="btn btn-nav" onclick="irA('sobreNosotros')">💌 Sobre Nosotras</a>
+    </nav>
+</header>
+
+<!-- ════════════════════════════════════
+     CONTENIDO PRINCIPAL
+════════════════════════════════════ -->
+<main class="contenedor">
+
+    <!-- STATS BAR -->
+    <div class="stats-bar" id="stats-bar">
+        <div class="stat-card">
+            <span class="stat-valor" id="stat-total">—</span>
+            <span class="stat-label">Total Registros</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-valor" id="stat-en-curso" style="color:var(--accent-primario);">—</span>
+            <span class="stat-label">En Curso</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-valor" id="stat-entregados" style="color:var(--accent-secundario);">—</span>
+            <span class="stat-label">Entregados</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-valor" id="stat-monto" style="color:var(--accent-primario); font-size:clamp(0.85rem,2vw,1.1rem);">—</span>
+            <span class="stat-label">Monto Visible</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-valor" id="stat-monto-pend" style="color:var(--accent-admin); font-size:clamp(0.85rem,2vw,1.1rem);">—</span>
+            <span class="stat-label">Monto Pendiente</span>
+        </div>
+    </div>
+
+    <!-- PANEL ALERTAS SEMANALES -->
+    <div id="panel-alertas" style="display:none;">
+        <div class="alertas-header">
+            <span>🔔</span>
+            <strong id="alertas-titulo">Pedidos próximos esta semana</strong>
+            <button onclick="cerrarPanelAlertas()" title="Cerrar alertas">✕ Cerrar</button>
+        </div>
+        <div id="alertas-lista"></div>
+    </div>
+
+    <!-- PANEL PEDIDOS -->
+    <section class="panel">
+        <h2>
+            📋 Registro de Pedidos &amp; Cotizaciones
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <button class="btn" id="btn-vista-compacta" onclick="toggleVistaCompacta()"
+                    style="padding:5px 12px;font-size:0.73rem;border-color:var(--border-color);color:var(--color-subtitulos);">
+                    ☰ Compacta
+                </button>
+                <span style="font-size:0.72rem;color:var(--color-subtitulos);font-weight:400;" id="contador-visible"></span>
+            </div>
+        </h2>
+
+        <!-- TOOLBAR -->
+        <div class="toolbar">
+            <input type="search" class="toolbar-buscador" id="buscador-pedidos"
+                placeholder="🔍 Buscar cliente o nombre..."
+                oninput="renderizarPedidos()">
+
+            <select class="toolbar-select" id="filtro-estado" onchange="renderizarPedidos()">
+                <option value="">— Todos los estados —</option>
+                <option value="cotizacion">📄 Cotización</option>
+                <option value="confirmado">✅ Confirmado</option>
+                <option value="produccion">🏭 En Producción</option>
+                <option value="entregado">🎯 Entregado</option>
+                <option value="cancelado">❌ Cancelado</option>
+            </select>
+
+            <select class="toolbar-select" id="filtro-linea" onchange="renderizarPedidos()">
+                <option value="">— Todas las líneas —</option>
+            </select>
+
+            <select class="toolbar-select" id="filtro-publicacion" onchange="renderizarPedidos()">
+                <option value="">— Publicación —</option>
+                <option value="publicado">📌 En Catálogo</option>
+                <option value="privado">⚫ Privado</option>
+                <option value="oferta">🏷️ Oferta</option>
+            </select>
+
+            <select class="toolbar-select" id="selector-orden" onchange="renderizarPedidos()" style="min-width:175px;">
+                <option value="reciente">🕐 Más reciente</option>
+                <option value="antiguo">🕐 Más antiguo</option>
+                <option value="monto-desc">💰 Mayor monto</option>
+                <option value="monto-asc">💰 Menor monto</option>
+                <option value="entrega-prox">📅 Entrega próxima</option>
+                <option value="entrega-lejana">📅 Entrega lejana</option>
+            </select>
+
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                <span style="font-size:0.72rem;color:var(--color-subtitulos);white-space:nowrap;">📅 Entrega</span>
+                <input type="date" class="toolbar-select" id="filtro-fecha-desde"
+                    onchange="renderizarPedidos()" title="Entrega desde" style="min-width:135px;">
+                <span style="font-size:0.72rem;color:var(--color-subtitulos);">→</span>
+                <input type="date" class="toolbar-select" id="filtro-fecha-hasta"
+                    onchange="renderizarPedidos()" title="Entrega hasta" style="min-width:135px;">
+            </div>
+
+            <div class="toolbar-acciones">
+                <button class="btn btn-danger" onclick="exportarPedidosPDF()" title="Exportar a PDF imprimible">📄 PDF</button>
+                <button class="btn" style="border-color:var(--accent-secundario);color:var(--accent-secundario);" onclick="exportarPedidosCSV()" title="Exportar tabla para Excel">📊 Excel</button>
+                <button class="btn btn-primario" onclick="exportarPedidosBackup()" title="Backup completo con imágenes e inputs">💾 Backup</button>
+                <button class="btn btn-secundario" onclick="document.getElementById('input-importar-pedidos').click()" title="Importar desde CSV o JSON">📂 Importar</button>
+                <input type="file" id="input-importar-pedidos" accept=".csv,.json" style="display:none" onchange="importarPedidosAuto(event)">
+            </div>
+        </div>
+
+        <!-- LISTA -->
+        <div class="lista-pedidos" id="pedidos-lista">
+            <div class="estado-vacio">⏳ Cargando registros desde la nube…</div>
+        </div>
+
+    </section>
+
+</main>
+
+<!-- ════════════════════════════════════
+     BARRA INFERIOR — ACCIONES RÁPIDAS
+════════════════════════════════════ -->
+<div style="position:sticky;bottom:0;z-index:200;border-top:1px solid rgba(52,211,153,0.25);padding:12px 24px;display:flex;justify-content:flex-end;">
+    <button class="btn" id="btn-guardar-pedidos-bottom"
+        style="border-color:#34d399;color:#34d399;background:rgba(52,211,153,0.08);padding:8px 18px;font-weight:600;"
+        onclick="guardarPedidosManual()" title="Guardar y sincronizar pedidos en la nube">💾 Guardar en Nube</button>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div id="toast-cloud"></div>
+
+<!-- ══ TUTORIAL OVERLAY ══ -->
+<div id="tutorial-overlay" class="oculto">
+    <div id="tutorial-spotlight-ring" style="display:none;"></div>
+    <div id="tutorial-card">
+        <div class="tut-progress-bar" id="tut-progress-bar"></div>
+        <div id="tutorial-emoji"></div>
+        <div id="tutorial-titulo"></div>
+        <p id="tutorial-texto"></p>
+        <div class="tut-nav-row">
+            <button class="btn-tut-ant" id="btn-tut-ant" onclick="tutorialAnterior()">← Ant.</button>
+            <span class="tut-step-label" id="tut-step-label"></span>
+            <button class="btn-tut-saltar" onclick="tutorialSaltar()">✕ Saltar</button>
+            <button class="btn-tut-sig" id="btn-tut-sig" onclick="tutorialSiguiente()">Siguiente →</button>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════
+     SCRIPT PRINCIPAL
+════════════════════════════════════ -->
+<script>
+/* ══════════════════════════════════════════════════════════
+   SAGRADA DELICIA — PEDIDOS V3
+   Standalone · onSnapshot tiempo real · updateDoc anti-pisado
+   Diseñado por: Marto 🧠
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Rutas del ecosistema ── */
+const RUTAS = {
+    cotizador:    'COTIZADOR.html',
+    insumos:      'INSUMOS.html',
+    recetario:    'RECETARIO.html',
+    lineas:       'LINEAS.html',
+    costoLinea:   'COSTOS.html',
+    pedidos:      'PEDIDOS.html',
+    catalogo:     'CATALOGO.html',
+    sobreNosotros:'NOSOTROSEDITOR.html'
+};
+
+/* ── localStorage keys ── */
+const LLAVE_SNAPSHOTS = 'sagrada_delicia_snapshots_v17';
+const LLAVE_CATALOGO  = 'sagrada_delicia_framework_v17';
+const LLAVE_SYNC      = 'sd_sync_activo';
+
+/* ── Cloudinary ── */
+const CLOUDINARY_CLOUD_NAME    = 'dv7lelmoy';
+const CLOUDINARY_UPLOAD_PRESET = 'sagrada_preset';
+
+/* ── Estados ── */
+const _ESTADOS = {
+    cotizacion: { label:'📄 Cotización',    color:'var(--accent-admin)',          bg:'rgba(253,224,71,0.12)',   border:'rgba(253,224,71,0.35)' },
+    confirmado: { label:'✅ Confirmado',     color:'var(--accent-success)',         bg:'rgba(34,197,94,0.1)',     border:'rgba(34,197,94,0.35)' },
+    produccion: { label:'🏭 En Producción', color:'var(--accent-primario)',         bg:'rgba(125,211,252,0.1)',  border:'rgba(125,211,252,0.35)' },
+    entregado:  { label:'🎯 Entregado',     color:'var(--accent-secundario)',       bg:'rgba(192,132,252,0.1)', border:'rgba(192,132,252,0.35)' },
+    cancelado:  { label:'❌ Cancelado',     color:'var(--color-alerta-critica)',   bg:'rgba(252,165,165,0.08)',border:'rgba(252,165,165,0.3)' }
+};
+const _ORDEN_EST = ['cotizacion', 'confirmado', 'produccion', 'entregado'];
+
+/* ── Helpers ── */
+function _moneda(val) {
+    return new Intl.NumberFormat('es-CO', { style:'currency', currency:'COP', minimumFractionDigits:0, maximumFractionDigits:0 }).format(Math.round(val || 0));
+}
+function _esc(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function irA(clave) {
+    const ruta = RUTAS[clave];
+    if (ruta) { window.location.href = ruta; }
+    else { window._mostrarToast && window._mostrarToast('🚧 Página en construcción: ' + clave, 'warn'); }
+}
+
+/* ── DB local ── */
+function cargarSnaps()   { return JSON.parse(localStorage.getItem(LLAVE_SNAPSHOTS)) || []; }
+function cargarCatalogo(){ return JSON.parse(localStorage.getItem(LLAVE_CATALOGO))  || {}; }
+
+function guardarSnapsLocal(snaps) {
+    localStorage.setItem(LLAVE_SNAPSHOTS, JSON.stringify(snaps));
+}
+
+function guardarYSincronizar(snaps) {
+    guardarSnapsLocal(snaps);
+    if (typeof window.guardarSnapshotsEnCloud === 'function') {
+        window.guardarSnapshotsEnCloud(snaps);
+    }
+}
+
+/* ── Callback del listener Firebase ── */
+window._onPedidosUpdate = function() {
+    poblarFiltroLinea();
+    actualizarStats();
+    renderizarPedidos();
+    verificarAlertas();
+};
+
+/* ══════════════════════════════════════
+   FILTRO LÍNEA — desde CATALOGO_ACTIVO
+══════════════════════════════════════ */
+function poblarFiltroLinea() {
+    const sel = document.getElementById('filtro-linea');
+    if (!sel) return;
+    const cat = cargarCatalogo();
+    const valActual = sel.value;
+    let opts = '<option value="">— Todas las líneas —</option>';
+    Object.keys(cat).forEach(k => {
+        opts += `<option value="${k}">${k.toUpperCase().replace(/_/g,' ')}</option>`;
+    });
+    sel.innerHTML = opts;
+    if (valActual) sel.value = valActual;
+}
+
+/* ══════════════════════════════════════
+   STATS
+══════════════════════════════════════ */
+function actualizarStats() {
+    const snaps      = cargarSnaps();
+    const filtrados  = filtrarSnaps(snaps);
+    const enCurso    = filtrados.filter(s => ['confirmado','produccion'].includes(s.estado || 'cotizacion')).length;
+    const entregados = filtrados.filter(s => (s.estado || '') === 'entregado').length;
+    const monto      = filtrados.reduce((acc, s) => acc + (s.monto_total || 0), 0);
+    const montoPend  = filtrados
+        .filter(s => ['confirmado','produccion'].includes(s.estado || ''))
+        .reduce((acc, s) => acc + (s.monto_total || 0), 0);
+
+    document.getElementById('stat-total').textContent      = snaps.length;
+    document.getElementById('stat-en-curso').textContent   = enCurso;
+    document.getElementById('stat-entregados').textContent = entregados;
+    document.getElementById('stat-monto').textContent      = _moneda(monto);
+    const pendEl = document.getElementById('stat-monto-pend');
+    if (pendEl) pendEl.textContent = _moneda(montoPend);
+}
+
+/* ══════════════════════════════════════
+   FILTRAR
+══════════════════════════════════════ */
+function filtrarSnaps(snaps) {
+    const filtroEstado      = document.getElementById('filtro-estado')?.value      || '';
+    const filtroBusqueda    = (document.getElementById('buscador-pedidos')?.value  || '').toLowerCase().trim();
+    const filtroLinea       = document.getElementById('filtro-linea')?.value       || '';
+    const filtroPublicacion = document.getElementById('filtro-publicacion')?.value || '';
+    const filtroFechaDesde  = document.getElementById('filtro-fecha-desde')?.value || '';
+    const filtroFechaHasta  = document.getElementById('filtro-fecha-hasta')?.value || '';
+    const orden             = document.getElementById('selector-orden')?.value     || 'reciente';
+
+    let lista = snaps.filter(s => {
+        const est = s.estado || 'cotizacion';
+        if (filtroEstado && est !== filtroEstado) return false;
+        if (filtroLinea  && s.prod !== filtroLinea) return false;
+        if (filtroBusqueda && !(
+            (s.cliente || '').toLowerCase().includes(filtroBusqueda) ||
+            (s.nombre  || '').toLowerCase().includes(filtroBusqueda)
+        )) return false;
+        if (filtroPublicacion === 'publicado' && !s.publicado_catalogo)  return false;
+        if (filtroPublicacion === 'privado'   &&  s.publicado_catalogo)  return false;
+        if (filtroPublicacion === 'oferta'    && !s.es_oferta)           return false;
+        if (filtroFechaDesde && s.fecha_entrega && s.fecha_entrega < filtroFechaDesde) return false;
+        if (filtroFechaHasta && s.fecha_entrega && s.fecha_entrega > filtroFechaHasta) return false;
+        return true;
+    });
+
+    /* ordenamiento */
+    lista.sort((a, b) => {
+        const ta = a.timestamp ? new Date(a.timestamp).getTime() : parseInt((a.id||'0').split('_')[1]||0);
+        const tb = b.timestamp ? new Date(b.timestamp).getTime() : parseInt((b.id||'0').split('_')[1]||0);
+        if (orden === 'reciente')      return tb - ta;
+        if (orden === 'antiguo')       return ta - tb;
+        if (orden === 'monto-desc')    return (b.monto_total||0) - (a.monto_total||0);
+        if (orden === 'monto-asc')     return (a.monto_total||0) - (b.monto_total||0);
+        if (orden === 'entrega-prox') {
+            const ea = a.fecha_entrega || '9999-99-99';
+            const eb = b.fecha_entrega || '9999-99-99';
+            return ea < eb ? -1 : ea > eb ? 1 : 0;
+        }
+        if (orden === 'entrega-lejana') {
+            const ea = a.fecha_entrega || '0000-00-00';
+            const eb = b.fecha_entrega || '0000-00-00';
+            return ea > eb ? -1 : ea < eb ? 1 : 0;
+        }
+        return tb - ta;
+    });
+
+    return lista;
+}
+
+/* ══════════════════════════════════════
+   RENDER CARDS
+══════════════════════════════════════ */
+function renderizarPedidos() {
+    const contenedor = document.getElementById('pedidos-lista');
+    if (!contenedor) return;
+
+    const snaps    = cargarSnaps();
+    const catalogo = cargarCatalogo();
+    const filtrados = filtrarSnaps(snaps);
+
+    actualizarStats();
+
+    const contEl = document.getElementById('contador-visible');
+    if (contEl) contEl.textContent = filtrados.length !== snaps.length
+        ? `Mostrando ${filtrados.length} de ${snaps.length}`
+        : `${snaps.length} registro${snaps.length !== 1 ? 's' : ''}`;
+
+    if (filtrados.length === 0) {
+        contenedor.innerHTML = `<div class="estado-vacio">
+            ${snaps.length === 0
+                ? '📭 Aún no hay registros. Capturá tu primer snapshot desde el cotizador.'
+                : '🔍 Sin resultados para los filtros aplicados.'}
+        </div>`;
+        return;
+    }
+
+    contenedor.innerHTML = filtrados.map(snap => {
+        const estadoKey = snap.estado || 'cotizacion';
+        const est       = _ESTADOS[estadoKey] || _ESTADOS.cotizacion;
+        const idxActual = _ORDEN_EST.indexOf(estadoKey);
+        const sigEstado = _ORDEN_EST[idxActual + 1];
+
+        /* imagen */
+        const catProd  = catalogo[snap.prod];
+        const imgUrl   = snap.imagen_url
+            || (catProd ? catProd.imagen_url : '')
+            || `https://placehold.co/400x300/1e293b/cbd5e1?text=${encodeURIComponent((snap.prod||'').toUpperCase())}`;
+
+        /* fechas */
+        const fechaEntrega = snap.fecha_entrega
+            ? new Date(snap.fecha_entrega + 'T12:00').toLocaleDateString('es-CO', {day:'2-digit', month:'short', year:'2-digit'})
+            : '—';
+        const fechaEmision = snap.timestamp
+            ? new Date(snap.timestamp).toLocaleDateString('es-CO', {day:'2-digit', month:'short', year:'2-digit'})
+            : '—';
+
+        /* urgencia */
+        const urgencia = _urgencia(snap);
+        const badgeUrgencia = urgencia
+            ? `<span class="badge-urgencia" style="color:${urgencia.color};border-color:${urgencia.color};background:${urgencia.bg};">${urgencia.label}</span>`
+            : '';
+
+        /* botones estado */
+        const btnAvanzar = sigEstado
+            ? `<button class="btn btn-success" style="padding:5px 12px; font-size:0.73rem;" onclick="cambiarEstado('${snap.id}','${sigEstado}')">▶ ${_ESTADOS[sigEstado].label}</button>`
+            : '';
+        const btnCancelar = (estadoKey !== 'cancelado' && estadoKey !== 'cotizacion')
+            ? `<button class="btn btn-hide-compact" style="padding:5px 8px; font-size:0.7rem; border-color:var(--color-alerta-critica); color:var(--color-alerta-critica);" onclick="cambiarEstado('${snap.id}','cancelado')">✕ Cancelar</button>`
+            : '';
+        const btnReactivar = estadoKey === 'cancelado'
+            ? `<button class="btn btn-admin btn-hide-compact" style="padding:5px 10px; font-size:0.7rem;" onclick="cambiarEstado('${snap.id}','cotizacion')">↩ Reactivar</button>`
+            : '';
+        const btnPublicar = `<button class="badge-publicado btn-hide-compact ${snap.publicado_catalogo ? 'on' : 'off'}" onclick="togglePublicar('${snap.id}')" title="Visible en catálogo público">
+            ${snap.publicado_catalogo ? '📌 En Catálogo' : '⚫ Privado'}
+        </button>`;
+        const btnOferta = `<button class="badge-publicado btn-hide-compact ${snap.es_oferta ? 'on' : 'off'}" onclick="toggleOferta('${snap.id}')"
+            style="${snap.es_oferta ? 'border-color:var(--accent-admin);color:var(--accent-admin);background:rgba(253,224,71,0.1);' : ''}"
+            title="Marcar como Oferta Pública con precio">
+            ${snap.es_oferta ? '🏷️ Oferta Pública' : '🏷️ Oferta'}
+        </button>`;
+        const btnNotas = `<button class="btn btn-hide-compact" style="padding:5px 10px;font-size:0.73rem;border-color:var(--border-color);color:${snap.notas ? 'var(--accent-secundario)' : 'var(--color-subtitulos)'};" onclick="editarNotas('${snap.id}')" title="${snap.notas ? 'Editar nota' : 'Agregar nota'}">${snap.notas ? '📝 Nota' : '📝'}</button>`;
+
+        return `<div class="card-pedido" data-snap-id="${snap.id}" style="border-color:${est.border}; background:linear-gradient(135deg, ${est.bg} 0%, var(--bg-card) 55%);">
+            <!-- imagen lateral -->
+            <div class="card-pedido-img-wrap">
+                <img class="card-pedido-img" src="${_esc(imgUrl)}"
+                    alt="${_esc(snap.nombre || snap.prod || '')}"
+                    onerror="this.src='https://placehold.co/400x300/1e293b/cbd5e1?text=SIN+IMAGEN'">
+                <span class="card-pedido-img-badge" style="color:${est.color}; border-color:${est.border}; background:rgba(11,17,30,0.82);">${est.label}</span>
+            </div>
+            <!-- cuerpo -->
+            <div class="card-pedido-body">
+                <div class="card-pedido-header-row">
+                    <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+                        <strong style="color:var(--color-titulos); font-size:0.95rem;">${_esc(snap.nombre || '(Sin nombre)')}</strong>
+                        <div class="card-pedido-meta">
+                            <span class="meta-chip">📦 ${_esc((snap.prod||'').toUpperCase().replace(/_/g,' '))}</span>
+                            ${snap.cliente ? `<span class="meta-chip">👤 ${_esc(snap.cliente)}</span>` : ''}
+                            ${snap.receta  ? `<span class="meta-chip meta-chip-receta" style="color:var(--accent-secundario);">🧪 ${_esc(snap.receta)}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="card-pedido-monto-col">
+                        ${snap.monto_total
+                            ? `<strong style="font-size:1.05rem; color:var(--accent-primario);">${_moneda(snap.monto_total)}</strong>`
+                            : `<span style="color:var(--color-subtitulos); font-size:0.78rem;">Sin monto</span>`}
+                        <span style="font-size:0.72rem; color:var(--color-subtitulos);">🚀 ${fechaEntrega}</span>
+                        ${badgeUrgencia}
+                        <span class="fecha-emision" style="font-size:0.67rem; color:var(--border-color);">📝 ${fechaEmision}</span>
+                    </div>
+                </div>
+                ${snap.notas ? `<div class="card-pedido-nota">💬 ${_esc(snap.notas)}</div>` : ''}
+                <div class="card-pedido-footer">
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                        ${btnAvanzar}${btnCancelar}${btnReactivar}${btnPublicar}${btnOferta}${btnNotas}
+                        ${(snap.es_oferta || snap.publicado_catalogo) ? `<button class="badge-publicado on btn-hide-compact" onclick="abrirModalImagen('${snap.id}')" style="border-color:var(--accent-primario);color:var(--accent-primario);background:rgba(125,211,252,0.08);" title="Editar imagen del catálogo">📷 Imagen</button>` : ''}
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-primario btn-hide-compact" style="padding:5px 12px; font-size:0.73rem;" onclick="cargarEnCotizador('${snap.id}')">📊 Cargar</button>
+                        <button class="btn btn-danger" onclick="eliminarPedido('${snap.id}')">🗑</button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+/* ══════════════════════════════════════
+   HELPERS V3 — URGENCIA / NOTAS / VISTA
+══════════════════════════════════════ */
+function _urgencia(snap) {
+    if (!['confirmado','produccion'].includes(snap.estado || 'cotizacion')) return null;
+    if (!snap.fecha_entrega) return null;
+    const hoy  = new Date(); hoy.setHours(0,0,0,0);
+    const ent  = new Date(snap.fecha_entrega + 'T12:00'); ent.setHours(0,0,0,0);
+    const diff = Math.round((ent - hoy) / (1000*60*60*24));
+    if (diff < 0)   return { label:'🔴 Vencido', color:'var(--color-alerta-critica)', bg:'rgba(252,165,165,0.15)' };
+    if (diff === 0) return { label:'⚠️ Hoy',     color:'var(--accent-admin)',         bg:'rgba(253,224,71,0.15)' };
+    if (diff === 1) return { label:'🟡 Mañana',  color:'var(--accent-admin)',         bg:'rgba(253,224,71,0.10)' };
+    return null;
+}
+
+function editarNotas(id) {
+    const snaps = cargarSnaps();
+    const snap  = snaps.find(s => String(s.id) === String(id));
+    if (!snap) return;
+    document.getElementById('modal-notas-snap-nombre').textContent = snap.nombre || '(Sin nombre)';
+    document.getElementById('modal-notas-textarea').value = snap.notas || '';
+    document.getElementById('modal-notas-pedido')._snapId = id;
+    document.getElementById('modal-notas-pedido').classList.add('abierto');
+    setTimeout(() => document.getElementById('modal-notas-textarea').focus(), 80);
+}
+
+function cerrarModalNotas() {
+    document.getElementById('modal-notas-pedido').classList.remove('abierto');
+}
+
+function guardarModalNotas() {
+    const modal = document.getElementById('modal-notas-pedido');
+    const id    = modal._snapId;
+    const texto = document.getElementById('modal-notas-textarea').value.trim();
+    const snaps = cargarSnaps();
+    const snap  = snaps.find(s => String(s.id) === String(id));
+    if (!snap) return;
+    snap.notas = texto;
+    guardarYSincronizar(snaps);
+    renderizarPedidos();
+    cerrarModalNotas();
+    window._mostrarToast && window._mostrarToast(texto ? '📝 Nota guardada' : '🗑 Nota eliminada', 'ok');
+}
+
+function toggleVistaCompacta() {
+    const lista = document.getElementById('pedidos-lista');
+    const btn   = document.getElementById('btn-vista-compacta');
+    if (!lista || !btn) return;
+    lista.classList.toggle('compacta');
+    const esCompacta = lista.classList.contains('compacta');
+    btn.textContent = esCompacta ? '⊞ Normal' : '☰ Compacta';
+    localStorage.setItem('sd_vista_compacta', esCompacta ? 'true' : 'false');
+}
+
+/* ══════════════════════════════════════
+   ALERTAS SEMANALES
+══════════════════════════════════════ */
+function verificarAlertas() {
+    if (localStorage.getItem('sd_alertas_cerradas') === _hoyKey()) return;
+
+    const snaps   = cargarSnaps();
+    const hoy     = new Date(); hoy.setHours(0,0,0,0);
+    const limite  = new Date(hoy); limite.setDate(limite.getDate() + 7);
+
+    const urgentes = snaps.filter(s => {
+        if (!['confirmado','produccion'].includes(s.estado || '')) return false;
+        if (!s.fecha_entrega) return false;
+        const ent = new Date(s.fecha_entrega + 'T12:00'); ent.setHours(0,0,0,0);
+        return ent <= limite;
+    }).sort((a, b) => a.fecha_entrega < b.fecha_entrega ? -1 : 1);
+
+    const panel  = document.getElementById('panel-alertas');
+    const lista  = document.getElementById('alertas-lista');
+    const titulo = document.getElementById('alertas-titulo');
+    if (!panel || !lista) return;
+
+    if (urgentes.length === 0) { panel.style.display = 'none'; document.title = 'Sagrada Delicia — Pedidos V3'; return; }
+
+    titulo.textContent = `🔔 ${urgentes.length} pedido${urgentes.length > 1 ? 's' : ''} con entrega esta semana`;
+    document.title = `(${urgentes.length}) Pedidos V3 — Sagrada Delicia`;
+
+    lista.innerHTML = urgentes.map(s => {
+        const urg  = _urgencia(s);
+        const badge = urg
+            ? `<span class="badge-urgencia" style="color:${urg.color};border-color:${urg.color};background:${urg.bg};">${urg.label}</span>`
+            : '';
+        const ent  = new Date(s.fecha_entrega + 'T12:00');
+        const diff = Math.round((ent.setHours(0,0,0,0), ent - new Date().setHours(0,0,0,0)) / (1000*60*60*24));
+        const diasLabel = diff < 0 ? `hace ${Math.abs(diff)}d` : diff === 0 ? 'hoy' : `en ${diff}d`;
+        const estadoChip = s.estado === 'produccion'
+            ? `<span style="font-size:0.68rem;color:var(--accent-primario);border:1px solid var(--accent-primario);border-radius:8px;padding:1px 7px;">🏭 Producción</span>`
+            : `<span style="font-size:0.68rem;color:var(--accent-secundario);border:1px solid var(--accent-secundario);border-radius:8px;padding:1px 7px;">✅ Confirmado</span>`;
+        return `<div class="alerta-row">
+            <span class="ar-nombre">${_esc(s.nombre || '(Sin nombre)')}</span>
+            ${s.cliente ? `<span class="ar-cliente">👤 ${_esc(s.cliente)}</span>` : ''}
+            ${estadoChip}
+            ${badge}
+            <span class="ar-fecha">📅 ${s.fecha_entrega} <span style="color:var(--color-subtitulos);">(${diasLabel})</span></span>
+        </div>`;
+    }).join('');
+
+    panel.style.display = 'block';
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+}
+
+function cerrarPanelAlertas() {
+    const panel = document.getElementById('panel-alertas');
+    if (panel) panel.style.display = 'none';
+    localStorage.setItem('sd_alertas_cerradas', _hoyKey());
+    document.title = 'Sagrada Delicia — Pedidos V3';
+}
+
+function _hoyKey() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+/* ══════════════════════════════════════
+   ACCIONES
+══════════════════════════════════════ */
+function cambiarEstado(id, nuevoEstado) {
+    const snaps = cargarSnaps();
+    const snap  = snaps.find(s => s.id === id);
+    if (!snap) return;
+    snap.estado = nuevoEstado;
+    guardarYSincronizar(snaps);
+    renderizarPedidos();
+    setTimeout(() => {
+        const card = document.querySelector(`[data-snap-id="${id}"]`);
+        if (card) { card.classList.add('estado-flash'); setTimeout(() => card.classList.remove('estado-flash'), 1400); }
+    }, 50);
+    window._mostrarToast && window._mostrarToast('Estado → ' + (_ESTADOS[nuevoEstado]?.label || nuevoEstado), 'ok');
+}
+
+function togglePublicar(id) {
+    const snaps = cargarSnaps();
+    const snap  = snaps.find(s => s.id === id);
+    if (!snap) return;
+    snap.publicado_catalogo = !snap.publicado_catalogo;
+    guardarSnapsLocal(snaps);
+    /* doble write: snapshots + ofertas publicas */
+    if (typeof window.guardarSnapshotsEnCloud === 'function') {
+        window.guardarSnapshotsEnCloud(snaps);
+    }
+    if (typeof window.actualizarOfertasPublicas === 'function') {
+        window.actualizarOfertasPublicas(snaps);
+    }
+    renderizarPedidos();
+    window._mostrarToast && window._mostrarToast(
+        snap.publicado_catalogo ? '📢 Añadido al Catálogo Público' : '⚫ Retirado del Catálogo',
+        'info'
+    );
+}
+
+function toggleOferta(id) {
+    const snaps = cargarSnaps();
+    const snap  = snaps.find(s => s.id === id);
+    if (!snap) return;
+    snap.es_oferta = !snap.es_oferta;
+    guardarSnapsLocal(snaps);
+    /* doble write: snapshots + actualizar ofertas en publico/menu */
+    if (typeof window.guardarSnapshotsEnCloud === 'function') {
+        window.guardarSnapshotsEnCloud(snaps);
+    }
+    if (typeof window.actualizarOfertasPublicas === 'function') {
+        window.actualizarOfertasPublicas(snaps);
+    }
+    renderizarPedidos();
+    window._mostrarToast && window._mostrarToast(
+        snap.es_oferta ? '🏷️ Marcado como Oferta Pública' : '🏷️ Retirado de Ofertas Públicas',
+        'info'
+    );
+}
+
+function eliminarPedido(id) {
+    if (!id || id === 'undefined' || id === 'null') {
+        window._mostrarToast && window._mostrarToast('⚠️ ID no válido', 'warn');
+        return;
+    }
+    if (!confirm('¿Eliminar este registro permanentemente?')) return;
+    let snaps = cargarSnaps();
+    snaps = snaps.filter(s => String(s.id) !== String(id));
+    guardarYSincronizar(snaps);
+    renderizarPedidos();
+    window._mostrarToast && window._mostrarToast('🗑 Registro eliminado', 'ok');
+}
+
+function cargarEnCotizador(id) {
+    localStorage.setItem('sd_cargar_snap', id);
+    irA('cotizador');
+}
+
+/* ══════════════════════════════════════
+   EXPORT — PDF
+══════════════════════════════════════ */
+function exportarPedidosPDF() {
+    const snaps      = cargarSnaps();
+    const filtrados  = filtrarSnaps(snaps);
+    const totalMonto = filtrados.reduce((a, s) => a + (s.monto_total||0), 0);
+    const enCurso    = filtrados.filter(s => ['confirmado','produccion'].includes(s.estado||'')).length;
+    const entregados = filtrados.filter(s => (s.estado||'') === 'entregado').length;
+    const montoPend  = filtrados.filter(s => ['confirmado','produccion'].includes(s.estado||'')).reduce((a,s)=>a+(s.monto_total||0),0);
+    const catalogo   = cargarCatalogo();
+
+    const filas = filtrados.map(snap => {
+        const estadoKey = snap.estado || 'cotizacion';
+        const est       = _ESTADOS[estadoKey] || _ESTADOS.cotizacion;
+        const urg       = _urgencia(snap);
+        const fechaEnt  = snap.fecha_entrega
+            ? new Date(snap.fecha_entrega + 'T12:00').toLocaleDateString('es-CO', {day:'2-digit', month:'short', year:'2-digit'})
+            : '—';
+        const fechaEmi  = snap.timestamp
+            ? new Date(snap.timestamp).toLocaleDateString('es-CO', {day:'2-digit', month:'short', year:'2-digit'})
+            : '—';
+        const catProd = catalogo[snap.prod];
+        const imgUrl  = snap.imagen_url || (catProd ? catProd.imagen_url : '');
+        const imgHtml = imgUrl
+            ? `<img src="${_esc(imgUrl)}" class="pedido-img" onerror="this.style.display='none'">`
+            : `<div class="pedido-img-placeholder">${_esc((snap.prod||'?').slice(0,2).toUpperCase())}</div>`;
+        const chips = [
+            snap.publicado_catalogo ? `<span class="chip chip-pub">📌 Catálogo</span>` : '',
+            snap.es_oferta          ? `<span class="chip chip-oferta">🏷️ Oferta</span>`  : '',
+            urg                     ? `<span class="chip chip-urg">${urg.label}</span>`   : '',
+        ].filter(Boolean).join('');
+
+        return `<div class="pedido-row">
+            ${imgHtml}
+            <div class="pedido-info">
+                <strong>${_esc(snap.nombre || '(Sin nombre)')}</strong>
+                <div class="pedido-meta">
+                    ${snap.cliente ? `<span>👤 ${_esc(snap.cliente)}</span>` : ''}
+                    ${snap.prod    ? `<span>📦 ${_esc((snap.prod).toUpperCase().replace(/_/g,' '))}</span>` : ''}
+                    ${snap.receta  ? `<span>🧪 ${_esc(snap.receta)}</span>` : ''}
+                </div>
+                ${snap.notas ? `<div class="pedido-nota">💬 ${_esc(snap.notas)}</div>` : ''}
+                ${chips ? `<div style="margin-top:4px;">${chips}</div>` : ''}
+            </div>
+            <div class="pedido-right">
+                <span class="estado-badge" style="border-color:${est.border};color:${est.color};">${est.label}</span>
+                <strong class="pedido-monto">${snap.monto_total ? _moneda(snap.monto_total) : '—'}</strong>
+                <span class="pedido-fecha">🚀 ${fechaEnt}</span>
+                <span class="pedido-fecha" style="color:#94a3b8;">📝 ${fechaEmi}</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>Pedidos — Sagrada Delicia</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: system-ui, sans-serif; padding: 36px; max-width: 900px; margin: 0 auto; color: #0f172a; }
+        @media print { .no-print { display: none !important; } .pedido-row { page-break-inside: avoid; } }
+        .header { display:flex; align-items:flex-end; justify-content:space-between; border-bottom: 3px solid #c084fc; padding-bottom: 14px; margin-bottom: 20px; }
+        .header h1 { margin: 0; font-size: 1.5rem; letter-spacing: 1px; }
+        .header .sub { color: #64748b; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 2px; }
+        .header .fecha { font-size: 0.75rem; color: #94a3b8; text-align:right; }
+        .stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 20px; }
+        .sc { background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0; }
+        .sc strong { display: block; font-size: 1rem; }
+        .sc span { font-size: 0.62rem; color: #64748b; text-transform: uppercase; }
+        .pedido-row { display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid #e2e8f0; }
+        .pedido-img { width: 64px; height: 64px; object-fit: cover; border-radius: 7px; border: 1px solid #e2e8f0; flex-shrink: 0; }
+        .pedido-img-placeholder { width: 64px; height: 64px; border-radius: 7px; background: #f1f5f9; display:flex; align-items:center; justify-content:center; font-size: 1.1rem; font-weight: 700; color: #94a3b8; flex-shrink: 0; }
+        .pedido-info { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+        .pedido-info strong { font-size: 0.9rem; }
+        .pedido-meta { display:flex; flex-wrap:wrap; gap:6px; margin-top:2px; }
+        .pedido-meta span { font-size: 0.72rem; color: #475569; background:#f1f5f9; padding:1px 7px; border-radius:8px; }
+        .pedido-nota { font-size: 0.72rem; color: #64748b; font-style: italic; margin-top: 2px; }
+        .pedido-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; min-width: 120px; }
+        .pedido-monto { font-size: 0.95rem; font-weight: 700; }
+        .pedido-fecha { font-size: 0.72rem; color: #64748b; }
+        .estado-badge { font-size: 0.65rem; padding: 2px 8px; border-radius: 10px; border: 1px solid; white-space: nowrap; }
+        .chip { font-size: 0.62rem; padding: 1px 7px; border-radius: 8px; margin-right: 3px; }
+        .chip-pub    { background:#dbeafe; color:#1d4ed8; }
+        .chip-oferta { background:#fef9c3; color:#a16207; }
+        .chip-urg    { background:#fee2e2; color:#b91c1c; font-weight:700; }
+        .footer { text-align: center; margin-top: 32px; font-size: 0.7rem; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 14px; }
+    </style></head><body>
+    <button class="no-print" onclick="window.print()" style="display:block;width:100%;padding:12px;background:#c084fc;color:#fff;border:none;border-radius:8px;cursor:pointer;margin-bottom:24px;font-weight:700;font-size:0.95rem;">🖨️ Imprimir / Guardar PDF</button>
+    <div class="header">
+        <div><h1>SAGRADA DELICIA</h1><div class="sub">Registro de Pedidos &amp; Cotizaciones</div></div>
+        <div class="fecha">${new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'})}</div>
+    </div>
+    <div class="stats">
+        <div class="sc"><strong>${filtrados.length}</strong><span>Visibles</span></div>
+        <div class="sc"><strong>${enCurso}</strong><span>En Curso</span></div>
+        <div class="sc"><strong>${entregados}</strong><span>Entregados</span></div>
+        <div class="sc"><strong style="font-size:0.85rem;">${_moneda(totalMonto)}</strong><span>Monto Total</span></div>
+    </div>
+    ${filas || '<p style="text-align:center;color:#94a3b8;padding:24px 0;">Sin registros</p>'}
+    <div class="footer">Sagrada Delicia · Cali, Colombia · ${filtrados.length} de ${snaps.length} registros · Pendiente ${_moneda(montoPend)}</div>
+    </body></html>`;
+
+    const win = window.open('', '_blank', 'width=920,height=820');
+    if (win) { win.document.write(html); win.document.close(); }
+    else { window._mostrarToast && window._mostrarToast('⚠️ Permite ventanas emergentes para exportar', 'warn', 5000); }
+}
+    const snaps      = cargarSnaps();
+    const filtrados  = filtrarSnaps(snaps);
+    const totalMonto = filtrados.reduce((a, s) => a + (s.monto_total||0), 0);
+    const enCurso    = filtrados.filter(s => ['confirmado','produccion'].includes(s.estado||'')).length;
+    const entregados = filtrados.filter(s => (s.estado||'') === 'entregado').length;
+    const montoPend  = filtrados.filter(s => ['confirmado','produccion'].includes(s.estado||'')).reduce((a,s)=>a+(s.monto_total||0),0);
+
+
+/* ══════════════════════════════════════
+   EXPORT / IMPORT JSON
+══════════════════════════════════════ */
+function importarPedidosAuto(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.name.endsWith('.csv')) importarPedidosCSV(event);
+    else importarPedidosJSON(event);
+}
+
+function exportarPedidosBackup() {
+    const snaps = cargarSnaps();
+    const blob  = new Blob([JSON.stringify(snaps, null, 2)], { type: 'application/json' });
+    const a     = document.createElement('a');
+    a.href      = URL.createObjectURL(blob);
+    a.download  = `SD_Pedidos_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    window._mostrarToast && window._mostrarToast('💾 Backup completo descargado', 'ok');
+}
+
+function importarPedidosJSON(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (!Array.isArray(data)) { alert('❌ Formato inválido — se esperaba un array JSON.'); return; }
+            const actual = cargarSnaps();
+            if (!confirm(`⚠️ Esto reemplazará los ${actual.length} registros actuales por los ${data.length} del backup.\n\n¿Continuar?`)) return;
+            guardarYSincronizar(data);
+            poblarFiltroLinea();
+            actualizarStats();
+            renderizarPedidos();
+            window._mostrarToast && window._mostrarToast(`✅ ${data.length} registros restaurados`, 'ok');
+        } catch(err) { alert('❌ Error al leer el backup JSON.'); }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+const _CSV_COLS = ['id','nombre','cliente','prod','receta','estado','monto_total','fecha_entrega','timestamp','publicado_catalogo','es_oferta','notas'];
+
+function _csvEscape(val) {
+    if (val === null || val === undefined) return '';
+    const str = String(val);
+    return str.includes(',') || str.includes('"') || str.includes('\n')
+        ? '"' + str.replace(/"/g, '""') + '"'
+        : str;
+}
+
+function exportarPedidosCSV() {
+    const snaps  = cargarSnaps();
+    const header = _CSV_COLS.join(',');
+    const rows   = snaps.map(s => _CSV_COLS.map(c => {
+        const val = c === 'monto_total' ? Math.round(s[c] || 0) : s[c];
+        return _csvEscape(val);
+    }).join(','));
+    const csv    = [header, ...rows].join('\r\n');
+    const blob   = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const a      = document.createElement('a');
+    a.href       = URL.createObjectURL(blob);
+    a.download   = `SD_Pedidos_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window._mostrarToast && window._mostrarToast('📊 CSV descargado', 'ok');
+}
+
+function importarPedidosCSV(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const lines = e.target.result.replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.trim());
+            if (lines.length < 2) { alert('❌ CSV vacío o sin datos.'); return; }
+            const cols = lines[0].split(',').map(c => c.trim());
+            const data = lines.slice(1).map(line => {
+                const vals = _csvParseLine(line);
+                const obj  = {};
+                cols.forEach((c, i) => {
+                    const v = vals[i] !== undefined ? vals[i] : '';
+                    if (c === 'monto_total')         obj[c] = parseFloat(v) || 0;
+                    else if (c === 'publicado_catalogo' || c === 'es_oferta') obj[c] = v === 'true';
+                    else obj[c] = v;
+                });
+                return obj;
+            }).filter(o => o.id);
+            const actual = cargarSnaps();
+            if (!confirm(`⚠️ Esto reemplazará los ${actual.length} registros actuales por los ${data.length} del archivo CSV.\n\n¿Continuar?`)) return;
+            guardarYSincronizar(data);
+            poblarFiltroLinea();
+            actualizarStats();
+            renderizarPedidos();
+            window._mostrarToast && window._mostrarToast(`✅ ${data.length} registros importados`, 'ok');
+        } catch(err) { alert('❌ Error al leer el CSV: ' + err.message); }
+    };
+    reader.readAsText(file, 'UTF-8');
+    event.target.value = '';
+}
+
+function _csvParseLine(line) {
+    const result = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQ) {
+            if (ch === '"' && line[i+1] === '"') { cur += '"'; i++; }
+            else if (ch === '"') inQ = false;
+            else cur += ch;
+        } else {
+            if (ch === '"') inQ = true;
+            else if (ch === ',') { result.push(cur); cur = ''; }
+            else cur += ch;
+        }
+    }
+    result.push(cur);
+    return result;
+}
+
+/* ══════════════════════════════════════
+   IMAGEN CLOUDINARY — PEDIDOS V2
+══════════════════════════════════════ */
+let _snapIdImagen = null;
+
+function abrirModalImagen(snapId) {
+    _snapIdImagen = snapId;
+    const snaps  = cargarSnaps();
+    const snap   = snaps.find(s => s.id === snapId);
+    if (!snap) return;
+
+    /* Pre-llenar URL actual si existe */
+    const inputUrl = document.getElementById('modal-img-url-pedido');
+    const prev     = document.getElementById('modal-img-preview-pedido');
+    const status   = document.getElementById('modal-img-status-pedido');
+    inputUrl.value = snap.imagen_url || '';
+    status.textContent = snap.imagen_url ? '✅ Imagen actual' : '';
+    if (snap.imagen_url) { prev.src = snap.imagen_url; prev.style.display = 'block'; }
+    else                 { prev.src = ''; prev.style.display = 'none'; }
+
+    document.getElementById('modal-imagen-pedido').style.display = 'flex';
+}
+
+function cerrarModalImagen() {
+    document.getElementById('modal-imagen-pedido').style.display = 'none';
+    _snapIdImagen = null;
+}
+
+async function subirImagenPedido(input) {
+    const file   = input.files[0];
+    if (!file) return;
+    const status = document.getElementById('modal-img-status-pedido');
+    const prev   = document.getElementById('modal-img-preview-pedido');
+    status.textContent = '⏳ Subiendo a Cloudinary...';
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+        const resp = await fetch(
+            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+            { method: 'POST', body: formData }
+        );
+        if (!resp.ok) throw new Error('Error Cloudinary');
+        const datos = await resp.json();
+        const url   = datos.secure_url.replace('/upload/', '/upload/f_auto,q_auto,w_800/');
+        document.getElementById('modal-img-url-pedido').value = url;
+        prev.src = url; prev.style.display = 'block';
+        status.textContent = '✅ Imagen lista — guarda para confirmar';
+        window._mostrarToast('📸 Imagen subida a Cloudinary', 'ok');
+    } catch(err) {
+        console.error(err);
+        status.textContent = '❌ Error al subir';
+        window._mostrarToast('❌ Fallo al subir imagen', 'error', 5000);
+    }
+}
+
+function guardarImagenPedido() {
+    if (!_snapIdImagen) return;
+    const url   = document.getElementById('modal-img-url-pedido').value.trim();
+    const snaps = cargarSnaps();
+    const snap  = snaps.find(s => s.id === _snapIdImagen);
+    if (!snap) return;
+    snap.imagen_url = url;
+    guardarSnapsLocal(snaps);
+    if (typeof window.guardarSnapshotsEnCloud === 'function') window.guardarSnapshotsEnCloud(snaps);
+    if (typeof window.actualizarOfertasPublicas === 'function') window.actualizarOfertasPublicas(snaps);
+    cerrarModalImagen();
+    renderizarPedidos();
+    window._mostrarToast('📸 Imagen actualizada y sincronizada', 'ok');
+}
+
+/* ══════════════════════════════════════════════════
+   TUTORIAL SYSTEM — SD Pedidos V3.1
+   ══════════════════════════════════════════════════ */
+const _TUT_LLAVE = 'sd_tutorial_pedidos_v1';
+let _tutPaso = 0;
+
+const _TUT_PASOS = [
+    { target: null,                 emoji:'🎉', titulo:'¡Bienvenido a Pedidos!',                  texto:'Este módulo es la central de operaciones de Sagrada Delicia. Aquí llegan todos los registros capturados desde el Cotizador y gestionas su ciclo de vida completo hasta la entrega. Puedes saltar y relanzar con 🎓 Guía.' },
+    { target:'.nav-ecosistema',     emoji:'🗺️', titulo:'Posición en el Ecosistema',               texto:'Pedidos recibe registros del Cotizador (botón "Capturar Cotización") y los publica al Catálogo Público. Es el puente entre la operación interna del taller y la vitrina visible para los clientes.' },
+    { target:'.stats-bar',          emoji:'📊', titulo:'Panel de Estadísticas',                   texto:'5 indicadores en tiempo real: Total de registros, pedidos En Curso (cotización + confirmado + producción), Entregados, Monto Visible (suma de los filtros activos) y Monto Pendiente (pedidos no entregados aún). Se actualizan con cada filtro que apliques.' },
+    { target:'.toolbar',            emoji:'🔧', titulo:'Barra de Filtros y Herramientas',         texto:'Centro de control del módulo. Desde aquí buscas, filtras por cualquier combinación de criterios y exportas los resultados. Todos los filtros son acumulativos: puedes combinar estado + línea + fecha + publicación para vistas muy específicas.' },
+    { target:'#buscador-pedidos',   emoji:'🔍', titulo:'Buscador',                               texto:'Busca en tiempo real por nombre del cliente o nombre del pedido/producto. Se actualiza mientras escribes sin necesidad de presionar Enter. Combínalo con los demás filtros para localizar cualquier registro al instante.' },
+    { target:'#filtro-estado',      emoji:'📄', titulo:'Filtros de Estado y Línea',              texto:'Estado: filtra por la etapa del ciclo (Cotización, Confirmado, En Producción, Entregado, Cancelado). Línea: filtra por tipo de producto (Tortas, Cupcakes, etc.). El filtro de orden permite ordenar por fecha de registro, monto o fecha de entrega próxima.' },
+    { target:'#filtro-publicacion', emoji:'📌', titulo:'Filtro de Publicación',                  texto:'Tres opciones: En Catálogo (pedidos publicados en la vitrina pública), Privado (registros internos no publicados) y Oferta (pedidos marcados con precio especial). Usa este filtro para gestionar qué aparece en tu catálogo online.' },
+    { target:'.toolbar-acciones',   emoji:'📤', titulo:'Exportar e Importar',                    texto:'PDF: lista imprimible de los registros visibles. Excel (CSV): tabla para análisis en hojas de cálculo. Backup: JSON completo con imágenes y todos los campos (ideal para respaldos). Importar: carga registros desde CSV o JSON (fusiona sin borrar lo existente).' },
+    { target:'#pedidos-lista',      emoji:'📋', titulo:'Lista de Registros',                     texto:'Cada tarjeta muestra: imagen Cloudinary, nombre del pedido, cliente, línea, badge de estado (clic para avanzar al siguiente), indicador de urgencia de entrega con código de color, monto total, nota interna y badges de publicación. La vista ☰ Compacta oculta imagen y detalles para ver más registros a la vez.' },
+    { target: null,                 emoji:'🔄', titulo:'Ciclo de Vida y Publicación al Catálogo', texto:'Cada registro avanza por 4 etapas: 📄 Cotización → ✅ Confirmado → 🏭 En Producción → 🎯 Entregado. Haz clic en el badge de estado para avanzar al siguiente. El toggle 📌 Publicar activa un doble write en Firebase: actualiza DB_SNAPSHOTS y simultáneamente escribe en publico/menu.ofertas, haciendo que el pedido aparezca inmediatamente en el Catálogo Público visible para los clientes.' },
+    { target:'#badge-cloud-sync',   emoji:'☁️', titulo:'Sincronización Cloud',                   texto:'Pedidos escribe en dos documentos de Firebase: DB_SNAPSHOTS (en operaciones/taller) y ofertas (en publico/menu) para los publicados. Nunca toca CATALOGO_ACTIVO, DB_INSUMOS ni DB_RECETAS. El listener en tiempo real garantiza que cambios desde otro dispositivo se reflejen automáticamente.' },
+];
+
+function iniciarTutorial(forzar = false) {
+    const visto = localStorage.getItem(_TUT_LLAVE);
+    if (visto && !forzar) return;
+    _tutPaso = 0;
+    document.getElementById('tutorial-overlay').classList.remove('oculto');
+    _renderTutPaso();
+}
+
+function _renderTutPaso() {
+    const paso  = _TUT_PASOS[_tutPaso];
+    const total = _TUT_PASOS.length;
+    const ring  = document.getElementById('tutorial-spotlight-ring');
+    const card  = document.getElementById('tutorial-card');
+
+    card.classList.remove('animando');
+    void card.offsetWidth;
+    card.classList.add('animando');
+
+    document.getElementById('tut-progress-bar').innerHTML =
+        _TUT_PASOS.map((_, i) =>
+            `<div class="tut-pip ${i < _tutPaso ? 'hecho' : i === _tutPaso ? 'activo' : ''}"></div>`
+        ).join('');
+
+    document.getElementById('tutorial-emoji').textContent  = paso.emoji;
+    document.getElementById('tutorial-titulo').textContent = paso.titulo;
+    document.getElementById('tutorial-texto').textContent  = paso.texto;
+    document.getElementById('tut-step-label').textContent  = `${_tutPaso + 1} / ${total}`;
+
+    document.getElementById('btn-tut-ant').style.visibility = _tutPaso === 0 ? 'hidden' : 'visible';
+    document.getElementById('btn-tut-sig').textContent = _tutPaso === total - 1 ? '✅ Finalizar' : 'Siguiente →';
+
+    if (paso.target) {
+        const el = document.querySelector(paso.target);
+        if (el) {
+            el.scrollIntoView({ behavior:'smooth', block:'center' });
+            setTimeout(() => _posicionarTutorial(el, card, ring), 400);
+        } else {
+            ring.style.display = 'none';
+            _centrarCard(card);
+        }
+    } else {
+        ring.style.display = 'none';
+        _centrarCard(card);
+    }
+}
+
+function _posicionarTutorial(el, card, ring) {
+    const rect  = el.getBoundingClientRect();
+    const pad   = 8;
+    const vp    = { w: window.innerWidth, h: window.innerHeight };
+    const cardW = 320, cardH = 272;
+
+    ring.style.display = 'block';
+    ring.style.top     = (rect.top    - pad) + 'px';
+    ring.style.left    = (rect.left   - pad) + 'px';
+    ring.style.width   = (rect.width  + pad * 2) + 'px';
+    ring.style.height  = (rect.height + pad * 2) + 'px';
+
+    let top;
+    if (rect.bottom + cardH + 20 < vp.h)    top = rect.bottom + 16;
+    else if (rect.top - cardH - 16 > 0)     top = rect.top - cardH - 16;
+    else                                     top = Math.max(12, (vp.h - cardH) / 2);
+
+    let left = rect.left + (rect.width / 2) - (cardW / 2);
+    left = Math.max(12, Math.min(left, vp.w - cardW - 12));
+
+    card.style.top       = top  + 'px';
+    card.style.left      = left + 'px';
+    card.style.transform = 'none';
+}
+
+function _centrarCard(card) {
+    card.style.top       = '50%';
+    card.style.left      = '50%';
+    card.style.transform = 'translate(-50%, -50%)';
+}
+
+function tutorialSiguiente() {
+    if (_tutPaso >= _TUT_PASOS.length - 1) { terminarTutorial(); return; }
+    _tutPaso++;
+    _renderTutPaso();
+}
+
+function tutorialAnterior() {
+    if (_tutPaso > 0) { _tutPaso--; _renderTutPaso(); }
+}
+
+function tutorialSaltar()   { terminarTutorial(); }
+
+function terminarTutorial() {
+    localStorage.setItem(_TUT_LLAVE, '1');
+    document.getElementById('tutorial-overlay').classList.add('oculto');
+    document.getElementById('tutorial-spotlight-ring').style.display = 'none';
+    window._mostrarToast && window._mostrarToast('🎓 Guía disponible en el botón del encabezado', 'info', 4000);
+}
+
+window.addEventListener('load', () => {
+    setTimeout(() => iniciarTutorial(false), 1000);
+});
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') cerrarModalImagen();
+});
+
+
+function actualizarBtnSync() { /* badge gestionado por el módulo Firebase */ }
+
+function guardarPedidosManual() {
+    const snaps = cargarSnaps();
+    guardarYSincronizar(snaps);
+}
+
+function toggleSync() {
+    const activo = localStorage.getItem(LLAVE_SYNC) !== 'false';
+    localStorage.setItem(LLAVE_SYNC, activo ? 'false' : 'true');
+    if (!activo) {
+        window._mostrarToast && window._mostrarToast('🔔 Sync reactivado. Conectando...', 'ok');
+        typeof window._iniciarListener === 'function' && window._iniciarListener();
+    } else {
+        window._mostrarToast && window._mostrarToast('🔕 Sync pausado — modo local', 'warn');
+        typeof window._detenerListener === 'function' && window._detenerListener();
+    }
+}
+
+/* ══════════════════════════════════════
+   INIT
+══════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+    actualizarBtnSync();
+    poblarFiltroLinea();
+    actualizarStats();
+    renderizarPedidos();
+    verificarAlertas();
+    /* restaurar vista compacta */
+    if (localStorage.getItem('sd_vista_compacta') === 'true') {
+        const lista = document.getElementById('pedidos-lista');
+        const btn   = document.getElementById('btn-vista-compacta');
+        if (lista) lista.classList.add('compacta');
+        if (btn)   btn.textContent = '⊞ Normal';
+    }
+});
+
+</script>
+<!-- ════════════════════════════════════
+     MODAL IMAGEN PEDIDO — CLOUDINARY
+════════════════════════════════════ -->
+<div id="modal-imagen-pedido" style="display:none;position:fixed;inset:0;z-index:8000;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+    <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:14px;padding:24px;width:100%;max-width:480px;margin:20px;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+        <h2 style="margin-bottom:16px;font-size:1rem;">📷 Imagen del Catálogo</h2>
+
+        <!-- Preview -->
+        <img id="modal-img-preview-pedido" src="" alt="Preview"
+            style="display:none;width:100%;max-height:200px;object-fit:cover;border-radius:9px;margin-bottom:12px;border:1px solid var(--border-color);">
+
+        <!-- Upload Cloudinary -->
+        <label style="font-size:0.72rem;color:var(--color-subtitulos);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">📤 Subir imagen</label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:1px dashed var(--accent-primario);border-radius:9px;margin-bottom:12px;background:rgba(125,211,252,0.04);transition:background 0.2s;"
+            onmouseover="this.style.background='rgba(125,211,252,0.09)'" onmouseout="this.style.background='rgba(125,211,252,0.04)'">
+            <span style="font-size:1.2rem;">🖼️</span>
+            <span style="font-size:0.83rem;color:var(--accent-primario);">Seleccionar archivo...</span>
+            <input type="file" accept="image/*" style="display:none;" onchange="subirImagenPedido(this)">
+        </label>
+
+        <!-- URL manual -->
+        <label style="font-size:0.72rem;color:var(--color-subtitulos);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px;">🔗 O pegar URL</label>
+        <input type="text" id="modal-img-url-pedido" placeholder="https://res.cloudinary.com/..."
+            style="width:100%;margin-bottom:6px;"
+            oninput="const p=document.getElementById('modal-img-preview-pedido'); if(this.value){p.src=this.value;p.style.display='block';}else{p.style.display='none';}">
+
+        <span id="modal-img-status-pedido" style="font-size:0.75rem;color:var(--accent-success);display:block;margin-bottom:14px;"></span>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
+            <button class="btn btn-link" onclick="cerrarModalImagen()">Cancelar</button>
+            <button class="btn btn-primario" onclick="guardarImagenPedido()">💾 Guardar imagen</button>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════
+     MODAL NOTAS PEDIDO
+════════════════════════════════════ -->
+<div id="modal-notas-pedido">
+    <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:14px;padding:24px;width:100%;max-width:460px;margin:20px;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+        <h2 style="margin:0 0 6px;font-size:1rem;">📝 Notas del pedido</h2>
+        <p id="modal-notas-snap-nombre" style="font-size:0.8rem;color:var(--color-subtitulos);margin:0 0 4px;"></p>
+        <textarea id="modal-notas-textarea" placeholder="Escribe una nota para este pedido..."></textarea>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button class="btn" onclick="cerrarModalNotas()" style="color:var(--color-subtitulos);border-color:var(--border-color);">Cancelar</button>
+            <button class="btn btn-primario" onclick="guardarModalNotas()">💾 Guardar nota</button>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
