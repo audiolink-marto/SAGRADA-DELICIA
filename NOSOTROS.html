@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sobre Nosotras · Sagrada Delicia v1.1.0</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍰</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Dancing+Script:wght@500;700&display=swap" rel="stylesheet" />
+
+  <!-- ╔══════════════════════════════════════════════════════════════╗
+       ║  FIREBASE MODULE — NOSOTROS v1.1.0                         ║
+       ║  onSnapshot → lee nosotras_config de operaciones/taller    ║
+       ║  Puebla la página en tiempo real · fallback a defaults      ║
+       ╚══════════════════════════════════════════════════════════════╝ -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, doc, onSnapshot }
+        from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey:            "AIzaSyAeAWVCyu_qUSVo11uToAgGKqSYhdU1ABI",
+        authDomain:        "sagrada-delicia-central.firebaseapp.com",
+        projectId:         "sagrada-delicia-central",
+        storageBucket:     "sagrada-delicia-central.firebasestorage.app",
+        messagingSenderId: "474340023357",
+        appId:             "1:474340023357:web:bd7a643fa77733eaaede54"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+    const ref = doc(db, "operaciones", "taller");
+
+    /* ── Helpers ── */
+    function g(obj, path, fallback = '') {
+        const val = path.split('.').reduce((a, k) =>
+            (a != null ? (isNaN(k) ? a[k] : a[parseInt(k)]) : undefined), obj);
+        return (val !== undefined && val !== null && val !== '') ? val : fallback;
+    }
+
+    function setTxt(id, val) {
+        if (!val) return;
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+    }
+
+    function setHTML(id, html) {
+        if (!html) return;
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = html;
+    }
+
+    /* ── Poblar página desde nosotras_config ── */
+    function poblarPagina(cfg) {
+        if (!cfg) return;
+
+        // ── Header
+        setTxt('hdr-eyebrow', g(cfg, 'header.eyebrow'));
+        setTxt('hdr-titulo',  g(cfg, 'header.titulo'));
+        setTxt('hdr-sub',     g(cfg, 'header.subtitulo'));
+
+        // ── Foto principal — Cloudinary o ruta local
+        const fotoUrl = g(cfg, 'quienes.foto_url');
+        if (fotoUrl) {
+            const img = document.getElementById('foto-principal');
+            if (img) img.src = fotoUrl;
+        }
+
+        // ── Sello circular (soporta \n → <br/>)
+        const sello = g(cfg, 'quienes.sello');
+        if (sello) setHTML('sello-txt', sello.replace(/\n/g, '<br/>'));
+
+        // ── Quiénes somos texto
+        setTxt('q-eyebrow', g(cfg, 'quienes.eyebrow'));
+
+        const t1 = g(cfg, 'quienes.titulo1');
+        const t2 = g(cfg, 'quienes.titulo2');
+        if (t1 || t2) setHTML('q-titulo', `${t1}<br/><em>${t2}</em>`);
+
+        setTxt('q-p1',    g(cfg, 'quienes.p1'));
+        setTxt('q-p2',    g(cfg, 'quienes.p2'));
+        setTxt('q-firma', g(cfg, 'quienes.firma'));
+
+        // ── Filosofía / Pilares
+        setTxt('fil-eyebrow', g(cfg, 'filosofia.eyebrow'));
+        setTxt('fil-titulo',  g(cfg, 'filosofia.titulo'));
+
+        const pilares = cfg.filosofia?.pilares;
+        if (Array.isArray(pilares)) {
+            pilares.forEach((p, i) => {
+                const el = document.getElementById('pilar-' + i);
+                if (!el) return;
+                const icono  = el.querySelector('.pilar-icono');
+                const nombre = el.querySelector('.pilar-nombre');
+                const desc   = el.querySelector('.pilar-desc');
+                if (icono  && p.icono)  icono.textContent  = p.icono;
+                if (nombre && p.nombre) nombre.textContent = p.nombre;
+                if (desc   && p.desc)   desc.textContent   = p.desc;
+            });
+        }
+
+        // ── El Sabor Especial
+        setTxt('sabor-badge', g(cfg, 'sabor.badge'));
+
+        const s1 = g(cfg, 'sabor.titulo1');
+        const s2 = g(cfg, 'sabor.titulo2');
+        if (s1 || s2) setHTML('sabor-titulo', `${s1}<br/>${s2}`);
+
+        setTxt('sabor-subtitulo', g(cfg, 'sabor.subtitulo'));
+        setTxt('sabor-texto',     g(cfg, 'sabor.texto'));
+
+        // ── CTA + todos los enlaces WhatsApp
+        const waNr   = g(cfg, 'contacto.wa_numero', '573183110524');
+        const waMsg  = g(cfg, 'cta.wa_msg', '¡Hola Sagrada Delicia! ✨ Quiero hacer un pedido.');
+        const waHref = `https://wa.me/${waNr}?text=${encodeURIComponent(waMsg)}`;
+
+        setTxt('cta-label', g(cfg, 'cta.label'));
+
+        const ctaBtn = document.getElementById('cta-btn-wpp');
+        if (ctaBtn) {
+            ctaBtn.href = waHref;
+            setTxt('cta-btn-txt', g(cfg, 'cta.btn_texto'));
+        }
+
+        // ── Footer
+        setTxt('footer-ciudad', g(cfg, 'footer.ciudad'));
+
+        const tel    = g(cfg, 'contacto.telefono', '3183110524');
+        const telFmt = tel.length === 10
+            ? `+57 ${tel.slice(0,3)} ${tel.slice(3,6)} ${tel.slice(6)}`
+            : `+57 ${tel}`;
+
+        const fwpp = document.getElementById('footer-wpp-link');
+        if (fwpp) {
+            fwpp.href        = `https://wa.me/${waNr}`;
+            fwpp.textContent = telFmt;
+        }
+
+        const copyright = g(cfg, 'footer.copyright');
+        const credito   = g(cfg, 'footer.credito');
+        if (copyright || credito) {
+            setHTML('footer-legal',
+                `${copyright ? `<p>${copyright}</p>` : ''}${credito ? `<p>${credito}</p>` : ''}`
+            );
+        }
+
+        // ── WPP flotante
+        const wppFloat = document.getElementById('wpp-float-link');
+        if (wppFloat) wppFloat.href = `https://wa.me/${waNr}`;
+    }
+
+    /* ── Escucha en tiempo real ── */
+    onSnapshot(ref, (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (data.nosotras_config) poblarPagina(data.nosotras_config);
+    }, (err) => {
+        console.warn('[NOSOTROS v1.1.0] Firebase listener error:', err);
+    });
+  </script>
+
+  <style>
+    :root {
+      --bg:           #0a0a0a;
+      --bg-card:      #141414;
+      --bg-panel:     #0f0f0f;
+      --dorado:       #d4af37;
+      --dorado-hover: #ebd586;
+      --dorado-suave: rgba(212,175,55,0.10);
+      --dorado-borde: rgba(212,175,55,0.30);
+      --texto:        #fcfbf9;
+      --mutado:       #a8a29e;
+      --borde:        #1e1e1e;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--texto);
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 400;
+      line-height: 1.7;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ══ CAPA GRANO ══ */
+    #grain-layer {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background-image:
+        radial-gradient(circle, rgba(255,255,255,0.09) 1px, transparent 1px),
+        radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px),
+        radial-gradient(circle, rgba(212,175,55,0.06)  1px, transparent 1px),
+        linear-gradient(118deg, transparent 0%, rgba(212,175,55,0.06) 38%, transparent 52%, rgba(212,175,55,0.04) 74%, transparent 100%);
+      background-size: 52px 52px, 19px 23px, 37px 31px, 300% 300%;
+      background-position: 0px 0px, 9px 13px, 22px 7px, 0% 50%;
+      animation: shimmer 14s ease-in-out infinite, grain-pulse 9s ease-in-out infinite alternate;
+    }
+
+    @keyframes shimmer {
+      0%   { background-position: 0px 0px,   9px 13px,  22px 7px,  0% 50%; }
+      100% { background-position: 52px 31px, 19px 23px, 37px 31px, 100% 50%; }
+    }
+
+    @keyframes grain-pulse {
+      0%   { opacity: 0.45; }
+      40%  { opacity: 0.80; }
+      70%  { opacity: 0.50; }
+      100% { opacity: 0.75; }
+    }
+
+    /* ══ HALO MAGNÉTICO ══ */
+    #halo {
+      position: fixed;
+      width: 520px;
+      height: 520px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(212,175,55,0.11) 0%, rgba(212,175,55,0.04) 40%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+      transform: translate(-50%, -50%);
+      left: 50%;
+      top: 30%;
+      transition: left 0.18s cubic-bezier(0.23,1,0.32,1),
+                  top  0.18s cubic-bezier(0.23,1,0.32,1),
+                  opacity 0.4s ease;
+      will-change: left, top;
+    }
+
+    /* ══ CANVAS PARTÍCULAS ══ */
+    #particle-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* contenido sobre capas */
+    header, main, footer, .wpp-float, .btn-float-catalogo { position: relative; z-index: 1; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: #1e1e1e; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--dorado); }
+
+    /* ══ HEADER ══ */
+    header {
+      text-align: center;
+      padding: 64px 20px 56px;
+      background: radial-gradient(circle at center, #1a170f 0%, var(--bg) 100%);
+      border-bottom: 1px solid var(--borde);
+    }
+
+    .header-logo {
+      max-width: 240px;
+      width: 100%;
+      margin: 0 auto 20px;
+      display: block;
+      filter: brightness(0) saturate(100%)
+              invert(78%) sepia(35%) saturate(600%)
+              hue-rotate(5deg) brightness(105%);
+      opacity: 0.85;
+    }
+
+    .header-eyebrow {
+      display: block;
+      color: var(--dorado);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 5px;
+      margin-bottom: 18px;
+    }
+
+    .header-titulo {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(2.4rem, 6vw, 3.8rem);
+      font-weight: 400;
+      font-style: italic;
+      color: var(--texto);
+      line-height: 1.1;
+      margin-bottom: 16px;
+    }
+
+    .header-divider { color: var(--dorado); font-size: 1rem; margin: 18px 0; opacity: 0.6; }
+
+    .header-sub {
+      color: var(--mutado);
+      font-size: 0.82rem;
+      font-weight: 300;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    /* ══ QUIÉNES SOMOS ══ */
+    .s-quienes {
+      max-width: 1060px;
+      margin: 0 auto;
+      padding: 80px 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+    }
+
+    .foto-marco {
+      position: relative;
+    }
+
+    .foto-marco::before {
+      content: '';
+      position: absolute;
+      inset: -10px;
+      border: 1px solid var(--dorado-borde);
+      border-radius: 2px;
+      z-index: 0;
+      animation: marco-pulse 5s ease-in-out infinite;
+    }
+
+    @keyframes marco-pulse {
+      0%, 100% { border-color: rgba(212,175,55,0.18); box-shadow: 0 0 0px rgba(212,175,55,0); }
+      50%       { border-color: rgba(212,175,55,0.48); box-shadow: 0 0 28px rgba(212,175,55,0.07); }
+    }
+
+    .foto-nosotras {
+      width: 100%;
+      display: block;
+      border-radius: 2px;
+      border: 1px solid var(--borde);
+      object-fit: cover;
+      aspect-ratio: 4/5;
+      position: relative;
+      z-index: 1;
+      filter: sepia(12%) contrast(1.04);
+      transition: filter 0.5s ease, transform 0.5s ease;
+    }
+
+    .foto-nosotras:hover {
+      filter: sepia(0%) contrast(1);
+      transform: scale(1.01);
+    }
+
+    .foto-sello {
+      position: absolute;
+      bottom: -16px;
+      right: -16px;
+      width: 90px;
+      height: 90px;
+      background: var(--bg-card);
+      border: 1px solid var(--dorado-borde);
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+      box-shadow: 0 0 22px rgba(212,175,55,0.12);
+    }
+
+    .sello-txt {
+      font-family: 'Dancing Script', cursive;
+      font-size: 0.78rem;
+      color: var(--dorado);
+      text-align: center;
+      line-height: 1.3;
+      font-weight: 700;
+    }
+
+    .txt-eyebrow {
+      display: block;
+      color: var(--dorado);
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 5px;
+      margin-bottom: 20px;
+    }
+
+    .txt-titulo {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 400;
+      color: var(--texto);
+      margin-bottom: 28px;
+      line-height: 1.25;
+    }
+
+    .txt-titulo em { color: var(--dorado); font-style: italic; }
+
+    .txt-body {
+      font-size: 0.92rem;
+      color: var(--mutado);
+      font-weight: 300;
+      margin-bottom: 18px;
+      line-height: 1.8;
+    }
+
+    .txt-body strong { color: var(--texto); font-weight: 500; }
+
+    .firma {
+      font-family: 'Dancing Script', cursive;
+      font-size: 1.7rem;
+      color: var(--dorado);
+      margin-top: 28px;
+      display: block;
+      opacity: 0.9;
+    }
+
+    /* ══ ORNAMENTO ══ */
+    .ornamento {
+      text-align: center;
+      color: var(--dorado);
+      opacity: 0.3;
+      font-size: 1rem;
+      letter-spacing: 12px;
+      padding: 0 24px;
+    }
+
+    /* ══ FILOSOFÍA ══ */
+    .s-filosofia {
+      padding: 80px 24px;
+      max-width: 1060px;
+      margin: 0 auto;
+    }
+
+    .s-filosofia-header {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+
+    .sec-eyebrow {
+      display: block;
+      color: var(--dorado);
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 5px;
+      margin-bottom: 16px;
+    }
+
+    .sec-titulo {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 400;
+      font-style: italic;
+      color: var(--texto);
+    }
+
+    .pilares {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+
+    .pilar {
+      background: var(--bg-card);
+      border: 1px solid var(--borde);
+      border-radius: 2px;
+      padding: 40px 28px;
+      text-align: center;
+      transition: border-color 0.35s ease, box-shadow 0.35s ease;
+      will-change: transform;
+      cursor: default;
+    }
+
+    .pilar:hover {
+      border-color: var(--dorado-borde);
+      box-shadow: 0 10px 32px rgba(212,175,55,0.08);
+    }
+
+    .pilar-icono { font-size: 1.8rem; margin-bottom: 18px; display: block; }
+
+    .pilar-nombre {
+      font-family: 'Playfair Display', serif;
+      font-size: 1rem;
+      color: var(--dorado);
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    .pilar-desc {
+      font-size: 0.85rem;
+      color: var(--mutado);
+      font-weight: 300;
+      line-height: 1.7;
+    }
+
+    /* ══ EL SABOR ESPECIAL ══ */
+    .s-sabor {
+      background: var(--bg-panel);
+      border-top: 1px solid var(--borde);
+      border-bottom: 1px solid var(--borde);
+      padding: 80px 24px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .sabor-halo {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px; height: 300px;
+      background: radial-gradient(ellipse, rgba(212,175,55,0.07) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .s-sabor-inner {
+      position: relative;
+      z-index: 1;
+      max-width: 660px;
+      margin: 0 auto;
+    }
+
+    .sabor-badge {
+      display: inline-block;
+      border: 1px solid var(--dorado-borde);
+      color: var(--dorado);
+      font-size: 0.68rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      padding: 6px 20px;
+      margin-bottom: 28px;
+    }
+
+    .sabor-titulo {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(1.7rem, 4vw, 2.8rem);
+      font-weight: 400;
+      color: var(--texto);
+      line-height: 1.15;
+      margin-bottom: 12px;
+    }
+
+    .sabor-subtitulo {
+      font-family: 'Dancing Script', cursive;
+      font-size: 1.3rem;
+      color: var(--dorado);
+      margin-bottom: 32px;
+      display: block;
+      opacity: 0.85;
+    }
+
+    .sabor-divider {
+      width: 40px; height: 1px;
+      background: var(--dorado-borde);
+      margin: 0 auto 28px;
+    }
+
+    .sabor-texto {
+      font-size: 0.92rem;
+      color: var(--mutado);
+      font-weight: 300;
+      line-height: 1.85;
+    }
+
+    /* ══ CTA ══ */
+    .s-cta {
+      text-align: center;
+      padding: 72px 24px;
+    }
+
+    .cta-label {
+      display: block;
+      font-size: 0.7rem;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--mutado);
+      margin-bottom: 28px;
+    }
+
+    .btn-wpp {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: transparent;
+      color: var(--dorado);
+      border: 1px solid var(--dorado-borde);
+      text-decoration: none;
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 500;
+      font-size: 0.82rem;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      padding: 16px 40px;
+      border-radius: 1px;
+      transition: all 0.3s ease;
+    }
+
+    .btn-wpp:hover {
+      background: var(--dorado);
+      color: var(--bg);
+      box-shadow: 0 0 32px rgba(212,175,55,0.22);
+    }
+
+    .btn-wpp svg { width: 18px; height: 18px; fill: currentColor; flex-shrink: 0; }
+
+    /* ══ FOOTER ══ */
+    footer {
+      background: radial-gradient(circle at center, #141210 0%, var(--bg) 100%);
+      border-top: 1px solid var(--borde);
+      text-align: center;
+      padding: 56px 24px 40px;
+    }
+
+    .footer-logo {
+      max-width: 150px;
+      margin: 0 auto 24px;
+      display: block;
+      filter: brightness(0) saturate(100%)
+              invert(78%) sepia(35%) saturate(600%)
+              hue-rotate(5deg) brightness(105%) opacity(0.35);
+    }
+
+    .footer-orn { color: var(--dorado); opacity: 0.3; font-size: 1rem; margin-bottom: 20px; }
+
+    .footer-ciudad {
+      font-size: 0.72rem;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--mutado);
+      margin-bottom: 12px;
+    }
+
+    .footer-wpp-link {
+      color: var(--dorado);
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 500;
+      letter-spacing: 1px;
+      transition: color 0.2s;
+    }
+
+    .footer-wpp-link:hover { color: var(--dorado-hover); }
+
+    .footer-sep { width: 28px; height: 1px; background: var(--borde); margin: 24px auto; }
+
+    .footer-legal { font-size: 0.68rem; color: var(--mutado); opacity: 0.4; line-height: 2; }
+
+    .footer-back {
+      display: inline-block;
+      margin-top: 28px;
+      font-size: 0.7rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--mutado);
+      text-decoration: none;
+      border-bottom: 1px solid var(--borde);
+      padding-bottom: 2px;
+      opacity: 0.5;
+      transition: opacity 0.2s, color 0.2s;
+    }
+
+    .footer-back:hover { opacity: 1; color: var(--dorado); }
+
+    /* ══ WPP FLOTANTE ══ */
+    .wpp-float {
+      position: fixed;
+      bottom: 26px; right: 26px;
+      width: 52px; height: 52px;
+      background: #25D366;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 20px rgba(37,211,102,0.35);
+      z-index: 999;
+      transition: transform 0.2s ease;
+    }
+
+    .wpp-float:hover { transform: scale(1.1); }
+    .wpp-float svg { width: 26px; height: 26px; fill: #fff; }
+
+    /* ══ BOTÓN FLOTANTE — Catálogo Público ══ */
+    .btn-float-catalogo {
+      position: fixed;
+      bottom: 26px; left: 26px;
+      display: flex; align-items: center; gap: 9px;
+      background: rgba(10,10,10,0.90);
+      border: 1px solid var(--dorado-borde);
+      color: var(--dorado);
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      text-decoration: none;
+      padding: 10px 18px; border-radius: 30px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 0 20px rgba(212,175,55,0.08), 0 4px 16px rgba(0,0,0,0.4);
+      transition: all 0.3s ease;
+      z-index: 998;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    .btn-float-catalogo:hover {
+      background: rgba(212,175,55,0.10);
+      border-color: var(--dorado);
+      box-shadow: 0 0 28px rgba(212,175,55,0.20), 0 4px 20px rgba(0,0,0,0.5);
+      transform: translateY(-2px);
+    }
+
+    .btn-float-catalogo svg {
+      width: 14px; height: 14px; fill: currentColor; flex-shrink: 0;
+    }
+
+    /* ══ FADE UP ══ */
+    .fade-up {
+      opacity: 0;
+      transform: translateY(32px);
+      transition: opacity 0.75s ease, transform 0.75s ease;
+    }
+
+    .fade-up.visible { opacity: 1; transform: translateY(0); }
+
+    /* ══ RESPONSIVE ══ */
+    @media (max-width: 720px) {
+      .s-quienes { grid-template-columns: 1fr; gap: 40px; }
+      .foto-sello { right: 8px; bottom: 8px; width: 72px; height: 72px; }
+      .pilares { grid-template-columns: 1fr; gap: 16px; }
+      .btn-float-catalogo { padding: 9px 14px; font-size: 0.68rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #grain-layer, #halo { animation: none; }
+      .fade-up { opacity: 1; transform: none; transition: none; }
+      .foto-marco::before { animation: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="grain-layer"></div>
+  <div id="halo"></div>
+  <canvas id="particle-canvas"></canvas>
+
+  <!-- ── HEADER ── -->
+  <header>
+    <img
+      src="JQLB0329.JPG"
+      alt="Sagrada Delicia · Repostería Fina"
+      class="header-logo"
+      onerror="this.style.display='none'; document.getElementById('logo-fallback').style.display='block';"
+    />
+    <div id="logo-fallback" style="display:none; font-family:'Playfair Display',serif; font-size:1.8rem; color:var(--dorado); letter-spacing:2px; margin-bottom:16px;">
+      Sagrada Delicia
+    </div>
+    <span id="hdr-eyebrow" class="header-eyebrow">Repostería Fina · Cali, Colombia</span>
+    <h1 id="hdr-titulo" class="header-titulo">Sobre Nosotras</h1>
+    <div class="header-divider">✦ ✦ ✦</div>
+    <p id="hdr-sub" class="header-sub">Madre e hija · Con amor desde el primer día</p>
+  </header>
+
+  <main>
+
+    <!-- ── QUIÉNES SOMOS ── -->
+    <section class="s-quienes">
+      <div class="foto-marco fade-up">
+        <img
+          id="foto-principal"
+          src="FOTO_LUZ_MARINA_PAOLA.jpg"
+          alt="Luz Marina y Paola – Sagrada Delicia"
+          class="foto-nosotras"
+          onerror="this.src='https://placehold.co/460x575/141414/d4af37?text=Sagrada+Delicia'"
+        />
+        <div class="foto-sello">
+          <span id="sello-txt" class="sello-txt">Repostería<br/>Fina</span>
+        </div>
+      </div>
+
+      <div class="texto-quienes fade-up">
+        <span id="q-eyebrow" class="txt-eyebrow">Nuestra historia</span>
+        <h2 id="q-titulo" class="txt-titulo">Hola, somos<br/><em>Luz Marina y Paola</em></h2>
+        <p id="q-p1" class="txt-body">
+          Madre e hija, amantes de la repostería. Llevamos muchos años trabajando juntas,
+          capacitándonos constantemente en las nuevas técnicas de decoración, recetas y
+          sabores que van a la vanguardia — para llevar siempre <strong>lo mejor a sus hogares</strong>.
+        </p>
+        <p id="q-p2" class="txt-body">
+          Nuestros postres y pasteles están hechos con los mejores ingredientes
+          y con el sabor casero que todos prefieren.
+        </p>
+        <span id="q-firma" class="firma">Luz Marina &amp; Paola ✦</span>
+      </div>
+    </section>
+
+    <div class="ornamento">· · · · ✦ · · · ·</div>
+
+    <!-- ── FILOSOFÍA ── -->
+    <section class="s-filosofia">
+      <div class="s-filosofia-header fade-up">
+        <span id="fil-eyebrow" class="sec-eyebrow">Lo que nos mueve</span>
+        <h2 id="fil-titulo" class="sec-titulo">"Cada pieza, una promesa"</h2>
+      </div>
+      <div class="pilares">
+        <div id="pilar-0" class="pilar fade-up" data-magnet>
+          <span class="pilar-icono">🌾</span>
+          <div class="pilar-nombre">Ingredientes de verdad</div>
+          <p class="pilar-desc">Sin atajos ni sustitutos. Todo lo que entra en nuestras preparaciones se siente en cada bocado.</p>
+        </div>
+        <div id="pilar-1" class="pilar fade-up" data-magnet>
+          <span class="pilar-icono">✦</span>
+          <div class="pilar-nombre">Técnica en evolución</div>
+          <p class="pilar-desc">Nos formamos continuamente para traerte lo más actual de la repostería sin perder la esencia artesanal.</p>
+        </div>
+        <div id="pilar-2" class="pilar fade-up" data-magnet>
+          <span class="pilar-icono">🏠</span>
+          <div class="pilar-nombre">Sabor de hogar</div>
+          <p class="pilar-desc">Ese recuerdo dulce que buscas cuando quieres compartir algo especial con quienes más quieres.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── EL SABOR ESPECIAL ── -->
+    <section class="s-sabor">
+      <div class="sabor-halo"></div>
+      <div class="s-sabor-inner fade-up">
+        <div id="sabor-badge" class="sabor-badge">Nuestra joya</div>
+        <h2 id="sabor-titulo" class="sabor-titulo">El Sabor Especial<br/>de la Casa</h2>
+        <span id="sabor-subtitulo" class="sabor-subtitulo">Torta Envinada Sagrada Delicia</span>
+        <div class="sabor-divider"></div>
+        <p id="sabor-texto" class="sabor-texto">
+          Una receta tradicional elevada al nivel gourmet. Horneada lentamente para lograr
+          una textura húmeda y suave, infusionada con licor fino y especias aromáticas
+          que realzan su sabor profundo y elegante. Perfecta para quienes disfrutan de los
+          placeres auténticos de la repostería artesanal.
+        </p>
+      </div>
+    </section>
+
+    <!-- ── CTA ── -->
+    <section class="s-cta fade-up">
+      <span id="cta-label" class="cta-label">¿Lista para pedir?</span>
+      <a id="cta-btn-wpp"
+         href="https://wa.me/573183110524?text=¡Hola%20Sagrada%20Delicia!%20✨%20Quiero%20hacer%20un%20pedido."
+         class="btn-wpp" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.126 1.535 5.858L0 24l6.335-1.512A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-5.006-1.371l-.36-.214-3.732.891.948-3.617-.235-.372A9.818 9.818 0 012.182 12C2.182 6.58 6.58 2.182 12 2.182S21.818 6.58 21.818 12 17.42 21.818 12 21.818z"/></svg>
+        <span id="cta-btn-txt">Escríbenos al WhatsApp</span>
+      </a>
+    </section>
+
+  </main>
+
+  <!-- ── FOOTER ── -->
+  <footer>
+    <img src="JQLB0329.JPG" alt="Sagrada Delicia" class="footer-logo" onerror="this.style.display='none'" />
+    <div class="footer-orn">✦</div>
+    <p id="footer-ciudad" class="footer-ciudad">Cali, Colombia</p>
+    <p style="font-size:0.82rem; color:var(--mutado); margin-bottom:8px;">Contáctanos vía WhatsApp:</p>
+    <a id="footer-wpp-link" href="https://wa.me/573183110524" class="footer-wpp-link" target="_blank" rel="noopener">+57 318 311 0524</a>
+    <div class="footer-sep"></div>
+    <a href="CATALOGO_PUBLICO.html" class="footer-back">← Volver al Catálogo</a>
+    <div class="footer-sep"></div>
+    <div id="footer-legal" class="footer-legal">
+      <p>© 2025 Sagrada Delicia. Todos los derechos reservados.</p>
+      <p>Diseñado por: Marto 🧠 · martowave@gmail.com</p>
+    </div>
+  </footer>
+
+  <!-- ── WPP FLOTANTE ── -->
+  <a id="wpp-float-link" href="https://wa.me/573183110524" class="wpp-float" target="_blank" rel="noopener" aria-label="WhatsApp">
+    <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.126 1.535 5.858L0 24l6.335-1.512A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-5.006-1.371l-.36-.214-3.732.891.948-3.617-.235-.372A9.818 9.818 0 012.182 12C2.182 6.58 6.58 2.182 12 2.182S21.818 6.58 21.818 12 17.42 21.818 12 21.818z"/></svg>
+  </a>
+
+  <!-- ── CATÁLOGO FLOTANTE ── -->
+  <a href="CATALOGO_PUBLICO.html" class="btn-float-catalogo" title="Ver Catálogo Público">
+    <svg viewBox="0 0 24 24"><path d="M21 6H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 14H3V8h18v12zM3 4h18v2H3z"/></svg>
+    Catálogo
+  </a>
+
+  <script>
+  (function() {
+
+    /* ══════════════════════════════════════════
+       1. HALO MAGNÉTICO — sigue cursor y touch
+    ══════════════════════════════════════════ */
+    const halo = document.getElementById('halo');
+    let haloX = window.innerWidth / 2;
+    let haloY = window.innerHeight * 0.3;
+    let targetX = haloX, targetY = haloY;
+
+    function updateHaloTarget(x, y) {
+      targetX = x;
+      targetY = y;
+    }
+
+    document.addEventListener('mousemove', e => updateHaloTarget(e.clientX, e.clientY));
+
+    document.addEventListener('touchmove', e => {
+      const t = e.touches[0];
+      updateHaloTarget(t.clientX, t.clientY);
+    }, { passive: true });
+
+    document.addEventListener('touchstart', e => {
+      const t = e.touches[0];
+      updateHaloTarget(t.clientX, t.clientY);
+    }, { passive: true });
+
+    function lerpHalo() {
+      haloX += (targetX - haloX) * 0.07;
+      haloY += (targetY - haloY) * 0.07;
+      halo.style.left = haloX + 'px';
+      halo.style.top  = haloY + 'px';
+      requestAnimationFrame(lerpHalo);
+    }
+    lerpHalo();
+
+
+    /* ══════════════════════════════════════════
+       2. PARTÍCULAS EN CANVAS — magnéticas
+    ══════════════════════════════════════════ */
+    const canvas = document.getElementById('particle-canvas');
+    const ctx    = canvas.getContext('2d');
+
+    let W = canvas.width  = window.innerWidth;
+    let H = canvas.height = window.innerHeight;
+
+    window.addEventListener('resize', () => {
+      W = canvas.width  = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    });
+
+    let mx = W / 2, my = H / 2;
+    document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+    document.addEventListener('touchmove', e => {
+      mx = e.touches[0].clientX;
+      my = e.touches[0].clientY;
+    }, { passive: true });
+    document.addEventListener('touchstart', e => {
+      mx = e.touches[0].clientX;
+      my = e.touches[0].clientY;
+    }, { passive: true });
+
+    const TOTAL = 55;
+    const ATTRACT_RADIUS = 180;
+    const ATTRACT_FORCE  = 0.012;
+    const REPEL_RADIUS   = 70;
+    const REPEL_FORCE    = 0.06;
+
+    const particles = Array.from({ length: TOTAL }, () => ({
+      x:    Math.random() * W,
+      y:    Math.random() * H,
+      vx:   (Math.random() - 0.5) * 0.4,
+      vy:   (Math.random() - 0.5) * 0.4,
+      r:    Math.random() * 1.6 + 0.4,
+      base: Math.random() * 0.5 + 0.2,
+      alpha: 0,
+      speed: Math.random() * 0.3 + 0.15,
+    }));
+
+    function drawParticles() {
+      ctx.clearRect(0, 0, W, H);
+
+      particles.forEach(p => {
+        const dx = mx - p.x;
+        const dy = my - p.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < REPEL_RADIUS) {
+          const force = (REPEL_RADIUS - dist) / REPEL_RADIUS * REPEL_FORCE;
+          p.vx -= (dx / dist) * force * 8;
+          p.vy -= (dy / dist) * force * 8;
+          p.alpha = Math.min(1, p.alpha + 0.08);
+        } else if (dist < ATTRACT_RADIUS) {
+          const t = 1 - dist / ATTRACT_RADIUS;
+          const force = t * ATTRACT_FORCE;
+          p.vx += (dx / dist) * force * 5;
+          p.vy += (dy / dist) * force * 5;
+          p.alpha = Math.min(p.base + t * 0.5, 0.9);
+        } else {
+          p.alpha += (p.base - p.alpha) * 0.03;
+        }
+
+        p.vx += (Math.random() - 0.5) * 0.02;
+        p.vy += (Math.random() - 0.5) * 0.02;
+        p.vx *= 0.96;
+        p.vy *= 0.96;
+
+        const spd = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+        if (spd > 2.5) { p.vx = (p.vx / spd) * 2.5; p.vy = (p.vy / spd) * 2.5; }
+
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < 0)  { p.x = 0;  p.vx *= -0.5; }
+        if (p.x > W)  { p.x = W;  p.vx *= -0.5; }
+        if (p.y < 0)  { p.y = 0;  p.vy *= -0.5; }
+        if (p.y > H)  { p.y = H;  p.vy *= -0.5; }
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(212,175,55,${Math.max(0, p.alpha)})`;
+        ctx.fill();
+      });
+
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const a = particles[i], b = particles[j];
+          const ddx = a.x - b.x, ddy = a.y - b.y;
+          const dd = Math.sqrt(ddx * ddx + ddy * ddy);
+          if (dd < 90) {
+            const adx = mx - a.x, ady = my - a.y;
+            const nearCursor = Math.sqrt(adx*adx + ady*ady) < ATTRACT_RADIUS;
+            if (nearCursor) {
+              ctx.beginPath();
+              ctx.moveTo(a.x, a.y);
+              ctx.lineTo(b.x, b.y);
+              ctx.strokeStyle = `rgba(212,175,55,${(1 - dd / 90) * 0.18})`;
+              ctx.lineWidth = 0.5;
+              ctx.stroke();
+            }
+          }
+        }
+      }
+
+      requestAnimationFrame(drawParticles);
+    }
+
+    drawParticles();
+
+
+    /* ══════════════════════════════════════════
+       3. MAGNETISMO EN TARJETAS (pilares)
+    ══════════════════════════════════════════ */
+    const magnets = document.querySelectorAll('[data-magnet]');
+
+    magnets.forEach(el => {
+      let animId = null;
+      let tx = 0, ty = 0, cx = 0, cy = 0;
+
+      function lerp(a, b, t) { return a + (b - a) * t; }
+
+      function animateMagnet() {
+        cx = lerp(cx, tx, 0.1);
+        cy = lerp(cy, ty, 0.1);
+        el.style.transform = `translate(${cx}px, ${cy}px)`;
+        animId = requestAnimationFrame(animateMagnet);
+      }
+
+      function onMove(clientX, clientY) {
+        const rect = el.getBoundingClientRect();
+        const ex = rect.left + rect.width  / 2;
+        const ey = rect.top  + rect.height / 2;
+        const dx = clientX - ex;
+        const dy = clientY - ey;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const maxDist = 140;
+
+        if (dist < maxDist) {
+          const pull = (1 - dist / maxDist);
+          tx = dx * pull * 0.35;
+          ty = dy * pull * 0.35;
+          el.style.borderColor = `rgba(212,175,55,${0.2 + pull * 0.5})`;
+          el.style.boxShadow   = `0 ${8 + pull * 14}px ${20 + pull * 20}px rgba(212,175,55,${0.04 + pull * 0.1})`;
+        } else {
+          tx = 0; ty = 0;
+          el.style.borderColor = '';
+          el.style.boxShadow   = '';
+        }
+      }
+
+      document.addEventListener('mousemove', e => onMove(e.clientX, e.clientY));
+
+      document.addEventListener('touchmove', e => {
+        onMove(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: true });
+
+      animId = requestAnimationFrame(animateMagnet);
+
+      el.addEventListener('mouseleave', () => { tx = 0; ty = 0; });
+    });
+
+
+    /* ══════════════════════════════════════════
+       4. FADE UP AL SCROLL
+    ══════════════════════════════════════════ */
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible');
+          observer.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.12 });
+
+    document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+  })();
+  </script>
+
+</body>
+</html>
