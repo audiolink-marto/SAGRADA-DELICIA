@@ -1,0 +1,2641 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sagrada Delicia — Catálogo & Historial V5.16</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📖</text></svg>">
+
+    <!-- ╔══════════════════════════════════════════════════════════════╗
+         ║  FIREBASE MODULE V2                                         ║
+         ║  onSnapshot  → escucha operaciones/taller en tiempo real   ║
+         ║  updateDoc   → anti-pisado por campo:                      ║
+         ║    DB_HISTORIAL   → guardarHistorialEnCloud                 ║
+         ║    DB_RECETAS     → guardarRecetasEnCloud (NUEVO)          ║
+         ║    CATALOGO_ACTIVO→ guardarCatalogoEnCloud (NUEVO)         ║
+         ║  publicarEnMenu   → updateDoc publico/menu (NUEVO)         ║
+         ╚══════════════════════════════════════════════════════════════╝ -->
+    <script type="module">
+        import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, updateDoc, onSnapshot }
+            from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey:            "AIzaSyAeAWVCyu_qUSVo11uToAgGKqSYhdU1ABI",
+            authDomain:        "sagrada-delicia-central.firebaseapp.com",
+            projectId:         "sagrada-delicia-central",
+            storageBucket:     "sagrada-delicia-central.firebasestorage.app",
+            messagingSenderId: "474340023357",
+            appId:             "1:474340023357:web:bd7a643fa77733eaaede54"
+        };
+
+        const app          = initializeApp(firebaseConfig);
+        const db           = getFirestore(app);
+        const docTallerRef = doc(db, "operaciones", "taller");
+        const docMenuRef   = doc(db, "publico",     "menu");
+        let unsubscribe    = null;
+
+        /* ── UI helpers ── */
+        function setBadge(estado, texto) {
+            const b = document.getElementById('badge-cloud-sync');
+            if (!b) return;
+            b.className = 'sync-' + estado;
+            b.innerHTML = texto;
+        }
+        function horaCorta(iso) {
+            try {
+                const d = new Date(iso);
+                return d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})
+                    + ' · ' + d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit'});
+            } catch(e){ return ''; }
+        }
+
+        window._mostrarToast = function(msg, tipo = 'info', dur = 3500) {
+            const cont = document.getElementById('toast-cloud');
+            if (!cont) return;
+            const el = document.createElement('div');
+            el.className = `toast-item t-${tipo}`;
+            el.textContent = msg;
+            cont.appendChild(el);
+            setTimeout(() => { el.classList.add('saliendo'); setTimeout(() => el.remove(), 400); }, dur);
+        };
+
+        function syncActivo() { return localStorage.getItem('sd_sync_activo') !== 'false'; }
+
+        /* ── LISTENER EN TIEMPO REAL ── */
+        function iniciarListenerTiempoReal() {
+            if (unsubscribe) return;
+            if (!syncActivo()) return;
+            setBadge('working', '<span class="dot-anim">☁️</span> Conectando...');
+
+            unsubscribe = onSnapshot(docTallerRef, (snap) => {
+                if (!snap.exists()) { setBadge('pending', '⚠️ Sin datos en nube'); return; }
+                const data = snap.data();
+                const ts   = data.ultimaActualizacion || new Date().toISOString();
+                setBadge('ok', '✅ En vivo · ' + horaCorta(ts));
+
+                if (data.CATALOGO_ACTIVO) {
+                    localStorage.setItem('sagrada_delicia_framework_v17', JSON.stringify(data.CATALOGO_ACTIVO));
+                }
+                if (data.DB_RECETAS && Array.isArray(data.DB_RECETAS)) {
+                    localStorage.setItem('sagrada_delicia_recetas_v17', JSON.stringify(data.DB_RECETAS));
+                }
+                if (data.DB_CATEGORIAS_RECETAS) {
+                    localStorage.setItem('sagrada_delicia_categorias_recetas_v17', JSON.stringify(data.DB_CATEGORIAS_RECETAS));
+                }
+                if (typeof window._onCloudUpdate === 'function') {
+                    window._onCloudUpdate(data);
+                }
+            }, (err) => {
+                console.error('onSnapshot error:', err);
+                setBadge('error', '❌ Error listener');
+                window._mostrarToast('❌ Error en listener Firebase', 'error', 5000);
+            });
+        }
+
+        function detenerListener() {
+            if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+        }
+
+        /* ── GUARDAR HISTORIAL ── */
+        window.guardarHistorialEnCloud = async function(historial) {
+            if (!syncActivo()) { setBadge('offline','🔕 Sync desactivado'); return; }
+            if (!navigator.onLine) { window._mostrarToast('💾 Local OK · Sin conexión','warn'); setBadge('offline','🔌 Sin red'); return; }
+            setBadge('working','<span class="dot-anim">☁️</span> Guardando historial...');
+            try {
+                await updateDoc(docTallerRef, { DB_HISTORIAL: historial, ultimaActualizacion: new Date().toISOString() });
+                window._mostrarToast('✅ Historial sincronizado','ok');
+            } catch(err) {
+                console.error(err); setBadge('error','❌ Error sync');
+                window._mostrarToast('❌ No se pudo guardar historial','error',5000);
+            }
+        };
+
+        /* ── GUARDAR RECETAS (campo DB_RECETAS en operaciones/taller) ── */
+        window.guardarRecetasEnCloud = async function(dbRecetas) {
+            if (!syncActivo()) { setBadge('offline','🔕 Sync desactivado'); return; }
+            if (!navigator.onLine) { window._mostrarToast('💾 Local OK · Sin red','warn'); return; }
+            setBadge('working','<span class="dot-anim">☁️</span> Guardando recetas...');
+            try {
+                await updateDoc(docTallerRef, { DB_RECETAS: dbRecetas, ultimaActualizacion: new Date().toISOString() });
+                window._mostrarToast('✅ Recetas sincronizadas con la nube','ok');
+            } catch(err) {
+                console.error(err); setBadge('error','❌ Error sync');
+                window._mostrarToast('❌ No se pudo guardar recetas','error',5000);
+            }
+        };
+
+        /* ── GUARDAR CATÁLOGO (campo CATALOGO_ACTIVO — para tamanios) ── */
+        window.guardarCatalogoEnCloud = async function(catalogo) {
+            if (!syncActivo()) { setBadge('offline','🔕 Sync desactivado'); return; }
+            if (!navigator.onLine) { window._mostrarToast('💾 Local OK · Sin red','warn'); return; }
+            setBadge('working','<span class="dot-anim">☁️</span> Guardando catálogo...');
+            try {
+                await updateDoc(docTallerRef, { CATALOGO_ACTIVO: catalogo, ultimaActualizacion: new Date().toISOString() });
+                window._mostrarToast('✅ Catálogo sincronizado','ok');
+            } catch(err) {
+                console.error(err); setBadge('error','❌ Error sync');
+                window._mostrarToast('❌ No se pudo guardar catálogo','error',5000);
+            }
+        };
+
+        /* ── PUBLICAR EN MENÚ PÚBLICO (publico/menu — campos específicos) ── */
+        window.publicarEnMenu = async function(campos) {
+            if (!navigator.onLine) { window._mostrarToast('⚠️ Sin conexión — no se pudo publicar','warn'); return; }
+            try {
+                await updateDoc(docMenuRef, { ...campos, ultimaActualizacion: new Date().toISOString() });
+                window._mostrarToast('📢 Publicado en menú público','ok');
+            } catch(err) {
+                console.error(err);
+                window._mostrarToast('❌ Error al publicar en menú público','error',5000);
+            }
+        };
+
+        /* ── SYNC MANUAL ── */
+        window.forzarSyncManual = function() {
+            if (!navigator.onLine) { window._mostrarToast('⚠️ Sin conexión','warn'); return; }
+            detenerListener();
+            setTimeout(iniciarListenerTiempoReal, 300);
+            window._mostrarToast('☁️ Reconectando listener en tiempo real...','info');
+        };
+
+        window._iniciarListener = iniciarListenerTiempoReal;
+        window._detenerListener = detenerListener;
+
+        window.addEventListener('online', () => {
+            if (!syncActivo()) return;
+            window._mostrarToast('🌐 Conexión restaurada','info');
+            if (!unsubscribe) iniciarListenerTiempoReal();
+        });
+        window.addEventListener('offline', () => {
+            setBadge('offline','🔌 Sin red — modo local');
+            window._mostrarToast('⚠️ Sin conexión','warn',5000);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (navigator.onLine && syncActivo()) iniciarListenerTiempoReal();
+            else if (!navigator.onLine) setBadge('offline','🔌 Sin red — modo local');
+        });
+    </script>
+
+    <style>
+        /* ══════════════════════════════════════════
+           PALETA NOCTURNA — ecosistema SD
+           ══════════════════════════════════════════ */
+        :root {
+            --bg-principal:      #0b111e;
+            --bg-card:           #151f32;
+            --bg-input:          #1e293b;
+            --border-color:      #2e3d56;
+            --color-texto:       #cbd5e1;
+            --color-titulos:     #f8fafc;
+            --color-subtitulos:  #94a3b8;
+            --accent-primario:   #7dd3fc;
+            --accent-secundario: #c084fc;
+            --accent-admin:      #fde047;
+            --accent-hover:      #38bdf8;
+            --accent-success:    #22c55e;
+            --color-alerta-critica: #fca5a5;
+            --color-alerta-media:   #fde047;
+            --color-alerta-ok:      #86efac;
+            --font-display: 'Georgia', serif;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: var(--bg-principal);
+            color: var(--color-texto);
+            padding: 28px 20px;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; line-height: 1.5;
+        }
+
+        /* ── Header ── */
+        header {
+            width: 100%; max-width: 1280px;
+            margin-bottom: 28px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 18px;
+            display: flex; flex-direction: column; gap: 14px;
+        }
+        .header-top {
+            display: flex; justify-content: space-between;
+            align-items: center; flex-wrap: wrap; gap: 10px;
+        }
+        .header-brand { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        h1 {
+            color: var(--color-titulos); font-size: 1.4rem;
+            font-weight: 700; letter-spacing: 1.5px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .chip-modulo {
+            background: rgba(192,132,252,0.12); color: var(--accent-secundario);
+            border: 1px solid rgba(192,132,252,0.3); border-radius: 20px;
+            font-size: 0.7rem; font-weight: 700; padding: 3px 10px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+
+        /* ── Botones ── */
+        .btn {
+            padding: 9px 16px; border-radius: 8px; font-size: 0.83rem;
+            font-weight: 600; cursor: pointer; border: 1px solid transparent;
+            transition: all 0.22s ease;
+            display: inline-flex; align-items: center; gap: 6px;
+            justify-content: center; text-decoration: none; background: none;
+            color: var(--color-texto);
+        }
+        .btn-primario  { background: var(--accent-primario); color: #0b111e; border-color: var(--accent-primario); }
+        .btn-primario:hover { background: var(--accent-hover); box-shadow: 0 0 14px rgba(125,211,252,0.3); transform: translateY(-1px); }
+        .btn-secundario { background: rgba(192,132,252,0.12); color: var(--accent-secundario); border: 1px solid var(--accent-secundario); }
+        .btn-secundario:hover { background: var(--accent-secundario); color: #0b111e; transform: translateY(-1px); }
+        .btn-success { background: rgba(34,197,94,0.12); color: var(--accent-success); border: 1px solid var(--accent-success); }
+        .btn-success:hover { background: var(--accent-success); color: #0b111e; }
+        .btn-danger { background: rgba(252,165,165,0.08); color: var(--color-alerta-critica); border: 1px solid var(--color-alerta-critica); }
+        .btn-danger:hover { background: var(--color-alerta-critica); color: #0b111e; }
+        .btn-link {
+            background: rgba(125,211,252,0.06); color: var(--accent-primario);
+            border: 1px solid rgba(125,211,252,0.25); padding: 6px 12px; font-size: 0.77rem;
+        }
+        .btn-link:hover { background: rgba(125,211,252,0.14); }
+
+        /* ── Navegación ecosistema ── */
+        .nav-ecosistema { display: flex; gap: 6px; flex-wrap: wrap; }
+        .btn-nav {
+            background: rgba(30,41,59,0.5); color: var(--color-subtitulos);
+            border: 1px solid var(--border-color); padding: 7px 11px; font-size: 0.76rem;
+            border-radius: 8px; cursor: pointer;
+        }
+        .btn-nav:hover { background: rgba(125,211,252,0.08); color: var(--color-titulos); border-color: rgba(125,211,252,0.3); }
+        .btn-nav.activo { background: rgba(192,132,252,0.1); color: var(--accent-secundario); border-color: var(--accent-secundario); }
+
+        /* ── Controles sync ── */
+        .ctrl-sync { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+        /* ── Contenedor principal ── */
+        .contenedor { width: 100%; max-width: 1280px; display: flex; flex-direction: column; gap: 20px; }
+
+        /* ── Panel ── */
+        .panel {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 26px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+            animation: fadeIn 0.35s ease-out;
+        }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+        h2 {
+            color: var(--color-titulos); font-size: 1.1rem; font-weight: 600;
+            margin-bottom: 20px; border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+        }
+
+        /* ── Inputs ── */
+        input[type="text"], input[type="file"], select, textarea {
+            background: var(--bg-input); border: 1px solid var(--border-color);
+            color: var(--color-texto); padding: 9px 12px; border-radius: 8px;
+            font-size: 0.87rem; outline: none; width: 100%;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            font-family: inherit;
+        }
+        input[type="text"]:focus, select:focus, textarea:focus {
+            border-color: var(--accent-primario);
+            box-shadow: 0 0 0 3px rgba(125,211,252,0.1);
+        }
+        label {
+            font-size: 0.75rem; font-weight: 600; color: var(--color-subtitulos);
+            text-transform: uppercase; letter-spacing: 0.4px; display: block; margin-bottom: 6px;
+        }
+        .grupo-formulario { display: flex; flex-direction: column; }
+
+        /* ── Separador de grupo en catálogo ── */
+        .grupo-separador {
+            grid-column: 1 / -1;
+            display: flex; align-items: center; gap: 12px;
+            margin: 24px 0 4px;
+            font-size: 0.7rem; font-weight: 700; letter-spacing: 1.5px;
+            text-transform: uppercase; color: var(--accent-secundario);
+        }
+        .grupo-separador::after {
+            content: ''; flex: 1; height: 1px;
+            background: linear-gradient(to right, var(--accent-secundario), transparent);
+            opacity: 0.3;
+        }
+
+        /* ══════════════════════════════════════════
+           TABS
+           ══════════════════════════════════════════ */
+        .tabs-nav {
+            display: flex; gap: 4px;
+            background: rgba(0,0,0,0.25);
+            border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 5px;
+            flex-wrap: wrap;
+        }
+        .tab-btn {
+            flex: 1; min-width: 140px;
+            background: none; border: none; border-radius: 7px;
+            color: var(--color-subtitulos); font-size: 0.83rem; font-weight: 600;
+            padding: 10px 16px; cursor: pointer;
+            transition: all 0.22s ease;
+            display: flex; align-items: center; justify-content: center; gap: 7px;
+        }
+        .tab-btn:hover { color: var(--color-titulos); background: rgba(125,211,252,0.06); }
+        .tab-btn.activo {
+            background: var(--bg-card);
+            color: var(--accent-secundario);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .tab-section { display: none; }
+        .tab-section.activo { display: block; }
+
+        /* ══════════════════════════════════════════
+           TARJETAS CATÁLOGO — LISTA HORIZONTAL
+           ══════════════════════════════════════════ */
+        .tarjeta-comercial-menu {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 10px; overflow: hidden;
+            display: flex; align-items: center; gap: 14px;
+            padding: 10px 14px;
+            transition: border-color 0.22s, background 0.22s;
+        }
+        .tarjeta-comercial-menu:hover { border-color: var(--accent-primario); background: rgba(21,31,50,0.95); }
+        .tarjeta-comercial-img {
+            width: 76px; height: 76px; object-fit: cover; flex-shrink: 0;
+            border-radius: 8px; border: 1px solid var(--border-color);
+            background: rgba(30,41,59,0.5);
+        }
+        .video-thumb-wrapper {
+            position: relative; width: 76px; height: 76px; flex-shrink: 0;
+            border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color);
+        }
+        .video-thumb-wrapper video {
+            width: 100%; height: 100%; object-fit: cover; display: block;
+        }
+        .btn-sound {
+            position: absolute; bottom: 4px; right: 4px;
+            background: rgba(0,0,0,0.55); border: none; border-radius: 50%;
+            width: 22px; height: 22px; font-size: 0.65rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; backdrop-filter: blur(4px); z-index: 10;
+            transition: background 0.2s;
+        }
+        .btn-sound:hover { background: rgba(0,0,0,0.8); }
+        .tarjeta-comercial-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+        .tarjeta-comercial-acciones { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+
+        /* ══════════════════════════════════════════
+        /* ══════════════════════════════════════════
+           HISTORIAL — LISTA HORIZONTAL COMPACTA (V5.1)
+           Mismo lenguaje visual que .tarjeta-comercial-menu
+           ══════════════════════════════════════════ */
+        .tarjeta-historial-h {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 10px; overflow: hidden;
+            display: flex; align-items: center; gap: 14px;
+            padding: 10px 14px;
+            transition: border-color 0.22s, background 0.22s, opacity 0.22s;
+        }
+        .tarjeta-historial-h:hover { border-color: var(--accent-primario); background: rgba(21,31,50,0.95); }
+        .tarjeta-historial-h.oculta { opacity: 0.45; filter: grayscale(0.4); }
+        .tarjeta-historial-img-h {
+            width: 76px; height: 76px; object-fit: cover; flex-shrink: 0;
+            border-radius: 8px; border: 1px solid var(--border-color);
+            background: rgba(30,41,59,0.5);
+        }
+        .tarjeta-historial-cuerpo-h { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+        .tarjeta-historial-badge-linea {
+            font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--accent-secundario);
+        }
+        .tarjeta-historial-nombre-h {
+            font-family: var(--font-display); font-size: 0.95rem; color: var(--color-titulos);
+            line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .tarjeta-historial-cliente-h { font-size: 0.76rem; color: var(--color-subtitulos); }
+        .tarjeta-historial-desc-h {
+            font-size: 0.78rem; color: var(--color-texto); font-style: italic;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .tarjeta-historial-acciones-h {
+            display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0;
+        }
+
+        /* ══════════════════════════════════════════
+           BUSCADOR + FILTROS GLOBALES (V5.1)
+           Opera en tiempo real sobre catálogo e historial
+           ══════════════════════════════════════════ */
+        .buscador-wrap {
+            display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+            margin-bottom: 18px;
+        }
+        .buscador-input {
+            flex: 1; min-width: 220px;
+            background: rgba(30,41,59,0.5); border: 1px solid var(--border-color);
+            border-radius: 20px; color: var(--color-texto);
+            padding: 8px 16px; font-size: 0.85rem;
+        }
+        .buscador-input:focus { outline: none; border-color: var(--accent-primario); }
+        .buscador-input::placeholder { color: var(--color-subtitulos); }
+        .buscador-filtros { display: flex; gap: 8px; flex-wrap: wrap; }
+        .buscador-sin-resultados {
+            text-align: center; padding: 30px 20px; color: var(--color-subtitulos); font-style: italic;
+        }
+
+        /* ── Badge publicado (compartido historial + recetas) ── */
+        .badge-publicado {
+            font-size: 0.68rem; font-weight: 700; padding: 3px 9px;
+            border-radius: 20px; cursor: pointer; transition: all 0.2s; border: none;
+        }
+        .badge-publicado.on  { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+        .badge-publicado.off { background: rgba(100,116,139,0.15); color: var(--color-subtitulos); border: 1px solid var(--border-color); }
+        .card-oculta { opacity: 0.45; filter: grayscale(0.4); }
+
+        /* ══════════════════════════════════════════
+           CARDS RECETAS
+           ══════════════════════════════════════════ */
+        .card-receta {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 4px; overflow: hidden; display: flex; flex-direction: column;
+            transition: transform 0.22s, border-color 0.22s, box-shadow 0.22s;
+        }
+        .card-receta:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent-secundario);
+            box-shadow: 0 6px 22px rgba(0,0,0,0.35);
+        }
+        .card-receta-img {
+            width: 100%; height: 130px; object-fit: cover; display: block;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .card-receta-body { padding: 14px 14px 12px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+        .card-receta-cat {
+            font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.08em; padding: 2px 7px; border-radius: 10px;
+            display: inline-block; width: fit-content;
+        }
+        .card-receta-nombre { font-family: var(--font-display); font-size: 0.9rem; color: var(--color-titulos); line-height: 1.3; }
+        .card-receta-origen { font-size: 0.68rem; color: var(--accent-primario); font-weight: 600; letter-spacing: 0.3px; }
+        .card-receta-desc { font-size: 0.76rem; color: var(--color-texto); font-style: italic; flex: 1; line-height: 1.45; }
+        .card-receta-footer {
+            display: flex; gap: 8px; align-items: center; justify-content: space-between;
+            margin-top: 6px; border-top: 1px solid var(--border-color); padding-top: 8px;
+        }
+
+        /* ── Filtros recetas ── */
+        .filtros-recetas {
+            display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;
+            align-items: center;
+        }
+        .filtro-chip {
+            background: rgba(30,41,59,0.5); border: 1px solid var(--border-color);
+            color: var(--color-subtitulos); border-radius: 20px;
+            font-size: 0.75rem; font-weight: 600; padding: 5px 12px;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .filtro-chip:hover, .filtro-chip.activo {
+            background: rgba(192,132,252,0.12); color: var(--accent-secundario);
+            border-color: var(--accent-secundario);
+        }
+
+        /* ══════════════════════════════════════════
+           PANEL CONFIGURADOR
+           ══════════════════════════════════════════ */
+        .cfg-selector-wrap {
+            display: flex; align-items: center; gap: 12px;
+            background: rgba(0,0,0,0.2); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 14px 18px; margin-bottom: 24px; flex-wrap: wrap;
+        }
+        .cfg-selector-label { font-size: 0.75rem; font-weight: 700; color: var(--color-subtitulos); text-transform: uppercase; white-space: nowrap; }
+
+        .cfg-seccion {
+            margin-bottom: 24px;
+            background: rgba(0,0,0,0.15); border: 1px solid var(--border-color);
+            border-radius: 10px; overflow: hidden;
+        }
+        .cfg-seccion-header {
+            padding: 12px 16px;
+            background: rgba(0,0,0,0.2);
+            border-bottom: 1px solid var(--border-color);
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+        }
+        .cfg-seccion-titulo {
+            font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px;
+        }
+        .cfg-seccion-body { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+        /* ── Editor de chips (tamaños) ── */
+        .chip-editor-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 8px; align-items: center;
+            background: rgba(11,17,30,0.4);
+            border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 10px 12px;
+            transition: border-color 0.2s;
+        }
+        .chip-editor-row:hover { border-color: rgba(192,132,252,0.35); }
+        .chip-editor-row input[type="text"] {
+            padding: 7px 10px; font-size: 0.83rem;
+        }
+        .chip-input-label { border-color: rgba(192,132,252,0.3); }
+        .chip-input-label:focus { border-color: var(--accent-secundario) !important; box-shadow: 0 0 0 3px rgba(192,132,252,0.1) !important; }
+        .chip-input-nota { border-color: rgba(125,211,252,0.2); }
+        .chip-input-nota:focus { border-color: var(--accent-primario) !important; }
+        .chip-campo-hint {
+            font-size: 0.63rem; color: var(--color-subtitulos);
+            display: block; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.3px;
+        }
+
+        /* ── Tags heredados (read-only) ── */
+        .tags-heredados { display: flex; flex-wrap: wrap; gap: 8px; }
+        .tag-heredado {
+            font-size: 0.75rem; font-weight: 600; padding: 4px 10px;
+            border-radius: 20px; border: 1px solid;
+            opacity: 0.85;
+        }
+        .tag-sabor      { color: var(--accent-admin);      border-color: rgba(253,224,71,0.3);  background: rgba(253,224,71,0.06); }
+        .tag-relleno    { color: var(--accent-secundario); border-color: rgba(192,132,252,0.3); background: rgba(192,132,252,0.06); }
+        .tag-decoracion { color: var(--accent-primario);   border-color: rgba(125,211,252,0.3); background: rgba(125,211,252,0.06); }
+
+        .heredado-vacio {
+            font-size: 0.8rem; color: var(--color-subtitulos);
+            font-style: italic; padding: 8px 0;
+        }
+
+        /* ── Info badge heredado ── */
+        .badge-heredado {
+            font-size: 0.63rem; font-weight: 700; padding: 2px 8px;
+            border-radius: 10px; color: var(--color-subtitulos);
+            border: 1px solid var(--border-color);
+            background: rgba(148,163,184,0.08);
+        }
+
+        /* ══════════════════════════════════════════
+           SEPARADOR SECCIONES
+           ══════════════════════════════════════════ */
+        .seccion-separador {
+            margin: 40px 0 28px;
+            border-top: 1px solid var(--border-color);
+            padding-top: 32px;
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 12px;
+        }
+
+        /* ── Formulario historial ── */
+        .form-historial {
+            display: none;
+            background: rgba(0,0,0,0.25); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 24px; margin-bottom: 28px;
+        }
+        .form-historial.abierto { display: block; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+        /* ── Sistema Sync Firebase ── */
+        #badge-cloud-sync {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 12px; border-radius: 20px; font-size: 0.72rem;
+            font-weight: 700; letter-spacing: 0.3px; border: 1px solid;
+            transition: all 0.4s ease; cursor: default; white-space: nowrap;
+        }
+        #badge-cloud-sync.sync-ok      { color: var(--accent-success);       border-color: var(--accent-success);       background: rgba(34,197,94,0.08); }
+        #badge-cloud-sync.sync-pending { color: var(--accent-admin);          border-color: var(--accent-admin);          background: rgba(253,224,71,0.08); }
+        #badge-cloud-sync.sync-error   { color: var(--color-alerta-critica);  border-color: var(--color-alerta-critica);  background: rgba(252,165,165,0.08); }
+        #badge-cloud-sync.sync-offline { color: var(--color-subtitulos);      border-color: var(--border-color);          background: rgba(148,163,184,0.08); }
+        #badge-cloud-sync.sync-working { color: var(--accent-primario);       border-color: var(--accent-primario);       background: rgba(125,211,252,0.08); }
+        @keyframes pulse-sync { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        #badge-cloud-sync.sync-working .dot-anim { animation: pulse-sync 1s infinite; }
+
+        /* ── Toast ── */
+        #toast-cloud {
+            position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+            display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+        }
+        .toast-item {
+            padding: 10px 16px; border-radius: 10px; font-size: 0.81rem;
+            font-weight: 600; border: 1px solid; backdrop-filter: blur(8px);
+            animation: toast-in 0.28s ease; pointer-events: none;
+            max-width: 320px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+        .toast-item.t-ok    { color:var(--accent-success);       border-color:var(--accent-success);       background:rgba(10,25,15,0.94); }
+        .toast-item.t-warn  { color:var(--accent-admin);         border-color:var(--accent-admin);         background:rgba(22,18,4,0.94); }
+        .toast-item.t-error { color:var(--color-alerta-critica); border-color:var(--color-alerta-critica); background:rgba(28,8,8,0.94); }
+        .toast-item.t-info  { color:var(--accent-primario);      border-color:var(--accent-primario);      background:rgba(4,16,28,0.94); }
+        .toast-item.saliendo { animation: toast-out 0.4s ease forwards; }
+        @keyframes toast-in  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes toast-out { from{opacity:1;transform:translateY(0)} to{opacity:0;transform:translateY(10px)} }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            body { padding: 12px 10px; }
+            h1 { font-size: 1.15rem; }
+            .panel { padding: 14px 12px; }
+            .form-grid { grid-template-columns: 1fr; }
+            .nav-ecosistema { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+            .btn-nav { padding: 8px 6px; font-size: 0.72rem; justify-content: center; }
+            .chip-editor-row { grid-template-columns: 1fr auto; }
+            .chip-editor-row input:nth-child(2) { grid-column: 1; }
+        }
+        @media (max-width: 480px) {
+            .nav-ecosistema { grid-template-columns: 1fr 1fr; }
+            .header-top { flex-direction: column; align-items: flex-start; }
+            .tab-btn { min-width: 100px; font-size: 0.75rem; }
+        }
+
+        /* ══ TUTORIAL SYSTEM ══ */
+        #tutorial-overlay { position:fixed; inset:0; z-index:9990; background:rgba(5,12,28,0.86); pointer-events:all; transition:opacity 0.3s; }
+        #tutorial-overlay.oculto { display:none !important; }
+        #tutorial-spotlight-ring { position:fixed; z-index:9995; border-radius:12px; box-shadow:0 0 0 3px #10b981,0 0 0 7px rgba(16,185,129,0.18),0 0 28px rgba(16,185,129,0.10); pointer-events:none; transition:top 0.35s cubic-bezier(0.4,0,0.2,1),left 0.35s cubic-bezier(0.4,0,0.2,1),width 0.35s cubic-bezier(0.4,0,0.2,1),height 0.35s cubic-bezier(0.4,0,0.2,1); }
+        #tutorial-card { position:fixed; z-index:10000; background:var(--bg-card); border:1px solid #10b981; border-radius:14px; padding:22px 22px 16px; width:316px; box-shadow:0 20px 60px rgba(0,0,0,0.75),0 0 0 1px rgba(16,185,129,0.07); }
+        #tutorial-card.animando { animation:tut-fade 0.26s ease; }
+        @keyframes tut-fade { from{opacity:0;transform:translateY(7px)} to{opacity:1;transform:translateY(0)} }
+        .tut-progress-bar { display:flex; gap:3px; margin-bottom:16px; }
+        .tut-pip { flex:1; height:3px; border-radius:3px; background:var(--border-color); transition:background 0.3s; }
+        .tut-pip.activo { background:#10b981; }
+        .tut-pip.hecho  { background:rgba(16,185,129,0.32); }
+        #tutorial-emoji { font-size:1.55rem; margin-bottom:8px; line-height:1; }
+        #tutorial-titulo { color:var(--color-titulos); font-size:0.98rem; font-weight:700; margin-bottom:9px; }
+        #tutorial-texto { color:var(--color-texto); font-size:0.81rem; line-height:1.65; margin-bottom:16px; }
+        .tut-nav-row { display:flex; gap:6px; align-items:center; justify-content:space-between; }
+        .tut-step-label { font-size:0.67rem; color:var(--color-subtitulos); font-weight:600; white-space:nowrap; }
+        .btn-tut-ant { background:none; border:1px solid var(--border-color); color:var(--color-subtitulos); padding:7px 11px; border-radius:8px; font-size:0.76rem; cursor:pointer; transition:all 0.18s; }
+        .btn-tut-ant:hover { border-color:#10b981; color:#10b981; }
+        .btn-tut-sig { background:#10b981; color:#0b111e; border:none; padding:7px 14px; border-radius:8px; font-size:0.76rem; font-weight:700; cursor:pointer; transition:all 0.18s; white-space:nowrap; }
+        .btn-tut-sig:hover { filter:brightness(1.12); transform:translateY(-1px); }
+        .btn-tut-saltar { background:none; border:none; color:var(--color-subtitulos); font-size:0.7rem; cursor:pointer; padding:4px 5px; transition:color 0.18s; white-space:nowrap; }
+        .btn-tut-saltar:hover { color:var(--color-alerta-critica); }
+        .btn-guia { background:rgba(16,185,129,0.07); color:#10b981; border:1px solid rgba(16,185,129,0.35); padding:8px 13px; border-radius:8px; font-size:0.78rem; font-weight:600; cursor:pointer; transition:all 0.2s; display:inline-flex; align-items:center; gap:5px; }
+        .btn-guia:hover { background:rgba(16,185,129,0.14); box-shadow:0 0 10px rgba(16,185,129,0.12); }
+    </style>
+</head>
+<body>
+
+<div id="toast-cloud"></div>
+
+<!-- ══ TUTORIAL OVERLAY ══ -->
+<div id="tutorial-overlay" class="oculto">
+    <div id="tutorial-spotlight-ring" style="display:none;"></div>
+    <div id="tutorial-card">
+        <div class="tut-progress-bar" id="tut-progress-bar"></div>
+        <div id="tutorial-emoji"></div>
+        <div id="tutorial-titulo"></div>
+        <p id="tutorial-texto"></p>
+        <div class="tut-nav-row">
+            <button class="btn-tut-ant" id="btn-tut-ant" onclick="tutorialAnterior()">← Ant.</button>
+            <span class="tut-step-label" id="tut-step-label"></span>
+            <button class="btn-tut-saltar" onclick="tutorialSaltar()">✕ Saltar</button>
+            <button class="btn-tut-sig" id="btn-tut-sig" onclick="tutorialSiguiente()">Siguiente →</button>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════
+     HEADER
+════════════════════════════════════ -->
+<header>
+    <div class="header-top">
+        <div class="header-brand">
+            <h1>🧁 SAGRADA DELICIA</h1>
+            <span class="chip-modulo">Catálogo & Historial V5.16</span>
+            <span id="badge-cloud-sync" class="sync-offline" title="Listener en tiempo real">⚫ Conectando...</span>
+        </div>
+        <div class="ctrl-sync">
+            <button class="btn-guia" onclick="iniciarTutorial(true)" title="Relanzar guía interactiva">🎓 Guía</button>
+            <button class="btn" id="btn-republicar-menu"
+                style="border-color:#10b981;color:#10b981;background:rgba(16,185,129,0.1);padding:8px 18px;font-weight:600;"
+                onclick="republicarMenuPublico()" title="Publicar configurador actual en el menú público">🌐 Republicar Menú Público</button>
+        </div>
+    </div>
+
+    <nav class="nav-ecosistema" aria-label="Páginas del sistema">
+        <a class="btn btn-nav" onclick="irA('cotizador')">📊 Cotizador</a>
+        <a class="btn btn-nav" onclick="irA('recetario')">🍳 Recetario</a>
+        <a class="btn btn-nav" onclick="irA('insumos')">🍎 Insumos</a>
+        <a class="btn btn-nav" onclick="irA('lineas')">📦 Líneas</a>
+        <a class="btn btn-nav" onclick="irA('costoLinea')">💰 Costo de Línea</a>
+        <a class="btn btn-nav" onclick="irA('pedidos')">📋 Pedidos</a>
+        
+        <a class="btn btn-nav activo" aria-current="page">📖 Catálogo</a>
+        <a class="btn btn-nav" onclick="irA('sobreNosotros')">💌 Sobre Nosotros</a>
+    </nav>
+</header>
+
+<!-- ════════════════════════════════════
+     CONTENIDO PRINCIPAL
+════════════════════════════════════ -->
+<main class="contenedor">
+
+    <!-- TABS -->
+    <div class="tabs-nav">
+        <button class="tab-btn activo" onclick="cambiarTab('portafolio')" id="tab-btn-portafolio">
+            📖 Portafolio & Historial
+        </button>
+        <button class="tab-btn" onclick="cambiarTab('recetas')" id="tab-btn-recetas">
+            🍰 Recetas
+        </button>
+        <button class="tab-btn" onclick="cambiarTab('configurador')" id="tab-btn-configurador">
+            ⚙️ Configurador Público
+        </button>
+        <button class="tab-btn" onclick="cambiarTab('menu-selectivo')" id="tab-btn-menu-selectivo">
+            🍽 Menú Selectivo
+        </button>
+        <button class="tab-btn" onclick="cambiarTab('mini-treats')" id="tab-btn-mini-treats">
+            🍬 Mini Treats
+        </button>
+
+    </div>
+
+    <!-- ════════════════════════════════════
+         TAB 1 — PORTAFOLIO & HISTORIAL
+    ════════════════════════════════════ -->
+    <section id="tab-portafolio" class="tab-section activo panel">
+        <h2>
+            📖 Portafolio Comercial
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn btn-link" onclick="exportarMenuCompletoPDF(false)" style="font-size:0.77rem;">🖨️ PDF Todos</button>
+                <button class="btn btn-secundario" onclick="exportarMenuCompletoPDF(true)" style="padding:8px 14px;">🖨️ PDF Publicados</button>
+            </div>
+        </h2>
+        <p style="color:var(--color-subtitulos); font-size:0.88rem; margin-bottom:16px;">
+            Portafolio de líneas activas sincronizado en tiempo real desde la nube.
+        </p>
+
+        <!-- BUSCADOR + FILTROS GLOBALES V5.1 -->
+        <div class="buscador-wrap">
+            <input class="buscador-input" type="search" id="buscador-global"
+                placeholder="🔍 Buscar producto o trabajo..."
+                oninput="aplicarBuscador()">
+            <div class="buscador-filtros">
+                <button class="filtro-chip activo" id="fbtn-todos"      onclick="activarFiltroCatalogo('todos',this)">Todos</button>
+                <button class="filtro-chip"         id="fbtn-publicados" onclick="activarFiltroCatalogo('publicados',this)">🟢 Publicados</button>
+                <button class="filtro-chip"         id="fbtn-ocultos"   onclick="activarFiltroCatalogo('ocultos',this)">⚫ Ocultos</button>
+
+            </div>
+        </div>
+
+        <div id="grid-catalogo" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(380px, 1fr)); gap:10px;"></div>
+
+        <!-- SEPARADOR HISTORIAL -->
+        <div class="seccion-separador">
+            <div>
+                <h3 style="color:var(--color-titulos); font-family:var(--font-display); font-size:1.25rem; margin:0;">
+                    📸 Historial de Trabajos
+                </h3>
+                <p style="color:var(--color-subtitulos); font-size:0.82rem; margin:4px 0 0;">
+                    Galería de trabajos entregados · Los publicados aparecen en el portafolio público.
+                </p>
+            </div>
+            <button class="btn btn-primario" onclick="toggleFormHistorial()" id="btn-abrir-historial">
+                ＋ Añadir Trabajo
+            </button>
+        </div>
+
+        <!-- FORMULARIO NUEVO TRABAJO -->
+        <div id="contenedor-form-historial" class="form-historial">
+            <h4 style="color:var(--color-titulos); margin:0 0 18px; font-size:1rem;">
+                Nueva entrada — Historial de Trabajos
+            </h4>
+            <div class="form-grid">
+                <div class="grupo-formulario">
+                    <label>Nombre / Título del Trabajo</label>
+                    <input type="text" id="hist-nombre" placeholder="Ej: Torta de Cumpleaños Rústica">
+                </div>
+                <div class="grupo-formulario">
+                    <label>Cliente</label>
+                    <input type="text" id="hist-cliente" placeholder="Nombre del cliente (opcional)">
+                </div>
+                <div class="grupo-formulario">
+                    <label>Línea de Producto</label>
+                    <select id="hist-linea">
+                        <option value="">— seleccionar —</option>
+                    </select>
+                </div>
+                <div class="grupo-formulario">
+                    <label>Descripción del Producto</label>
+                    <textarea id="hist-descripcion" rows="3"
+                        placeholder="Características particulares, motivo, locación, detalles del diseño..."
+                        style="resize:vertical;"></textarea>
+                </div>
+                <div class="grupo-formulario" style="grid-column:1/-1;">
+                    <label>Imagen del Trabajo</label>
+                    <input type="file" id="hist-imagen-input" accept="image/*"
+                        onchange="subirImagenHistorialCloudinary(this)">
+                    <img id="hist-imagen-preview" src="" alt=""
+                        style="display:none; max-height:160px; max-width:100%; margin-top:10px; border-radius:8px; object-fit:cover;">
+                    <span id="hist-imagen-status"
+                        style="font-size:0.75rem; color:var(--color-subtitulos); display:block; margin-top:4px;"></span>
+                    <input type="hidden" id="hist-imagen-url">
+                </div>
+            </div>
+            <div style="display:flex; gap:10px; margin-top:16px; justify-content:flex-end;">
+                <button class="btn" onclick="toggleFormHistorial()"
+                    style="border-color:var(--border-color); color:var(--color-subtitulos);">Cancelar</button>
+                <button class="btn btn-primario" onclick="agregarEntradaHistorial()">💾 Guardar Trabajo</button>
+            </div>
+        </div>
+
+        <div id="grid-historial" style="display:flex; flex-direction:column; gap:8px;"></div>
+    </section>
+
+    <!-- ════════════════════════════════════
+         TAB 2 — RECETAS
+    ════════════════════════════════════ -->
+    <section id="tab-recetas" class="tab-section panel" style="display:none;">
+        <h2>
+            🍰 Recetas del Recetario
+            <span id="cnt-recetas-pub" style="font-size:0.75rem; font-weight:400; color:var(--color-subtitulos);"></span>
+        </h2>
+        <p style="color:var(--color-subtitulos); font-size:0.88rem; margin-bottom:20px;">
+            Heredadas del Recetario. Las marcadas como <strong style="color:#4ade80;">Publicadas</strong> aparecen en la página pública con nombre, categoría y descripción.
+        </p>
+
+        <!-- TOOLBAR RECETAS -->
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+            <input type="text" id="busq-recetas" placeholder="🔍 Buscar receta..."
+                oninput="renderizarRecetas()"
+                style="flex:1; min-width:160px; padding:7px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--color-fondo-panel); color:var(--color-texto); font-size:0.82rem;">
+            <div class="filtros-recetas" id="filtros-recetas" style="margin-bottom:0;">
+                <span style="font-size:0.72rem; color:var(--color-subtitulos); font-weight:600; text-transform:uppercase;">Filtrar:</span>
+                <button class="filtro-chip activo" onclick="filtrarRecetas('todas', this)">Todas</button>
+                <button class="filtro-chip" onclick="filtrarRecetas('publicas', this)">🟢 Publicadas</button>
+                <button class="filtro-chip" onclick="filtrarRecetas('ocultas', this)">⚫ Ocultas</button>
+            </div>
+            <button class="btn btn-secundario" style="font-size:0.72rem;padding:5px 12px;" onclick="_expandirTodasRecetas(true)">▼ Expandir todo</button>
+            <button class="btn btn-secundario" style="font-size:0.72rem;padding:5px 12px;" onclick="_expandirTodasRecetas(false)">▶ Colapsar todo</button>
+        </div>
+
+        <div id="grid-recetas" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </section>
+
+    <!-- ════════════════════════════════════
+         TAB 3 — CONFIGURADOR PÚBLICO
+    ════════════════════════════════════ -->
+    <section id="tab-configurador" class="tab-section panel" style="display:none;">
+        <h2>
+            ⚙️ Configurador Público
+            <button class="btn btn-primario" onclick="guardarConfigurador()" style="padding:8px 18px;">
+                💾 Guardar y Publicar
+            </button>
+        </h2>
+        <p style="color:var(--color-subtitulos); font-size:0.88rem; margin-bottom:20px;">
+            Define los tamaños por producto. Sabores, rellenos y decoraciones se heredan automáticamente desde el Recetario y Costos.
+        </p>
+
+        <!-- SELECTOR DE PRODUCTO -->
+        <div class="cfg-selector-wrap">
+            <span class="cfg-selector-label">📦 Producto:</span>
+            <select id="cfg-sel-producto"
+                style="flex:1; max-width:340px; font-weight:600;"
+                onchange="renderizarConfiguradorProducto(this.value)">
+                <option value="">— Seleccionar producto —</option>
+            </select>
+            <span id="cfg-badge-heredado" style="display:none;" class="badge-heredado">Heredado de Costos</span>
+        </div>
+
+        <!-- CONTENIDO DEL CONFIGURADOR (se renderiza dinámicamente) -->
+        <div id="cfg-contenido">
+            <div style="text-align:center; padding:40px 20px; color:var(--color-subtitulos); font-style:italic;">
+                Selecciona un producto para editar su configurador público.
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════
+         TAB 4 — MENÚ SELECTIVO
+    ════════════════════════════════════ -->
+    <section id="tab-menu-selectivo" class="tab-section panel" style="display:none;">
+        <h2>
+            🍽 Menú Selectivo
+            <button class="btn btn-primario" onclick="guardarMenuSelectivo()" style="padding:8px 18px;">
+                💾 Guardar y Publicar
+            </button>
+        </h2>
+        <p style="color:var(--color-subtitulos); font-size:0.88rem; margin-bottom:20px;">
+            Define líneas de menú con grupos y opciones. Cada línea se vincula a un producto via <code style="background:rgba(0,0,0,0.3); padding:1px 6px; border-radius:4px; font-size:0.8rem;">menuSelectivoId</code> en el catálogo.
+        </p>
+
+        <!-- BOTÓN NUEVA LÍNEA -->
+        <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
+            <button class="btn btn-secundario" onclick="msAgregarLinea()">＋ Nueva Línea</button>
+        </div>
+
+        <!-- CONTENEDOR DE LÍNEAS -->
+        <div id="ms-lineas-contenedor"></div>
+    </section>
+
+    <!-- ════════════════════════════════════
+         TAB 5 — MINI TREATS
+    ════════════════════════════════════ -->
+    <section id="tab-mini-treats" class="tab-section panel" style="display:none;">
+        <h2>
+            🍬 Mini Treats
+            <button class="btn btn-primario" onclick="guardarMiniTreats()" style="padding:8px 18px;">
+                💾 Guardar y Publicar
+            </button>
+        </h2>
+        <p style="color:var(--color-subtitulos); font-size:0.88rem; margin-bottom:20px;">
+            Productos pequeños con mínimos de cantidad. Cada uno tiene imagen, descripción y unidad mínima de pedido.
+        </p>
+        <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
+            <button class="btn btn-success" onclick="mtAgregarProducto()" style="padding:8px 18px;">
+                ＋ Nuevo Producto
+            </button>
+        </div>
+        <div id="mt-productos-contenedor"></div>
+    </section>
+
+</main>
+
+<!-- ════════════════════════════════════
+     BARRA INFERIOR — REPUBLICAR MENÚ
+════════════════════════════════════ -->
+<div style="position:sticky;bottom:0;z-index:200;background:var(--color-fondo-panel);border-top:1px solid rgba(16,185,129,0.25);padding:12px 24px;display:flex;justify-content:flex-end;">
+    <button class="btn" id="btn-republicar-menu-bottom"
+        style="border-color:#10b981;color:#10b981;background:rgba(16,185,129,0.1);padding:8px 18px;font-weight:600;"
+        onclick="republicarMenuPublico()" title="Publicar configurador actual en el menú público">🌐 Republicar Menú Público</button>
+</div>
+
+<!-- ════════════════════════════════════
+     SCRIPT PRINCIPAL
+════════════════════════════════════ -->
+<script>
+/* ══════════════════════════════════════════════════════════
+   SAGRADA DELICIA — CATÁLOGO & HISTORIAL V2
+   Diseñado por: Marto 🧠
+   ══════════════════════════════════════════════════════════ */
+
+const RUTAS = {
+    cotizador:    'COTIZADOR.html',
+    recetario:    'RECETARIO.html',
+    lineas:       'LINEAS.html',
+    costoLinea:   'COSTOS.html',
+    pedidos:      'PEDIDOS.html',
+    insumos:      'INSUMOS.html',
+    catalogo:     '',
+    sobreNosotros:'NOSOTROS.html'
+};
+function irA(clave) {
+    const ruta = RUTAS[clave];
+    if (ruta) window.location.href = ruta;
+    else window._mostrarToast && window._mostrarToast('🚧 Página en construcción: ' + clave, 'warn');
+}
+
+/* ── Llaves localStorage ── */
+const LLAVE_STORAGE    = 'sagrada_delicia_framework_v17';
+const LLAVE_RECETAS    = 'sagrada_delicia_recetas_v17';
+const LLAVE_CATEGORIAS_RECETAS = 'sagrada_delicia_categorias_recetas_v17';
+const LLAVE_HISTORIAL      = 'sd_historial_v18';
+const LLAVE_MENU_SELECTIVO = 'sd_menu_selectivo_v17';
+const LLAVE_MINI_TREATS    = 'sd_mini_treats_v17';
+const LLAVE_SYNC       = 'sd_sync_activo';
+
+/* ── Cloudinary ── */
+const CLOUDINARY_CLOUD_NAME    = 'dv7lelmoy';
+const CLOUDINARY_UPLOAD_PRESET = 'sagrada_preset';
+
+/* ── Estado en memoria ── */
+let CATALOGO_ACTIVO       = {};
+let DB_RECETAS            = [];
+let DB_HISTORIAL          = [];
+let DB_CATEGORIAS_RECETAS = [];
+let DB_MENU_SELECTIVO     = [];
+let DB_MINI_TREATS        = [];
+let _filtroRecetasActivo  = 'todas';
+let _cfgTamaniosEdicion   = {};   // { productoId: [{label, nota}] } — estado local del editor
+let _cfgLibresEdicion     = {};   // { productoId: [{grupo, campos:[{id, etiqueta, placeholder}]}] } — estado local del editor
+
+/* ══════════════════════════════════════════════
+   ARRANQUE
+══════════════════════════════════════════════ */
+window.addEventListener('DOMContentLoaded', function() {
+    CATALOGO_ACTIVO       = JSON.parse(localStorage.getItem(LLAVE_STORAGE))  || {};
+    DB_RECETAS            = JSON.parse(localStorage.getItem(LLAVE_RECETAS))  || [];
+    DB_HISTORIAL          = JSON.parse(localStorage.getItem(LLAVE_HISTORIAL)) || [];
+    DB_CATEGORIAS_RECETAS = JSON.parse(localStorage.getItem(LLAVE_CATEGORIAS_RECETAS)) || [];
+    DB_MENU_SELECTIVO     = JSON.parse(localStorage.getItem(LLAVE_MENU_SELECTIVO)) || [];
+    DB_MINI_TREATS        = JSON.parse(localStorage.getItem(LLAVE_MINI_TREATS))    || [];
+
+    renderizarCatalogo();
+    renderizarHistorial();
+    renderizarRecetas();
+    poblarSelectorConfigurador();
+    renderizarMenuSelectivo();
+    renderizarMiniTreats();
+});
+
+/* ── Callback Firebase ── */
+window._onCloudUpdate = function(data) {
+    if (data.CATALOGO_ACTIVO) {
+        CATALOGO_ACTIVO = data.CATALOGO_ACTIVO;
+        localStorage.setItem(LLAVE_STORAGE, JSON.stringify(CATALOGO_ACTIVO));
+    }
+    if (data.DB_RECETAS && Array.isArray(data.DB_RECETAS) && !window._sd_guardando) {
+        DB_RECETAS = data.DB_RECETAS;
+        localStorage.setItem(LLAVE_RECETAS, JSON.stringify(DB_RECETAS));
+        /* Mantener recetas_publicas en publico/menu siempre sincronizado */
+        _publicarRecetasEnMenu();
+    }
+    if (data.DB_CATEGORIAS_RECETAS) {
+        DB_CATEGORIAS_RECETAS = data.DB_CATEGORIAS_RECETAS;
+        localStorage.setItem(LLAVE_CATEGORIAS_RECETAS, JSON.stringify(DB_CATEGORIAS_RECETAS));
+    }
+    if (data.DB_HISTORIAL && Array.isArray(data.DB_HISTORIAL)) {
+        DB_HISTORIAL = data.DB_HISTORIAL;
+        localStorage.setItem(LLAVE_HISTORIAL, JSON.stringify(DB_HISTORIAL));
+    }
+    if (data.DB_MENU_SELECTIVO && Array.isArray(data.DB_MENU_SELECTIVO)) {
+        DB_MENU_SELECTIVO = data.DB_MENU_SELECTIVO;
+        localStorage.setItem(LLAVE_MENU_SELECTIVO, JSON.stringify(DB_MENU_SELECTIVO));
+    }
+    if (data.mini_treats && Array.isArray(data.mini_treats)) {
+        DB_MINI_TREATS = data.mini_treats;
+        localStorage.setItem(LLAVE_MINI_TREATS, JSON.stringify(DB_MINI_TREATS));
+    }
+    renderizarCatalogo();
+    renderizarHistorial();
+    renderizarRecetas();
+    poblarSelectorConfigurador();
+    renderizarMenuSelectivo();
+    renderizarMiniTreats();
+
+    /* Refrescar configurador si hay producto seleccionado */
+    const sel = document.getElementById('cfg-sel-producto');
+    if (sel && sel.value) renderizarConfiguradorProducto(sel.value);
+};
+
+/* ══════════════════════════════════════════════
+   TABS
+══════════════════════════════════════════════ */
+function cambiarTab(tab) {
+    ['portafolio','recetas','configurador','menu-selectivo','mini-treats'].forEach(t => {
+        document.getElementById('tab-' + t).classList.toggle('activo', t === tab);
+        document.getElementById('tab-btn-' + t).classList.toggle('activo', t === tab);
+        if (t !== tab) document.getElementById('tab-' + t).style.display = 'none';
+    });
+    document.getElementById('tab-' + tab).style.display = 'block';
+}
+
+/* ══════════════════════════════════════════════
+   BUSCADOR + FILTROS GLOBALES — V5.2
+   _filtroCatalogoActivo: 'todos'|'publicados'|'ocultos'
+══════════════════════════════════════════════ */
+let _filtroCatalogoActivo = 'todos';
+
+function aplicarBuscador() {
+    renderizarCatalogo();
+    renderizarHistorial();
+}
+
+function activarFiltroCatalogo(tipo, btn) {
+    _filtroCatalogoActivo = tipo;
+    document.querySelectorAll('.buscador-filtros .filtro-chip').forEach(b => b.classList.remove('activo'));
+    if (btn) btn.classList.add('activo');
+    renderizarCatalogo();
+}
+
+/* ══════════════════════════════════════════════
+   RENDER CATÁLOGO (sin precios) — V5.2
+   Filtro activo + texto buscador
+══════════════════════════════════════════════ */
+function renderizarCatalogo() {
+    const grid = document.getElementById('grid-catalogo');
+    if (!grid) return;
+
+    const texto = (document.getElementById('buscador-global')?.value || '').toLowerCase().trim();
+
+    let claves = Object.keys(CATALOGO_ACTIVO)
+        .sort((a, b) => (CATALOGO_ACTIVO[a].orden ?? 9999) - (CATALOGO_ACTIVO[b].orden ?? 9999));
+
+    if (claves.length === 0) {
+        grid.innerHTML = `<p style="color:var(--color-subtitulos); font-size:0.85rem; font-style:italic; grid-column:1/-1;">
+            Sin datos de catálogo aún. Verifica la conexión con la nube.</p>`;
+        return;
+    }
+
+    /* Filtro de tipo (chips) */
+    if (_filtroCatalogoActivo === 'publicados') claves = claves.filter(k =>  _esPublicada(k));
+    if (_filtroCatalogoActivo === 'ocultos')    claves = claves.filter(k => !_esPublicada(k));
+
+
+    /* Filtro de texto (buscador) */
+    if (texto) {
+        claves = claves.filter(k => {
+            const d = CATALOGO_ACTIVO[k];
+            const haystack = [k, d.descripcion_comercial, d.grupo, d.emoji]
+                .join(' ').toLowerCase();
+            return haystack.includes(texto);
+        });
+    }
+
+    if (claves.length === 0) {
+        grid.innerHTML = `<p class="buscador-sin-resultados" style="grid-column:1/-1;">Sin productos que coincidan con la búsqueda.</p>`;
+        return;
+    }
+
+    /* Agrupar productos por campo 'grupo' — Sin clasificar al final */
+    const GRUPO_DEFAULT = '— Sin clasificar —';
+    const mapaGrupos = {};
+    claves.forEach(prod => {
+        const g = (CATALOGO_ACTIVO[prod].grupo || '').trim() || GRUPO_DEFAULT;
+        if (!mapaGrupos[g]) mapaGrupos[g] = [];
+        mapaGrupos[g].push(prod);
+    });
+
+    const gruposOrdenados = Object.keys(mapaGrupos).sort((a, b) => {
+        if (a === GRUPO_DEFAULT) return 1;
+        if (b === GRUPO_DEFAULT) return -1;
+        return a.localeCompare(b, 'es');
+    });
+
+    const _renderTarjeta = prod => {
+        const data    = CATALOGO_ACTIVO[prod];
+        let sabores   = DB_RECETAS.filter(r => r.productoOrigen === prod).map(r => r.nombre);
+        if (sabores.length === 0) sabores = data.sabores || ['Estándar de la Casa'];
+
+        const srcImg = data.imagen_url
+            ? data.imagen_url
+            : `https://placehold.co/200x200/1e293b/cbd5e1?text=${encodeURIComponent((data.emoji||'📦'))}`;
+
+        const publicada = _esPublicada(prod);
+        const esMontaje = data.esMontaje === true;
+        const catClase  = publicada ? '' : ' card-oculta';
+
+        const badges = [
+            publicada ? '' : '<span style="font-size:0.62rem;color:var(--color-subtitulos);background:rgba(0,0,0,0.3);padding:1px 7px;border-radius:10px;border:1px solid var(--border-color);">⚫ Oculta</span>',
+            esMontaje ? '<span style="font-size:0.62rem;color:var(--accent-secundario);background:rgba(192,132,252,0.1);padding:1px 7px;border-radius:10px;border:1px solid rgba(192,132,252,0.3);">🎪 Montaje</span>' : ''
+        ].filter(Boolean).join('');
+
+        const mediaAdmin = data.video_url && data.video_url.includes('cloudinary.com')
+            ? `<div class="video-thumb-wrapper">
+                <video src="${data.video_url}" autoplay loop muted playsinline id="vthumb-${prod}"></video>
+                <button class="btn-sound" onclick="event.stopPropagation();_toggleSound(this,document.getElementById('vthumb-${prod}'))">🔇</button>
+               </div>`
+            : `<img src="${srcImg}" class="tarjeta-comercial-img" alt="${prod}"
+                onerror="this.src='https://placehold.co/200x200/1e293b/cbd5e1?text=?'">`;
+
+        return `<div class="tarjeta-comercial-menu${catClase}">
+            ${mediaAdmin}
+            <div class="tarjeta-comercial-cuerpo">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <span style="color:var(--color-titulos); font-size:0.9rem; font-weight:700; text-transform:uppercase; letter-spacing:0.4px;">
+                        ${(data.emoji || '') + ' ' + prod.replace(/_/g, ' ')}
+                    </span>
+                    ${data.video_url
+                        ? `<span style="font-size:0.58rem;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.3);letter-spacing:0.3px;">🎬 VIDEO</span>`
+                        : data.imagen_url
+                            ? `<span style="font-size:0.58rem;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(99,179,237,0.12);color:#63b3ed;border:1px solid rgba(99,179,237,0.3);letter-spacing:0.3px;">🖼 IMAGEN</span>`
+                            : ''}
+                    ${badges}
+                </div>
+                <p style="font-size:0.78rem; color:var(--color-subtitulos); font-style:italic; line-height:1.4; margin:0;
+                    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;">
+                    ${data.descripcion_comercial || 'Sin descripción comercial.'}
+                </p>
+                <p style="font-size:0.74rem; color:var(--color-texto); margin:0; line-height:1.35;
+                    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    <span style="color:var(--accent-admin); font-weight:700;">✨</span>
+                    ${sabores.slice(0,4).join(' · ')}${sabores.length > 4 ? ` +${sabores.length - 4}` : ''}
+                </p>
+                <div id="video-cat-${prod}" style="display:none; margin-top:6px;">
+                    <div style="font-size:0.72rem; color:var(--color-subtitulos); margin-bottom:4px;">🔗 URL de YouTube</div>
+                    <input type="text" id="video-url-input-${prod}" value="${_esc(data.video_url||'')}"
+                        placeholder="https://youtu.be/xxx"
+                        style="width:100%; box-sizing:border-box; font-size:0.75rem; padding:6px 10px; border-radius:6px; border:1px solid var(--border-color); background:var(--color-fondo-panel); color:var(--color-texto);"
+                        onchange="guardarVideoCatalogo('${prod}', this.value.trim())"
+                        onclick="this.select()">
+                    <div style="font-size:0.72rem; color:var(--color-subtitulos); margin:8px 0 4px; text-align:center;">— o —</div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <label style="cursor:pointer; padding:5px 12px; border-radius:6px; border:1px solid var(--accent-success); color:var(--accent-success); font-size:0.72rem; font-weight:600; background:rgba(34,197,94,0.07); white-space:nowrap;">
+                            ☁️ Subir video
+                            <input type="file" accept="video/*" style="display:none;"
+                                onchange="subirVideoCloudinaryCatalogo('${prod}', this)">
+                        </label>
+                        <span id="video-status-${prod}" style="font-size:0.68rem; color:var(--color-subtitulos);">
+                            ${data.video_url ? '✅ Video asignado — recuerda Republicar' : 'Sin video'}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="tarjeta-comercial-acciones">
+                <button class="badge-publicado ${publicada ? 'on' : 'off'}"
+                    onclick="togglePublicadoCatalogo('${prod}')">
+                    ${publicada ? '🟢' : '⚫'}
+                </button>
+                <button class="btn" style="font-size:0.7rem; padding:4px 8px;"
+                    onclick="toggleVideoInputCat('${prod}')"
+                    title="${data.video_url ? 'Editar video YouTube' : 'Agregar video YouTube'}">🎬</button>
+            </div>
+        </div>`;
+    };
+
+    grid.innerHTML = gruposOrdenados.map(grupo => {
+        const separador = `<div class="grupo-separador" style="grid-column:1/-1;">📂 ${grupo} <span style="opacity:0.5;font-weight:400;">(${mapaGrupos[grupo].length})</span></div>`;
+        return separador + mapaGrupos[grupo].map(_renderTarjeta).join('');
+    }).join('');
+}
+
+/* ══════════════════════════════════════════════
+   RENDER HISTORIAL — V5.2
+   Usa .tarjeta-historial-h (horizontal compacto)
+   Respeta el texto del buscador activo
+══════════════════════════════════════════════ */
+function renderizarHistorial() {
+    const grid = document.getElementById('grid-historial');
+    if (!grid) return;
+
+    if (DB_HISTORIAL.length === 0) {
+        grid.innerHTML = `<p style="color:var(--color-subtitulos); font-size:0.85rem; font-style:italic;">
+            Aún no hay trabajos registrados. Usá el botón "＋ Añadir Trabajo" para comenzar.</p>`;
+        return;
+    }
+
+    /* Filtrar por texto del buscador si hay algo escrito */
+    const textoFiltro = (document.getElementById('buscador-global')?.value || '').toLowerCase().trim();
+
+    let entradas = DB_HISTORIAL;
+    if (textoFiltro) {
+        entradas = DB_HISTORIAL.filter(e => {
+            const haystack = [e.nombre, e.cliente, e.linea, e.descripcion]
+                .join(' ').toLowerCase();
+            return haystack.includes(textoFiltro);
+        });
+    }
+
+    if (entradas.length === 0) {
+        grid.innerHTML = `<p class="buscador-sin-resultados">Sin trabajos que coincidan con "<strong>${_esc(textoFiltro)}</strong>".</p>`;
+        return;
+    }
+
+    grid.innerHTML = entradas.map(e => {
+        const imgSrc      = e.imagen_url || e.imagen_b64
+            || `https://placehold.co/200x200/1e293b/cbd5e1?text=${encodeURIComponent(e.nombre)}`;
+        const lineaLabel  = e.linea  ? e.linea.replace(/_/g, ' ') : '';
+        const clienteLabel = e.cliente ? `👤 ${_esc(e.cliente)}`  : '';
+        const fechaLabel  = e.fecha
+            ? new Date(e.fecha).toLocaleDateString('es-CO', {day:'2-digit', month:'short', year:'numeric'})
+            : '';
+
+        const claseOculta = e.publicado ? '' : ' oculta';
+        return `<div class="tarjeta-historial-h${claseOculta}">
+            <img class="tarjeta-historial-img-h" src="${imgSrc}" alt="${_esc(e.nombre)}"
+                onerror="this.src='https://placehold.co/200x200/1e293b/cbd5e1?text=?'">
+            <div class="tarjeta-historial-cuerpo-h">
+                ${lineaLabel ? `<span class="tarjeta-historial-badge-linea">✦ ${_esc(lineaLabel)}</span>` : ''}
+                <div class="tarjeta-historial-nombre-h">${_esc(e.nombre)}</div>
+                ${clienteLabel ? `<div class="tarjeta-historial-cliente-h">${clienteLabel}</div>` : ''}
+                ${e.descripcion ? `<div class="tarjeta-historial-desc-h">${_esc(e.descripcion)}</div>` : ''}
+                ${fechaLabel ? `<div style="font-size:0.68rem; color:var(--color-subtitulos); margin-top:2px;">${fechaLabel}</div>` : ''}
+            </div>
+            <div class="tarjeta-historial-acciones-h">
+                <button class="badge-publicado ${e.publicado ? 'on' : 'off'}"
+                    onclick="togglePublicadoHistorial('${e.id}')"
+                    title="${e.publicado ? 'Ocultar del portafolio' : 'Publicar en portafolio'}">
+                    ${e.publicado ? '🟢' : '⚫'}
+                </button>
+                <button class="btn" style="font-size:0.7rem; padding:4px 8px; border-color:var(--color-alerta-critica); color:var(--color-alerta-critica);"
+                    onclick="eliminarEntradaHistorial('${e.id}')">🗑</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+/* ══════════════════════════════════════════════
+   V5.9 — VIDEO YOUTUBE EN TARJETA PORTAFOLIO
+══════════════════════════════════════════════ */
+function toggleVideoInputCat(prod) {
+    const el = document.getElementById('video-cat-' + prod);
+    if (!el) return;
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    if (el.style.display === 'block') el.querySelector('input').focus();
+}
+
+function guardarVideoCatalogo(prod, url) {
+    if (!CATALOGO_ACTIVO[prod]) return;
+    CATALOGO_ACTIVO[prod].video_url = url;
+    localStorage.setItem(LLAVE_STORAGE, JSON.stringify(CATALOGO_ACTIVO));
+    if (typeof window.guardarCatalogoEnCloud === 'function') window.guardarCatalogoEnCloud(CATALOGO_ACTIVO);
+    window._mostrarToast && window._mostrarToast(url ? '🎬 Video guardado — recuerda Republicar' : '🎬 Video eliminado', 'ok');
+}
+
+async function subirVideoACloudinary(file) {
+    const urlEndpoint = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+    const formData    = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    try {
+        const respuesta = await fetch(urlEndpoint, { method: 'POST', body: formData });
+        if (!respuesta.ok) throw new Error('Error de conexión a Cloudinary');
+        const datos = await respuesta.json();
+        return datos.secure_url;
+    } catch (error) {
+        console.error(error);
+        return null;
+    }
+}
+
+async function subirVideoCloudinaryCatalogo(prod, input) {
+    const file = input.files[0];
+    if (!file) return;
+    window._mostrarToast && window._mostrarToast('⏳ Subiendo video a Cloudinary...', 'ok');
+    const statusEl = document.getElementById(`video-status-${prod}`);
+    if (statusEl) statusEl.textContent = '⏳ Subiendo...';
+    const url = await subirVideoACloudinary(file);
+    if (url) {
+        guardarVideoCatalogo(prod, url);
+        if (statusEl) statusEl.textContent = '✅ Video subido — recuerda Republicar';
+        const inputText = document.getElementById(`video-url-input-${prod}`);
+        if (inputText) inputText.value = url;
+    } else {
+        if (statusEl) statusEl.textContent = '❌ Error al subir. Verifica conexión.';
+        window._mostrarToast && window._mostrarToast('❌ Error subiendo video', 'error');
+    }
+    input.value = '';
+}
+
+/* ══════════════════════════════════════════════
+   V5.11 — TOGGLE SONIDO VIDEO
+══════════════════════════════════════════════ */
+function _toggleSound(btn, video) {
+    if (!video) return;
+    video.muted = !video.muted;
+    btn.textContent = video.muted ? '🔇' : '🔊';
+}
+
+/* ══════════════════════════════════════════════
+   RENDER RECETAS
+══════════════════════════════════════════════ */
+function _getCatColor(catId) {
+    const cat = (Array.isArray(DB_CATEGORIAS_RECETAS) ? DB_CATEGORIAS_RECETAS : [])
+        .find(c => c.id === catId || c.nombre === catId);
+    return cat ? cat.color : '#64748b';
+}
+
+function filtrarRecetas(filtro, btn) {
+    _filtroRecetasActivo = filtro;
+    document.querySelectorAll('.filtro-chip').forEach(b => b.classList.remove('activo'));
+    if (btn) btn.classList.add('activo');
+    renderizarRecetas();
+}
+
+function renderizarRecetas() {
+    const grid = document.getElementById('grid-recetas');
+    if (!grid) return;
+
+    const busq = (document.getElementById('busq-recetas')?.value || '').toLowerCase().trim();
+    let recetas = [...DB_RECETAS];
+
+    if (_filtroRecetasActivo === 'publicas') recetas = recetas.filter(r => r.publica);
+    if (_filtroRecetasActivo === 'ocultas')  recetas = recetas.filter(r => !r.publica);
+    if (busq) recetas = recetas.filter(r => (r.nombre || '').toLowerCase().includes(busq));
+
+    const totalPub = DB_RECETAS.filter(r => r.publica).length;
+    const cntEl = document.getElementById('cnt-recetas-pub');
+    if (cntEl) cntEl.textContent = `${totalPub} publicada${totalPub !== 1 ? 's' : ''} de ${DB_RECETAS.length}`;
+
+    if (recetas.length === 0) {
+        grid.innerHTML = `<p style="color:var(--color-subtitulos); font-size:0.85rem; font-style:italic; padding:12px 0;">
+            ${DB_RECETAS.length === 0
+                ? 'Sin recetas. Se heredan automáticamente del Recetario.'
+                : 'Sin recetas con este filtro.'
+            }</p>`;
+        return;
+    }
+
+    grid.innerHTML = recetas.map(r => {
+        const catObj    = (Array.isArray(DB_CATEGORIAS_RECETAS) ? DB_CATEGORIAS_RECETAS : [])
+                            .find(c => c.id === r.categoria || c.nombre === r.categoria);
+        const catColor  = catObj ? catObj.color : _getCatColor(r.categoria);
+        const catNombre = catObj ? catObj.nombre : (r.categoria || '');
+        const origen    = r.productoOrigen ? r.productoOrigen.replace(/_/g, ' ') : '';
+        const desc      = r.descripcion || r.instrucciones || r.desc || '';
+        const expandida = r.publica === true; /* publicadas expandidas por defecto */
+
+        return `
+        <div class="rec-row" id="rec-row-${r.id}" style="border:1px solid var(--border-color); border-radius:8px; background:var(--color-fondo-panel); overflow:hidden;">
+            <!-- HEADER siempre visible -->
+            <div style="display:flex; align-items:center; gap:10px; padding:9px 12px; cursor:pointer; user-select:none;"
+                onclick="_toggleReceta('${r.id}')">
+                ${r.imagen_url
+                    ? `<img src="${r.imagen_url}" style="width:32px;height:32px;object-fit:cover;border-radius:5px;flex-shrink:0;" onerror="this.style.display='none'">`
+                    : `<span style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">🧁</span>`}
+                <span style="font-weight:700; font-size:0.85rem; color:var(--color-titulos); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    ${r.nombre || '—'}
+                </span>
+                ${catNombre ? `<span style="font-size:0.62rem;font-weight:700;padding:2px 7px;border-radius:10px;background:${catColor}22;color:${catColor};border:1px solid ${catColor}44;flex-shrink:0;">${catNombre}</span>` : ''}
+                <button class="badge-publicado ${r.esNueva ? 'on' : 'off'}"
+                    onclick="event.stopPropagation(); toggleNuevaReceta('${r.id}')"
+                    style="font-size:0.68rem; padding:3px 9px; flex-shrink:0; background:${r.esNueva ? 'rgba(167,139,250,0.18)' : ''}; border-color:${r.esNueva ? '#a78bfa' : ''}; color:${r.esNueva ? '#a78bfa' : ''};">
+                    ${r.esNueva ? '✦ Nueva' : '✦ Nueva?'}
+                </button>
+                <button class="badge-publicado ${r.publica ? 'on' : 'off'}"
+                    onclick="event.stopPropagation(); togglePublicadoReceta('${r.id}')"
+                    style="font-size:0.68rem; padding:3px 9px; flex-shrink:0;">
+                    ${r.publica ? '📢 Público' : '📤 Publicar'}
+                </button>
+                <span id="rec-toggle-${r.id}" style="font-size:0.7rem; color:var(--color-subtitulos); flex-shrink:0; margin-left:4px;">
+                    ${expandida ? '▼' : '▶'}
+                </span>
+            </div>
+            <!-- BODY colapsable -->
+            <div id="rec-body-${r.id}" style="display:${expandida ? 'block' : 'none'}; border-top:1px solid var(--border-color); padding:10px 12px 12px; display:${expandida ? 'flex' : 'none'}; gap:12px; align-items:flex-start;">
+                ${r.imagen_url
+                    ? `<img src="${r.imagen_url}" style="width:72px;height:72px;object-fit:cover;border-radius:7px;flex-shrink:0;" onerror="this.style.display='none'">`
+                    : ''}
+                <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:4px;">
+                    ${origen ? `<div style="font-size:0.7rem; color:var(--accent-primario); font-weight:600;">✦ ${origen}</div>` : ''}
+                    ${desc
+                        ? `<div style="font-size:0.78rem; color:var(--color-texto); font-style:italic; line-height:1.45;">${desc}</div>`
+                        : `<div style="font-size:0.75rem; color:var(--color-subtitulos); font-style:italic;">Sin descripción.</div>`}
+                    ${r.costoPorPorcion ? `<div style="font-size:0.68rem; color:var(--color-subtitulos);">🧮 Costo por porción calculado</div>` : ''}
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function _toggleReceta(id) {
+    const body   = document.getElementById('rec-body-' + id);
+    const toggle = document.getElementById('rec-toggle-' + id);
+    if (!body) return;
+    const abierto = body.style.display !== 'none';
+    body.style.display   = abierto ? 'none' : 'flex';
+    if (toggle) toggle.textContent = abierto ? '▶' : '▼';
+}
+
+function _expandirTodasRecetas(expandir) {
+    document.querySelectorAll('[id^="rec-body-"]').forEach(el => {
+        el.style.display = expandir ? 'flex' : 'none';
+    });
+    document.querySelectorAll('[id^="rec-toggle-"]').forEach(el => {
+        el.textContent = expandir ? '▼' : '▶';
+    });
+}
+
+/* ── Toggle publicar receta ── */
+/* ── Toggle Nueva Receta (V5.14) ── */
+function toggleNuevaReceta(id) {
+    const receta = DB_RECETAS.find(r => r.id === id);
+    if (!receta) return;
+    receta.esNueva = !receta.esNueva;
+    localStorage.setItem(LLAVE_RECETAS, JSON.stringify(DB_RECETAS));
+    renderizarRecetas();
+    window._sd_guardando = true;
+    if (typeof window.guardarRecetasEnCloud === 'function') {
+        window.guardarRecetasEnCloud(DB_RECETAS);
+    }
+    _publicarRecetasEnMenu();
+    window._mostrarToast && window._mostrarToast(
+        receta.esNueva ? '✦ Marcada como Nueva Receta' : '✦ Removida la marca de Nueva',
+        'info'
+    );
+    setTimeout(() => { window._sd_guardando = false; }, 3000);
+}
+
+function togglePublicadoReceta(id) {
+    const receta = DB_RECETAS.find(r => r.id === id);
+    if (!receta) return;
+    receta.publica = !receta.publica;
+
+    localStorage.setItem(LLAVE_RECETAS, JSON.stringify(DB_RECETAS));
+    renderizarRecetas();
+
+    window._sd_guardando = true;
+    /* Sync a operaciones/taller → DB_RECETAS */
+    if (typeof window.guardarRecetasEnCloud === 'function') {
+        window.guardarRecetasEnCloud(DB_RECETAS);
+    }
+
+    /* Empujar recetas públicas a publico/menu */
+    _publicarRecetasEnMenu();
+
+    window._mostrarToast && window._mostrarToast(
+        receta.publica ? '📢 Receta publicada en el menú público' : '⚫ Receta ocultada del menú público',
+        'info'
+    );
+    setTimeout(() => { window._sd_guardando = false; }, 3000);
+}
+
+function _publicarRecetasEnMenu() {
+    const recetas_publicas = DB_RECETAS
+        .filter(r => r.publica)
+        .map(r => {
+            const cat = (Array.isArray(DB_CATEGORIAS_RECETAS) ? DB_CATEGORIAS_RECETAS : [])
+                .find(c => c.id === r.categoria || c.nombre === r.categoria);
+            return {
+                id:             r.id,
+                nombre:         r.nombre,
+                categoria:      cat ? cat.nombre : (r.categoria || ''),
+                catColor:       cat ? cat.color  : _getCatColor(r.categoria),
+                descripcion:    r.descripcion || r.instrucciones || r.desc || '',
+                imagen_url:     r.imagen_url  || '',
+                productoOrigen: r.productoOrigen || '',
+                esNueva:        r.esNueva === true
+            };
+        });
+
+    if (typeof window.publicarEnMenu === 'function') {
+        window.publicarEnMenu({ recetas_publicas });
+    }
+}
+
+/* ══════════════════════════════════════════════
+   CONFIGURADOR PÚBLICO
+══════════════════════════════════════════════ */
+function poblarSelectorConfigurador() {
+    const sel = document.getElementById('cfg-sel-producto');
+    if (!sel) return;
+    const actual = sel.value;
+    let html = '<option value="">— Seleccionar producto —</option>';
+    Object.keys(CATALOGO_ACTIVO)
+        .sort((a, b) => (CATALOGO_ACTIVO[a].orden ?? 9999) - (CATALOGO_ACTIVO[b].orden ?? 9999))
+        .forEach(k => {
+        const d     = CATALOGO_ACTIVO[k];
+        const emoji = d?.emoji ? d.emoji + ' ' : '';
+        html += `<option value="${k}">${emoji}${k.replace(/_/g,' ').toUpperCase()}</option>`;
+    });
+    sel.innerHTML = html;
+    if (actual && CATALOGO_ACTIVO[actual]) {
+        sel.value = actual;
+        renderizarConfiguradorProducto(actual);
+    }
+}
+
+function renderizarConfiguradorProducto(prod) {
+    const cont = document.getElementById('cfg-contenido');
+    const badge = document.getElementById('cfg-badge-heredado');
+    if (!cont) return;
+
+    if (!prod || !CATALOGO_ACTIVO[prod]) {
+        cont.innerHTML = `<div style="text-align:center; padding:40px 20px; color:var(--color-subtitulos); font-style:italic;">
+            Selecciona un producto para editar su configurador público.</div>`;
+        if (badge) badge.style.display = 'none';
+        return;
+    }
+
+    if (badge) badge.style.display = 'inline-block';
+
+    const data = CATALOGO_ACTIVO[prod];
+
+    /* Inicializar tamaños en edición si no existen */
+    if (!_cfgTamaniosEdicion[prod]) {
+        _cfgTamaniosEdicion[prod] = JSON.parse(JSON.stringify(data.tamanios || []));
+    }
+
+    /* Inicializar campos libres en edición si no existen */
+    if (!_cfgLibresEdicion[prod]) {
+        _cfgLibresEdicion[prod] = JSON.parse(JSON.stringify(data.campos_libres || []));
+    }
+
+    /* Datos heredados */
+    const sabores     = DB_RECETAS.filter(r => r.productoOrigen === prod).map(r => r.nombre);
+    const rellenos    = (data.rellenos_torta || []).map(r => r.label).filter(Boolean);
+    const decoraciones = [
+        ...(data.compras_toppers || []).map(r => r.label),
+        ...(data.tematica_visual || []).map(r => r.label)
+    ].filter(Boolean);
+
+    /* Renderizar editor de tamaños */
+    const tamanios = _cfgTamaniosEdicion[prod];
+
+    const filasHTML = tamanios.length > 0
+        ? tamanios.map((t, i) => `
+            <div class="chip-editor-row" id="cfg-tam-row-${i}">
+                <div>
+                    <input type="text" class="chip-input-label"
+                        value="${_esc(t.label)}"
+                        placeholder="Ej: 1 Libra, 6 Unidades, Familiar..."
+                        oninput="actualizarTamanio('${prod}', ${i}, 'label', this.value)">
+                    <span class="chip-campo-hint">Etiqueta</span>
+                </div>
+                <div>
+                    <input type="text" class="chip-input-nota"
+                        value="${_esc(t.nota || '')}"
+                        placeholder="Ej: Mínimo 6 porciones, Para 20 personas..."
+                        oninput="actualizarTamanio('${prod}', ${i}, 'nota', this.value)">
+                    <span class="chip-campo-hint">Nota visible al cliente</span>
+                </div>
+                <button class="btn btn-danger" style="padding:6px 10px; font-size:0.78rem; align-self:flex-start; margin-top:1px;"
+                    onclick="eliminarTamanio('${prod}', ${i})" title="Eliminar tamaño">✕</button>
+            </div>`).join('')
+        : `<div style="text-align:center; padding:18px; color:var(--color-subtitulos); font-style:italic; font-size:0.85rem;">
+            Sin tamaños definidos. Usa el botón para añadir el primero.</div>`;
+
+    const tagsHTML = (arr, clase) => arr.length > 0
+        ? arr.map(t => `<span class="tag-heredado ${clase}">${_esc(t)}</span>`).join('')
+        : `<span class="heredado-vacio">Sin datos en Costos para este producto.</span>`;
+
+    /* Renderizar editor de campos libres (estructura: grupos -> campos) */
+    const gruposLibres = _cfgLibresEdicion[prod];
+
+    const librestHTML = gruposLibres.length > 0
+        ? gruposLibres.map((g, gi) => {
+            const camposHTML = (g.campos || []).length > 0
+                ? g.campos.map((c, ci) => `
+                    <div class="chip-editor-row" id="cfg-libre-row-${gi}-${ci}">
+                        <div>
+                            <input type="text" class="chip-input-label"
+                                value="${_esc(c.etiqueta)}"
+                                placeholder="Ej: Base de madera"
+                                oninput="actualizarCampoLibre('${prod}', ${gi}, ${ci}, 'etiqueta', this.value)">
+                            <span class="chip-campo-hint">Etiqueta visible al cliente</span>
+                        </div>
+                        <div>
+                            <input type="text" class="chip-input-nota"
+                                value="${_esc(c.placeholder || '')}"
+                                placeholder="Ej: Cumpleaños tropical, bautizo, 15 años..."
+                                oninput="actualizarCampoLibre('${prod}', ${gi}, ${ci}, 'placeholder', this.value)">
+                            <span class="chip-campo-hint">Placeholder del campo de texto</span>
+                        </div>
+                        <button class="btn btn-danger" style="padding:6px 10px; font-size:0.78rem; align-self:flex-start; margin-top:1px;"
+                            onclick="eliminarCampoLibre('${prod}', ${gi}, ${ci})" title="Eliminar campo">✕</button>
+                    </div>`).join('')
+                : `<div style="text-align:center; padding:14px; color:var(--color-subtitulos); font-style:italic; font-size:0.82rem;">
+                    Sin campos en este grupo. Usa "＋ Añadir Campo".</div>`;
+
+            return `
+            <div class="cfg-seccion" style="margin-bottom:12px; border-color:rgba(192,132,252,0.2);">
+                <div class="cfg-seccion-header">
+                    <input type="text" class="chip-input-label"
+                        value="${_esc(g.grupo || '')}"
+                        placeholder="Nombre del grupo (ej: Bases disponibles)"
+                        style="flex:1; min-width:160px; font-weight:700;"
+                        oninput="actualizarGrupoLibre('${prod}', ${gi}, this.value)">
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn btn-link" style="font-size:0.73rem; padding:4px 10px;"
+                            onclick="agregarCampoLibre('${prod}', ${gi})">＋ Añadir Campo</button>
+                        <button class="btn btn-danger" style="padding:4px 9px; font-size:0.75rem;"
+                            onclick="eliminarGrupoLibre('${prod}', ${gi})" title="Eliminar grupo">🗑</button>
+                    </div>
+                </div>
+                <div class="cfg-seccion-body" id="cfg-libres-body-${gi}">
+                    ${camposHTML}
+                </div>
+            </div>`;
+        }).join('')
+        : `<div style="text-align:center; padding:18px; color:var(--color-subtitulos); font-style:italic; font-size:0.85rem;">
+            Sin grupos de campos libres. Usa el botón para añadir el primero.</div>`;
+
+    cont.innerHTML = `
+        <!-- TAMAÑOS (editables) -->
+        <div class="cfg-seccion">
+            <div class="cfg-seccion-header">
+                <span class="cfg-seccion-titulo">
+                    📐 Tamaños
+                    <span style="font-size:0.68rem; color:var(--color-subtitulos); font-weight:400; text-transform:none;">(editable)</span>
+                </span>
+                <button class="btn btn-secundario" style="padding:5px 12px; font-size:0.77rem;"
+                    onclick="agregarTamanio('${prod}')">＋ Añadir Tamaño</button>
+            </div>
+            <div class="cfg-seccion-body" id="cfg-tamanios-body">
+                ${filasHTML}
+            </div>
+        </div>
+
+        <!-- SABORES (heredados de Recetario) -->
+        <div class="cfg-seccion">
+            <div class="cfg-seccion-header">
+                <span class="cfg-seccion-titulo">✨ Sabores / Fórmulas</span>
+                <span class="badge-heredado">Desde Recetario · ${sabores.length} fórmula${sabores.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="cfg-seccion-body">
+                <div class="tags-heredados">${tagsHTML(sabores, 'tag-sabor')}</div>
+                ${sabores.length === 0 ? `<p style="font-size:0.75rem; color:var(--color-subtitulos); margin-top:6px;">
+                    Las fórmulas se toman del Recetario filtrando por "Producto Origen = ${prod.replace(/_/g,' ')}".
+                </p>` : ''}
+            </div>
+        </div>
+
+        <!-- RELLENOS (heredados de Costos) -->
+        <div class="cfg-seccion">
+            <div class="cfg-seccion-header">
+                <span class="cfg-seccion-titulo">🍰 Rellenos</span>
+                <span class="badge-heredado">Desde Costos · Bloque "Rellenos de Torta" · ${rellenos.length} ítem${rellenos.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="cfg-seccion-body">
+                <div class="tags-heredados">${tagsHTML(rellenos, 'tag-relleno')}</div>
+            </div>
+        </div>
+
+        <!-- DECORACIONES (heredadas de Costos) -->
+        <div class="cfg-seccion">
+            <div class="cfg-seccion-header">
+                <span class="cfg-seccion-titulo">🎀 Decoraciones & Toppers</span>
+                <span class="badge-heredado">Desde Costos · Bloques "Toppers" + "Montajes" · ${decoraciones.length} ítem${decoraciones.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="cfg-seccion-body">
+                <div class="tags-heredados">${tagsHTML(decoraciones, 'tag-decoracion')}</div>
+            </div>
+        </div>
+
+        <!-- CAMPOS LIBRES (texto que el cliente diligencia en público) -->
+        <div class="cfg-seccion">
+            <div class="cfg-seccion-header">
+                <span class="cfg-seccion-titulo">
+                    📝 Campos Libres
+                    <span style="font-size:0.68rem; color:var(--color-subtitulos); font-weight:400; text-transform:none;">(el cliente los escribe en el público)</span>
+                </span>
+                <button class="btn btn-secundario" style="padding:5px 12px; font-size:0.77rem;"
+                    onclick="agregarGrupoLibre('${prod}')">＋ Añadir Grupo</button>
+            </div>
+            <div class="cfg-seccion-body" id="cfg-libres-body">
+                ${librestHTML}
+            </div>
+        </div>
+
+        <p style="font-size:0.75rem; color:var(--color-subtitulos); margin-top:4px; font-style:italic;">
+            💡 Los rellenos y decoraciones se actualizan automáticamente al editar los bloques de costos en COSTOS.html y guardar.
+        </p>`;
+}
+
+/* ── CRUD tamaños en edición ── */
+function agregarTamanio(prod) {
+    if (!_cfgTamaniosEdicion[prod]) _cfgTamaniosEdicion[prod] = [];
+    _cfgTamaniosEdicion[prod].push({ label: '', nota: '' });
+    renderizarConfiguradorProducto(prod);
+    /* Focus en el nuevo input */
+    setTimeout(() => {
+        const rows = document.querySelectorAll('.chip-editor-row');
+        if (rows.length) rows[rows.length - 1].querySelector('input')?.focus();
+    }, 50);
+}
+
+function eliminarTamanio(prod, idx) {
+    if (!_cfgTamaniosEdicion[prod]) return;
+    _cfgTamaniosEdicion[prod].splice(idx, 1);
+    renderizarConfiguradorProducto(prod);
+}
+
+function actualizarTamanio(prod, idx, campo, valor) {
+    if (!_cfgTamaniosEdicion[prod] || !_cfgTamaniosEdicion[prod][idx]) return;
+    _cfgTamaniosEdicion[prod][idx][campo] = valor;
+}
+
+/* ── CRUD campos libres en edición ── */
+function agregarGrupoLibre(prod) {
+    if (!_cfgLibresEdicion[prod]) _cfgLibresEdicion[prod] = [];
+    _cfgLibresEdicion[prod].push({ grupo: '', campos: [] });
+    renderizarConfiguradorProducto(prod);
+    setTimeout(() => {
+        const inputs = document.querySelectorAll('#cfg-libres-body input.chip-input-label');
+        if (inputs.length) inputs[inputs.length - 1].focus();
+    }, 50);
+}
+
+function eliminarGrupoLibre(prod, gi) {
+    if (!_cfgLibresEdicion[prod]) return;
+    _cfgLibresEdicion[prod].splice(gi, 1);
+    renderizarConfiguradorProducto(prod);
+}
+
+function actualizarGrupoLibre(prod, gi, valor) {
+    if (!_cfgLibresEdicion[prod] || !_cfgLibresEdicion[prod][gi]) return;
+    _cfgLibresEdicion[prod][gi].grupo = valor;
+}
+
+function agregarCampoLibre(prod, gi) {
+    if (!_cfgLibresEdicion[prod] || !_cfgLibresEdicion[prod][gi]) return;
+    if (!_cfgLibresEdicion[prod][gi].campos) _cfgLibresEdicion[prod][gi].campos = [];
+    _cfgLibresEdicion[prod][gi].campos.push({
+        id: 'libre_' + Date.now().toString(36),
+        etiqueta: '',
+        placeholder: ''
+    });
+    renderizarConfiguradorProducto(prod);
+    setTimeout(() => {
+        const rows = document.querySelectorAll(`#cfg-libres-body-${gi} .chip-editor-row`);
+        if (rows.length) rows[rows.length - 1].querySelector('input')?.focus();
+    }, 50);
+}
+
+function eliminarCampoLibre(prod, gi, ci) {
+    if (!_cfgLibresEdicion[prod] || !_cfgLibresEdicion[prod][gi]) return;
+    _cfgLibresEdicion[prod][gi].campos.splice(ci, 1);
+    renderizarConfiguradorProducto(prod);
+}
+
+function actualizarCampoLibre(prod, gi, ci, campo, valor) {
+    if (!_cfgLibresEdicion[prod] || !_cfgLibresEdicion[prod][gi] || !_cfgLibresEdicion[prod][gi].campos[ci]) return;
+    _cfgLibresEdicion[prod][gi].campos[ci][campo] = valor;
+}
+
+/* ── GUARDAR CONFIGURADOR → taller + publico/menu ── */
+async function guardarConfigurador() {
+    const sel  = document.getElementById('cfg-sel-producto');
+    const prod = sel?.value;
+    if (!prod) { window._mostrarToast && window._mostrarToast('⚠️ Selecciona un producto primero','warn'); return; }
+
+    /* 1. Persistir tamaños editados en CATALOGO_ACTIVO */
+    const tamaniosActuales = (_cfgTamaniosEdicion[prod] || [])
+        .filter(t => t.label.trim() !== '');   // descartar vacíos
+
+    CATALOGO_ACTIVO[prod].tamanios = tamaniosActuales;
+
+    /* 1b. Persistir campos libres editados en CATALOGO_ACTIVO (grupos -> campos) */
+    const libresActuales = (_cfgLibresEdicion[prod] || [])
+        .map(g => ({
+            grupo:  (g.grupo || '').trim(),
+            campos: (g.campos || []).filter(c => c.etiqueta.trim() !== '')
+        }))
+        .filter(g => g.grupo !== '' && g.campos.length > 0);
+
+    CATALOGO_ACTIVO[prod].campos_libres = libresActuales;
+    localStorage.setItem(LLAVE_STORAGE, JSON.stringify(CATALOGO_ACTIVO));
+
+    /* 2. Guardar CATALOGO_ACTIVO en operaciones/taller */
+    if (typeof window.guardarCatalogoEnCloud === 'function') {
+        await window.guardarCatalogoEnCloud(CATALOGO_ACTIVO);
+    }
+
+    /* 3. Construir objeto configurador completo y publicar en publico/menu */
+    const configurador = _buildConfigurador();
+    if (typeof window.publicarEnMenu === 'function') {
+        await window.publicarEnMenu({ configurador });
+    }
+
+    /* 4. Actualizar estado local de edición */
+    _cfgTamaniosEdicion[prod] = JSON.parse(JSON.stringify(tamaniosActuales));
+    _cfgLibresEdicion[prod] = JSON.parse(JSON.stringify(libresActuales));
+    renderizarConfiguradorProducto(prod);
+
+    window._mostrarToast && window._mostrarToast('✅ Configurador guardado y publicado','ok');
+}
+
+function _buildConfigurador() {
+    const cfg = {};
+    Object.keys(CATALOGO_ACTIVO).forEach(prod => {
+        const data = CATALOGO_ACTIVO[prod];
+        const sabores = DB_RECETAS.filter(r => r.productoOrigen === prod).map(r => {
+            const catObj = (Array.isArray(DB_CATEGORIAS_RECETAS) ? DB_CATEGORIAS_RECETAS : [])
+                .find(c => c.id === r.categoria || c.nombre === r.categoria);
+            return {
+                nombre:    r.nombre,
+                categoria: catObj ? catObj.nombre : (r.categoria || ''),
+                catColor:  catObj ? catObj.color : _getCatColor(r.categoria)
+            };
+        });
+        const rellenos = (data.rellenos_torta || []).map(r => r.label).filter(Boolean);
+        const decoraciones = [
+            ...(data.compras_toppers || []).map(r => r.label),
+            ...(data.tematica_visual || []).map(r => r.label)
+        ].filter(Boolean);
+        const camposLibres = (data.campos_libres || [])
+            .map(g => ({
+                grupo:  g.grupo || '',
+                campos: (g.campos || []).filter(c => c.etiqueta && c.etiqueta.trim() !== '')
+            }))
+            .filter(g => g.campos.length > 0);
+
+        /* Excluir si está marcada como oculta */
+        if (!_esPublicada(prod)) return;
+
+        /* Incluir si tiene imagen, descripción, o cualquier opción configurada */
+        if (data.imagen_url || data.video_url || data.descripcion_comercial ||
+            (data.tamanios||[]).length || sabores.length || rellenos.length || decoraciones.length || camposLibres.length) {
+            cfg[prod] = {
+                nombre:       prod.replace(/_/g, ' '),
+                emoji:        data.emoji || '📦',
+                orden:        data.orden ?? 9999,
+                esEstrella:   data.esEstrella === true,
+                esMontaje:    data.esMontaje === true,
+                descripcion:  data.descripcion_comercial || '',
+                imagen_url:   data.imagen_url || '',
+                video_url:    data.video_url  || '',                /* V5.9 */
+                tamanios:     data.tamanios || [],
+                sabores,
+                rellenos,
+                decoraciones,
+                campos_libres: camposLibres
+            };
+        }
+    });
+    return cfg;
+}
+
+/* ══════════════════════════════════════════════
+   FORMULARIO HISTORIAL
+══════════════════════════════════════════════ */
+function toggleFormHistorial() {
+    const contenedor = document.getElementById('contenedor-form-historial');
+    const abierto    = contenedor.classList.contains('abierto');
+    if (abierto) {
+        contenedor.classList.remove('abierto');
+        limpiarFormHistorial();
+    } else {
+        const sel = document.getElementById('hist-linea');
+        sel.innerHTML = '<option value="">— seleccionar —</option>';
+        Object.keys(CATALOGO_ACTIVO).forEach(k => {
+            const opt = document.createElement('option');
+            opt.value = k;
+            opt.textContent = k.replace(/_/g, ' ');
+            sel.appendChild(opt);
+        });
+        contenedor.classList.add('abierto');
+    }
+}
+
+function limpiarFormHistorial() {
+    ['hist-nombre','hist-cliente','hist-descripcion'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    const sel = document.getElementById('hist-linea');
+    if (sel) sel.value = '';
+    const urlInput = document.getElementById('hist-imagen-url');
+    if (urlInput) urlInput.value = '';
+    const status = document.getElementById('hist-imagen-status');
+    if (status) status.textContent = '';
+    const fileInput = document.getElementById('hist-imagen-input');
+    if (fileInput) fileInput.value = '';
+    const prev = document.getElementById('hist-imagen-preview');
+    if (prev) { prev.src = ''; prev.style.display = 'none'; }
+}
+
+/* ══════════════════════════════════════════════
+   CRUD HISTORIAL
+══════════════════════════════════════════════ */
+function agregarEntradaHistorial() {
+    const nombre = document.getElementById('hist-nombre').value.trim();
+    if (!nombre) { alert('El nombre del trabajo es obligatorio.'); return; }
+
+    const entrada = {
+        id:          'hist_' + Date.now(),
+        nombre,
+        cliente:     document.getElementById('hist-cliente').value.trim(),
+        linea:       document.getElementById('hist-linea').value,
+        descripcion: document.getElementById('hist-descripcion').value.trim(),
+        imagen_url:  document.getElementById('hist-imagen-url').value,
+        publicado:   false,
+        fecha:       new Date().toISOString()
+    };
+
+    DB_HISTORIAL.unshift(entrada);
+    guardarHistorial();
+    toggleFormHistorial();
+    renderizarHistorial();
+    window._mostrarToast && window._mostrarToast('✅ Trabajo añadido al historial','ok');
+}
+
+function eliminarEntradaHistorial(id) {
+    if (!confirm('¿Eliminar este trabajo del historial?')) return;
+    DB_HISTORIAL = DB_HISTORIAL.filter(e => e.id !== id);
+    guardarHistorial();
+    renderizarHistorial();
+}
+
+const LLAVE_PUBLICADO_LINEAS = 'sd_publicado_lineas_v1';
+
+function _getPublicadoLineas() {
+    try { return JSON.parse(localStorage.getItem(LLAVE_PUBLICADO_LINEAS)) || {}; } catch(e) { return {}; }
+}
+
+function _esPublicada(prod) {
+    const mapa = _getPublicadoLineas();
+    /* Si no hay registro = publicada por defecto */
+    return mapa[prod] !== false;
+}
+
+function togglePublicadoCatalogo(prod) {
+    if (!CATALOGO_ACTIVO[prod]) return;
+    const actual  = _esPublicada(prod);
+    const mapa    = _getPublicadoLineas();
+    mapa[prod]    = !actual;
+    localStorage.setItem(LLAVE_PUBLICADO_LINEAS, JSON.stringify(mapa));
+    renderizarCatalogo();
+    window._mostrarToast && window._mostrarToast(
+        !actual ? '🟢 Línea publicada en catálogo' : '⚫ Línea ocultada del catálogo',
+        !actual ? 'ok' : 'warn'
+    );
+}
+
+function togglePublicadoHistorial(id) {
+    const entry = DB_HISTORIAL.find(e => e.id === id);
+    if (!entry) return;
+    entry.publicado = !entry.publicado;
+    guardarHistorial();
+    renderizarHistorial();
+    window._mostrarToast && window._mostrarToast(
+        entry.publicado ? '📢 Trabajo publicado en portafolio' : '⚫ Trabajo ocultado del portafolio',
+        'info'
+    );
+}
+
+function guardarHistorial() {
+    localStorage.setItem(LLAVE_HISTORIAL, JSON.stringify(DB_HISTORIAL));
+    if (typeof window.guardarHistorialEnCloud === 'function') {
+        window.guardarHistorialEnCloud(DB_HISTORIAL);
+    }
+}
+
+/* ══════════════════════════════════════════════
+   CLOUDINARY
+══════════════════════════════════════════════ */
+async function subirImagenACloudinary(file) {
+    const urlEndpoint = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+    const formData    = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    try {
+        const respuesta = await fetch(urlEndpoint, { method: 'POST', body: formData });
+        if (!respuesta.ok) throw new Error('Error de conexión a Cloudinary');
+        const datos = await respuesta.json();
+        return datos.secure_url.replace('/upload/', '/upload/f_auto,q_auto,w_800/');
+    } catch (error) {
+        console.error(error);
+        return null;
+    }
+}
+
+async function subirImagenHistorialCloudinary(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const status = document.getElementById('hist-imagen-status');
+    const prev   = document.getElementById('hist-imagen-preview');
+    if (status) status.textContent = '⏳ Subiendo imagen...';
+    const url = await subirImagenACloudinary(file);
+    if (url) {
+        document.getElementById('hist-imagen-url').value = url;
+        prev.src = url; prev.style.display = 'block';
+        if (status) status.textContent = '✅ Imagen lista';
+    } else {
+        if (status) status.textContent = '❌ Error al subir. Verifica conexión o Cloudinary.';
+    }
+}
+
+/* ══════════════════════════════════════════════
+   EXPORTAR MENÚ PDF (sin precios)
+══════════════════════════════════════════════ */
+function exportarMenuCompletoPDF(soloPublicados = false) {
+    /* C6b: Agrupar por campo 'grupo' para separadores en PDF */
+    const GRUPO_DEFAULT_PDF = '— Sin clasificar —';
+    const clavesOrdenadas = Object.keys(CATALOGO_ACTIVO)
+        .sort((a,b) => (CATALOGO_ACTIVO[a].orden ?? 9999) - (CATALOGO_ACTIVO[b].orden ?? 9999));
+
+    const mapaGruposPDF = {};
+    clavesOrdenadas.forEach(prod => {
+        if (soloPublicados && !_esPublicada(prod)) return;
+        const g = (CATALOGO_ACTIVO[prod].grupo || '').trim() || GRUPO_DEFAULT_PDF;
+        if (!mapaGruposPDF[g]) mapaGruposPDF[g] = [];
+        mapaGruposPDF[g].push(prod);
+    });
+
+    const gruposOrdPDF = Object.keys(mapaGruposPDF).sort((a,b) => {
+        if (a === GRUPO_DEFAULT_PDF) return 1;
+        if (b === GRUPO_DEFAULT_PDF) return -1;
+        return a.localeCompare(b, 'es');
+    });
+
+    let bloquesHTML = '';
+    gruposOrdPDF.forEach(grupo => {
+        bloquesHTML += `<div class="p-grupo-sep">📂 ${grupo}</div>`;
+        mapaGruposPDF[grupo].forEach(prod => {
+            const data    = CATALOGO_ACTIVO[prod];
+            let sabores   = DB_RECETAS.filter(r => r.productoOrigen === prod).map(r => r.nombre);
+            if (sabores.length === 0) sabores = data.sabores || ['Estándar de la Casa'];
+
+            const imgTag = data.imagen_url
+                ? `<img src="${data.imagen_url}" class="p-img" onerror="this.style.display='none'">`
+                : '';
+
+            const gruposLibres = (data.campos_libres || []).filter(g => g.grupo && (g.campos || []).length > 0);
+            const librestHTML  = gruposLibres.length > 0
+                ? `<div class="p-libres">${gruposLibres.map(g => `
+                    <div class="p-libres-grupo">
+                        <strong>${g.grupo}:</strong>
+                        ${(g.campos || []).map(c => c.etiqueta).filter(Boolean).join(' · ')}
+                    </div>`).join('')}</div>`
+                : '';
+
+            bloquesHTML += `<div class="p-card">
+                ${imgTag}
+                <div class="p-info">
+                    <h2>${prod.replace(/_/g,' ').toUpperCase()}</h2>
+                    <p class="p-desc">${data.descripcion_comercial || ''}</p>
+                    <div class="p-sabores"><strong>Sabores / Fórmulas Disponibles:</strong><br>${sabores.join(' · ')}</div>
+                    ${librestHTML}
+                </div>
+            </div>`;
+        });
+    });
+
+    const tituloFiltro = soloPublicados ? 'Solo productos publicados' : 'Portafolio completo';
+    const html = `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>Portafolio — Sagrada Delicia</title>
+<style>
+body{font-family:'Helvetica Neue',Arial,sans-serif;padding:40px;max-width:800px;margin:0 auto;color:#0f172a;background:#fff;}
+@media print{.no-print{display:none!important}body{padding:0}.p-card{page-break-inside:avoid}}
+.header{text-align:center;border-bottom:3px double #c084fc;padding-bottom:20px;margin-bottom:35px;}
+.logo{font-size:2.4rem;font-weight:900;letter-spacing:2px;color:#0f172a;margin:0;}
+.subtitle{font-size:0.9rem;color:#64748b;text-transform:uppercase;letter-spacing:3px;margin-top:5px;}
+.filtro-badge{display:inline-block;margin-top:8px;font-size:0.75rem;padding:3px 12px;border-radius:20px;border:1px solid #c084fc;color:#7e22ce;background:#faf5ff;}
+.p-card{display:flex;gap:25px;margin-bottom:35px;border-bottom:1px solid #f1f5f9;padding-bottom:30px;align-items:center;}
+.p-img{width:220px;height:180px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;flex-shrink:0;}
+.p-info{flex:1;}.p-info h2{margin:0 0 10px;font-size:1.3rem;color:#0f172a;letter-spacing:1px;border-left:4px solid #c084fc;padding-left:10px;}
+.p-desc{font-size:0.95rem;color:#475569;font-style:italic;margin-bottom:12px;}
+.p-sabores{font-size:0.85rem;background:#f8fafc;padding:10px;border-radius:6px;color:#334155;border:1px solid #e2e8f0;line-height:1.6;}
+.p-libres{margin-top:10px;}
+.p-libres-grupo{font-size:0.82rem;color:#475569;margin-bottom:5px;}
+.p-libres-grupo strong{color:#0f172a;}
+.p-grupo-sep{font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:#7e22ce;
+    border-bottom:2px solid #c084fc;padding:6px 0 4px;margin:32px 0 16px;opacity:0.75;}
+.pie{text-align:center;margin-top:40px;font-size:0.78rem;color:#94a3b8;}
+</style></head><body>
+<button class="no-print" onclick="window.print()" style="display:block;width:100%;padding:12px;background:#c084fc;color:#fff;border:none;border-radius:8px;cursor:pointer;margin-bottom:28px;font-weight:700;font-size:1rem;">
+🖨️ Imprimir / Guardar Portafolio PDF</button>
+<div class="header">
+    <p class="logo">SAGRADA DELICIA</p>
+    <p class="subtitle">Portafolio Comercial · Arte &amp; Sabor</p>
+    <span class="filtro-badge">${tituloFiltro}</span>
+</div>
+${bloquesHTML}
+<div class="pie">Diseñado con ❤️ · Sagrada Delicia</div>
+</body></html>`;
+
+    const win = window.open('', '_blank', 'width=860,height=820');
+    if (win) { win.document.write(html); win.document.close(); }
+    else { window._mostrarToast && window._mostrarToast('⚠️ Permite las ventanas emergentes para exportar','warn',5000); }
+}
+
+/* ══════════════════════════════════════════════
+   REPUBLICAR MENÚ PÚBLICO
+══════════════════════════════════════════════ */
+async function republicarMenuPublico() {
+    const btn = document.getElementById('btn-republicar-menu');
+    const btn2 = document.getElementById('btn-republicar-menu-bottom');
+    [btn, btn2].forEach(b => { if (b) { b.disabled = true; b.textContent = '⏳ Publicando...'; }});
+    try {
+        if (typeof window.publicarEnMenu === 'function') {
+            /* V5.13 — Republicar siempre sube configurador + selectivo + mini_treats juntos
+               para evitar que secciones queden desincronizadas entre sesiones */
+            await window.publicarEnMenu({
+                configurador:    _buildConfigurador(),
+                DB_MENU_SELECTIVO: Array.isArray(DB_MENU_SELECTIVO) ? DB_MENU_SELECTIVO : [],
+                mini_treats:     Array.isArray(DB_MINI_TREATS)    ? DB_MINI_TREATS    : []
+            });
+            window._mostrarToast && window._mostrarToast('✅ Menú público republicado correctamente', 'ok');
+        }
+    } catch(err) {
+        console.error('republicarMenuPublico error:', err);
+        window._mostrarToast && window._mostrarToast('❌ Error al republicar el menú público', 'error', 5000);
+    } finally {
+        [btn, btn2].forEach(b => { if (b) { b.disabled = false; b.textContent = '🌐 Republicar Menú Público'; }});
+    }
+}
+
+/* ── Util ── */
+function _esc(str) {
+    return String(str||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ══════════════════════════════════════════════
+   MENÚ SELECTIVO — funciones nuevas V3
+   No tocan nada existente.
+   Estructura DB_MENU_SELECTIVO:
+   [{ id, nombre, grupos: [{ id, nombre, opciones: ['str',...] }] }]
+══════════════════════════════════════════════ */
+
+function renderizarMenuSelectivo() {
+    const cont = document.getElementById('ms-lineas-contenedor');
+    if (!cont) return;
+
+    if (DB_MENU_SELECTIVO.length === 0) {
+        cont.innerHTML = `<div style="text-align:center; padding:40px 20px; color:var(--color-subtitulos); font-style:italic;">
+            Sin líneas de menú. Usa "＋ Nueva Línea" para comenzar.</div>`;
+        return;
+    }
+
+    cont.innerHTML = DB_MENU_SELECTIVO.map((linea, li) => {
+        const gruposHTML = (linea.grupos || []).map((grupo, gi) => {
+            const opcionesHTML = (grupo.opciones || []).map((op, oi) => `
+                <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px;">
+                    <input type="text"
+                        value="${_esc(op)}"
+                        placeholder="Nombre de opción"
+                        style="flex:1; padding:6px 10px; font-size:0.83rem;"
+                        oninput="msActualizarOpcion(${li}, ${gi}, ${oi}, this.value)">
+                    <button class="btn btn-danger" style="padding:4px 9px; font-size:0.75rem;"
+                        onclick="msEliminarOpcion(${li}, ${gi}, ${oi})" title="Eliminar opción">✕</button>
+                </div>`).join('');
+
+            return `
+            <div class="cfg-seccion" style="margin-bottom:12px;">
+                <div class="cfg-seccion-header">
+                    <div style="display:flex; align-items:center; gap:8px; flex:1; flex-wrap:wrap;">
+                        <span class="cfg-seccion-titulo">Grupo</span>
+                        <input type="text"
+                            value="${_esc(grupo.nombre)}"
+                            placeholder="Nombre del grupo (ej: Repostería, Bebidas...)"
+                            style="flex:1; min-width:160px; padding:5px 10px; font-size:0.83rem; font-weight:600;"
+                            oninput="msActualizarNombreGrupo(${li}, ${gi}, this.value)">
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn btn-link" style="font-size:0.73rem; padding:4px 10px;"
+                            onclick="msAgregarOpcion(${li}, ${gi})">＋ Opción</button>
+                        <button class="btn btn-danger" style="padding:4px 9px; font-size:0.75rem;"
+                            onclick="msEliminarGrupo(${li}, ${gi})" title="Eliminar grupo">🗑</button>
+                    </div>
+                </div>
+                <div class="cfg-seccion-body">
+                    ${opcionesHTML || `<span style="color:var(--color-subtitulos); font-size:0.8rem; font-style:italic;">Sin opciones. Usa "＋ Opción".</span>`}
+                </div>
+            </div>`;
+        }).join('');
+
+        const imgPreviewHTML = linea.imagen_url
+            ? `<img src="${_esc(linea.imagen_url)}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--border-color);flex-shrink:0;" onerror="this.style.display='none'">`
+            : `<div style="width:72px;height:72px;border-radius:6px;border:1px dashed var(--border-color);display:flex;align-items:center;justify-content:center;font-size:1.8rem;opacity:0.35;flex-shrink:0;">📷</div>`;
+
+        return `
+        <div class="panel" style="margin-bottom:16px; border-color:rgba(192,132,252,0.25);">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+                <span style="font-size:0.68rem; font-weight:700; color:var(--accent-secundario); text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap;">
+                    ID: <code style="background:rgba(0,0,0,0.3); padding:1px 6px; border-radius:4px;">${_esc(linea.id)}</code>
+                </span>
+                <input type="text"
+                    value="${_esc(linea.nombre)}"
+                    placeholder="Nombre de la línea (ej: Menú Desayuno Romántico)"
+                    style="flex:1; min-width:200px; font-size:0.95rem; font-weight:700; padding:7px 12px;"
+                    oninput="msActualizarNombreLinea(${li}, this.value)">
+                <button class="btn btn-danger" style="padding:6px 12px; font-size:0.8rem;"
+                    onclick="msEliminarLinea(${li})">🗑 Eliminar Línea</button>
+            </div>
+            <!-- Imagen Cloudinary -->
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid var(--border-color);margin-bottom:16px;flex-wrap:wrap;">
+                ${imgPreviewHTML}
+                <div style="flex:1;">
+                    <label style="font-size:0.72rem;color:var(--color-subtitulos);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px;">📸 Imagen del menú (Cloudinary)</label>
+                    <input type="file" accept="image/*" style="font-size:0.82rem;padding:4px;color:var(--color-texto);"
+                        onchange="msSubirImagenLinea(${li}, this)">
+                    <span style="font-size:0.72rem;display:block;margin-top:4px;color:${linea.imagen_url ? 'var(--accent-success)' : 'var(--color-subtitulos)'};">
+                        ${linea.imagen_url ? '✅ Imagen cargada' : 'Sin imagen — elige un archivo para subir'}
+                    </span>
+                </div>
+            </div>
+            ${gruposHTML || `<div style="color:var(--color-subtitulos); font-size:0.82rem; font-style:italic; margin-bottom:12px;">Sin grupos aún.</div>`}
+            <button class="btn btn-link" style="margin-top:4px;" onclick="msAgregarGrupo(${li})">
+                ＋ Añadir Grupo
+            </button>
+        </div>`;
+    }).join('');
+}
+
+/* ── CRUD Líneas ── */
+function msAgregarLinea() {
+    DB_MENU_SELECTIVO.push({ id: 'linea_' + Date.now(), nombre: '', grupos: [] });
+    renderizarMenuSelectivo();
+    setTimeout(() => {
+        const panels = document.querySelectorAll('#ms-lineas-contenedor .panel');
+        const lastPanel = panels[panels.length - 1];
+        if (lastPanel) lastPanel.querySelector('input[type="text"]')?.focus();
+    }, 50);
+}
+
+function msEliminarLinea(li) {
+    if (!confirm('¿Eliminar esta línea de menú y todos sus grupos?')) return;
+    DB_MENU_SELECTIVO.splice(li, 1);
+    renderizarMenuSelectivo();
+}
+
+function msActualizarNombreLinea(li, valor) {
+    if (DB_MENU_SELECTIVO[li]) DB_MENU_SELECTIVO[li].nombre = valor;
+}
+
+/* ── CRUD Grupos ── */
+function msAgregarGrupo(li) {
+    if (!DB_MENU_SELECTIVO[li]) return;
+    DB_MENU_SELECTIVO[li].grupos.push({ id: 'grupo_' + Date.now(), nombre: '', opciones: [] });
+    renderizarMenuSelectivo();
+}
+
+function msEliminarGrupo(li, gi) {
+    if (!DB_MENU_SELECTIVO[li]) return;
+    DB_MENU_SELECTIVO[li].grupos.splice(gi, 1);
+    renderizarMenuSelectivo();
+}
+
+function msActualizarNombreGrupo(li, gi, valor) {
+    if (DB_MENU_SELECTIVO[li]?.grupos[gi]) DB_MENU_SELECTIVO[li].grupos[gi].nombre = valor;
+}
+
+/* ── CRUD Opciones ── */
+function msAgregarOpcion(li, gi) {
+    if (!DB_MENU_SELECTIVO[li]?.grupos[gi]) return;
+    DB_MENU_SELECTIVO[li].grupos[gi].opciones.push('');
+    renderizarMenuSelectivo();
+}
+
+function msEliminarOpcion(li, gi, oi) {
+    if (!DB_MENU_SELECTIVO[li]?.grupos[gi]) return;
+    DB_MENU_SELECTIVO[li].grupos[gi].opciones.splice(oi, 1);
+    renderizarMenuSelectivo();
+}
+
+function msActualizarOpcion(li, gi, oi, valor) {
+    if (DB_MENU_SELECTIVO[li]?.grupos[gi]?.opciones) {
+        DB_MENU_SELECTIVO[li].grupos[gi].opciones[oi] = valor;
+    }
+}
+
+/* ── SUBIR IMAGEN CLOUDINARY por línea de menú selectivo ── */
+async function msSubirImagenLinea(li, input) {
+    const file = input.files[0];
+    if (!file || !DB_MENU_SELECTIVO[li]) return;
+
+    window._mostrarToast && window._mostrarToast('⏳ Subiendo imagen...', 'info');
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+        const resp = await fetch(
+            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+            { method: 'POST', body: formData }
+        );
+        if (!resp.ok) throw new Error('Error Cloudinary');
+        const datos = await resp.json();
+        const url   = datos.secure_url.replace('/upload/', '/upload/f_auto,q_auto,w_800/');
+        DB_MENU_SELECTIVO[li].imagen_url = url;
+        renderizarMenuSelectivo();
+        window._mostrarToast && window._mostrarToast('📸 Imagen subida correctamente', 'ok');
+    } catch(err) {
+        console.error(err);
+        window._mostrarToast && window._mostrarToast('❌ Fallo al subir imagen', 'error', 5000);
+    }
+}
+
+/* ── GUARDAR Y PUBLICAR ── */
+async function guardarMenuSelectivo() {
+    /* Limpiar opciones vacías antes de guardar */
+    DB_MENU_SELECTIVO = DB_MENU_SELECTIVO.map(linea => ({
+        ...linea,
+        grupos: (linea.grupos || []).map(grupo => ({
+            ...grupo,
+            opciones: (grupo.opciones || []).filter(op => op.trim() !== '')
+        }))
+    }));
+
+    localStorage.setItem(LLAVE_MENU_SELECTIVO, JSON.stringify(DB_MENU_SELECTIVO));
+
+    /* Anti-pisado: campo propio — no toca configurador ni recetas */
+    if (typeof window.publicarEnMenu === 'function') {
+        await window.publicarEnMenu({ DB_MENU_SELECTIVO });
+    }
+
+    renderizarMenuSelectivo();
+    window._mostrarToast && window._mostrarToast('✅ Menú Selectivo guardado y publicado', 'ok');
+}
+
+/* ══════════════════════════════════════════════
+   MINI TREATS
+   Estructura DB_MINI_TREATS:
+   [{ id, nombre, descripcion, imagen_url, minimo }]
+══════════════════════════════════════════════ */
+
+function renderizarMiniTreats() {
+    const cont = document.getElementById('mt-productos-contenedor');
+    if (!cont) return;
+
+    if (DB_MINI_TREATS.length === 0) {
+        cont.innerHTML = `<div style="text-align:center; padding:40px 20px; color:var(--color-subtitulos); font-style:italic;">
+            Sin productos. Usa "＋ Nuevo Producto" para comenzar.</div>`;
+        return;
+    }
+
+    cont.innerHTML = DB_MINI_TREATS.map((p, pi) => {
+        const imgPreviewHTML = p.imagen_url
+            ? `<img src="${_esc(p.imagen_url)}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--border-color);flex-shrink:0;" onerror="this.style.display='none'">`
+            : `<div style="width:72px;height:72px;border-radius:6px;border:1px dashed var(--border-color);display:flex;align-items:center;justify-content:center;font-size:1.8rem;opacity:0.35;flex-shrink:0;">🍬</div>`;
+
+        return `
+        <div class="panel" style="margin-bottom:14px; border-color:rgba(253,224,71,0.2);">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+                <span style="font-size:0.68rem; font-weight:700; color:var(--accent-admin); text-transform:uppercase; letter-spacing:0.5px;">
+                    🍬 PRODUCTO ${pi + 1}
+                </span>
+                <input type="text"
+                    value="${_esc(p.nombre)}"
+                    placeholder="Nombre del producto (ej: Brownie Bites)"
+                    style="flex:1; min-width:200px; font-size:0.95rem; font-weight:700; padding:7px 12px;"
+                    oninput="mtActualizar(${pi}, 'nombre', this.value)">
+                <button class="btn btn-danger" style="padding:6px 12px; font-size:0.8rem;"
+                    onclick="mtEliminar(${pi})">🗑 Eliminar</button>
+            </div>
+            <div style="margin-bottom:14px;">
+                <label style="font-size:0.72rem;color:var(--color-subtitulos);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px;">🏷 Grupo (agrupa productos en el menú público)</label>
+                <input type="text"
+                    value="${_esc(p.grupo || '')}"
+                    placeholder="Ej: Bocaditos Salados, Postres Fríos… (dejar vacío = sin grupo)"
+                    style="width:100%; font-size:0.88rem; padding:6px 12px;"
+                    oninput="mtActualizar(${pi}, 'grupo', this.value.trim())">
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr auto; gap:14px; margin-bottom:14px; align-items:flex-start;">
+                <div class="grupo-formulario">
+                    <label>📝 Descripción</label>
+                    <textarea rows="2" placeholder="Descripción breve para el menú público..."
+                        style="resize:vertical;"
+                        oninput="mtActualizar(${pi}, 'descripcion', this.value)">${_esc(p.descripcion || '')}</textarea>
+                </div>
+                <div class="grupo-formulario" style="min-width:120px;">
+                    <label>📦 Mínimo (uds)</label>
+                    <input type="number" min="1" value="${p.minimo || ''}"
+                        placeholder="Ej: 6"
+                        style="text-align:center; font-size:1.1rem; font-weight:700;"
+                        oninput="mtActualizar(${pi}, 'minimo', parseInt(this.value) || null)">
+                </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid var(--border-color);flex-wrap:wrap;">
+                ${imgPreviewHTML}
+                <div style="flex:1;">
+                    <label style="font-size:0.72rem;color:var(--color-subtitulos);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px;">📸 Imagen (Cloudinary)</label>
+                    <input type="file" accept="image/*" style="font-size:0.82rem;padding:4px;color:var(--color-texto);"
+                        onchange="mtSubirImagen(${pi}, this)">
+                    <span style="font-size:0.72rem;display:block;margin-top:4px;color:${p.imagen_url ? 'var(--accent-success)' : 'var(--color-subtitulos)'};">
+                        ${p.imagen_url ? '✅ Imagen cargada' : 'Sin imagen — elige un archivo para subir'}
+                    </span>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function mtAgregarProducto() {
+    DB_MINI_TREATS.push({ id: 'mt_' + Date.now(), nombre: '', descripcion: '', imagen_url: '', minimo: null, grupo: '' });
+    renderizarMiniTreats();
+    setTimeout(() => {
+        const panels = document.querySelectorAll('#mt-productos-contenedor .panel');
+        const last   = panels[panels.length - 1];
+        if (last) last.querySelector('input[type="text"]')?.focus();
+    }, 50);
+}
+
+function mtEliminar(pi) {
+    if (!confirm('¿Eliminar este producto de Mini Treats?')) return;
+    DB_MINI_TREATS.splice(pi, 1);
+    renderizarMiniTreats();
+}
+
+function mtActualizar(pi, campo, valor) {
+    if (DB_MINI_TREATS[pi]) DB_MINI_TREATS[pi][campo] = valor;
+}
+
+async function mtSubirImagen(pi, input) {
+    const file = input.files[0];
+    if (!file || !DB_MINI_TREATS[pi]) return;
+    window._mostrarToast && window._mostrarToast('⏳ Subiendo imagen...', 'info');
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+        const resp = await fetch(
+            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+            { method: 'POST', body: formData }
+        );
+        if (!resp.ok) throw new Error('Error Cloudinary');
+        const datos = await resp.json();
+        const url   = datos.secure_url.replace('/upload/', '/upload/f_auto,q_auto,w_800/');
+        DB_MINI_TREATS[pi].imagen_url = url;
+        renderizarMiniTreats();
+        window._mostrarToast && window._mostrarToast('📸 Imagen subida correctamente', 'ok');
+    } catch(err) {
+        console.error(err);
+        window._mostrarToast && window._mostrarToast('❌ Fallo al subir imagen', 'error', 5000);
+    }
+}
+
+async function guardarMiniTreats() {
+    DB_MINI_TREATS = DB_MINI_TREATS.filter(p => p.nombre.trim() !== '');
+    localStorage.setItem(LLAVE_MINI_TREATS, JSON.stringify(DB_MINI_TREATS));
+    if (typeof window.publicarEnMenu === 'function') {
+        await window.publicarEnMenu({ mini_treats: DB_MINI_TREATS });
+    }
+    renderizarMiniTreats();
+    window._mostrarToast && window._mostrarToast('✅ Mini Treats guardados y publicados', 'ok');
+}
+
+/* ══════════════════════════════════════════════════
+   TUTORIAL SYSTEM — SD Catálogo V5.16
+   ══════════════════════════════════════════════════ */
+const _TUT_LLAVE = 'sd_tutorial_catalogo_v1';
+let _tutPaso = 0;
+
+const _TUT_PASOS = [
+    { target: null,                    emoji:'🎉', titulo:'¡Bienvenido al Catálogo Admin!',           texto:'Este es el módulo de publicación de Sagrada Delicia. Desde aquí controlas todo lo que ve el cliente en el menú público: productos, recetas, configurador de pedidos, menú selectivo y mini treats. Está organizado en 5 pestañas. Puedes saltar y relanzar con 🎓 Guía.' },
+    { target:'.nav-ecosistema',        emoji:'🗺️', titulo:'Posición en el Ecosistema',                texto:'El Catálogo Admin es el último eslabón de la cadena: recibe datos de Insumos, Recetario, Líneas y Costos, y los transforma en la vitrina pública. Todo cambio que hagas aquí y republicar actualiza inmediatamente lo que ven los clientes en el Catálogo Público.' },
+    { target:'.tabs-nav',              emoji:'🗂️', titulo:'Las 5 Pestañas del Módulo',               texto:'Portafolio & Historial: productos y galería de trabajos entregados. Recetas: las del Recetario listas para publicar. Configurador Público: personaliza los parámetros visibles del pedido online. Menú Selectivo: alternativas y opciones extras. Mini Treats: bocaditos y productos complementarios.' },
+    { target:'#grid-catalogo',         emoji:'🏪', titulo:'Portafolio de Productos',                  texto:'Tarjetas de todos los productos activos del catálogo (heredados de Líneas). Cada tarjeta muestra la foto o video, nombre, descripción y sabores disponibles. El toggle 🟢/⚫ la publica o oculta del menú público. El botón 🎬 permite asignar video de YouTube o subir un video a Cloudinary.' },
+    { target:'.buscador-wrap',         emoji:'🔍', titulo:'Buscador y Filtros del Portafolio',        texto:'Busca productos y trabajos del historial por nombre en tiempo real. Filtra por estado: Todos, 🟢 Publicados (visibles en el menú público) o ⚫ Ocultos (solo internos). Los PDF generan el catálogo completo o solo los publicados, listo para compartir con clientes.' },
+    { target:'.seccion-separador',     emoji:'📸', titulo:'Historial de Trabajos',                    texto:'Galería de trabajos entregados. Cada entrada tiene nombre, cliente, línea, descripción e imagen Cloudinary. Al marcar un trabajo como "publicado", aparece en la sección Portafolio de Obras del Catálogo Público. Úsalo para mostrar tu trabajo real a nuevos clientes.' },
+    { target:'#tab-btn-recetas',       emoji:'🍰', titulo:'Tab Recetas — Publicar al Menú',           texto:'Lista todas las recetas del Recetario. Las que marques como "📢 Público" aparecerán en la sección de Recetas del Catálogo Público con nombre, categoría, descripción e imagen. Las categorías "Insignia" reciben un diseño destacado especial en el menú público.' },
+    { target:'#tab-btn-configurador',  emoji:'⚙️', titulo:'Tab Configurador Público',                texto:'Define los parámetros de personalización que verá el cliente al pedir online: tamaños disponibles con precios, sabores (heredados del Recetario), rellenos, decoraciones y campos libres (ej: "¿Mensaje para la torta?", "¿Tipo de entrega?"). Cada campo aquí genera un input en el formulario de pedido del cliente.' },
+    { target:'#tab-btn-menu-selectivo',emoji:'🍽️', titulo:'Tab Menú Selectivo',                      texto:'Define las líneas de menú con grupos de opciones. Ej: línea "Tortas" con grupo "Sabores de Bizcocho" y opciones [Vainilla, Chocolate, Red Velvet]. El cliente las ve en el configurador de pedido como opciones seleccionables. Ideal para combos y menús cerrados.' },
+    { target:'#tab-btn-mini-treats',   emoji:'🍬', titulo:'Tab Mini Treats',                          texto:'Gestiona los productos complementarios y bocaditos: nombre, descripción, grupo (para agrupar en el menú), cantidad mínima de pedido e imagen Cloudinary. Aparecen en una sección dedicada del Catálogo Público. Perfectos para pedidos corporativos y buffets.' },
+    { target:'#btn-republicar-menu',   emoji:'🌐', titulo:'Republicar Menú Público — Botón Maestro',  texto:'El botón más importante del módulo. Consolida y publica TODOS los datos juntos: configurador de productos, menú selectivo y mini treats. Úsalo siempre que hagas cambios en el Configurador, Menú Selectivo o Mini Treats. Las recetas se publican automáticamente al togglearlas; el historial se publica al guardarlo.' },
+    { target:'#badge-cloud-sync',      emoji:'☁️', titulo:'Sincronización Cloud',                    texto:'El Catálogo Admin escribe en DOS documentos de Firebase: operaciones/taller (campos CATALOGO_ACTIVO, DB_RECETAS, DB_HISTORIAL) y publico/menu (configurador, recetas_publicas, DB_MENU_SELECTIVO, mini_treats, ofertas). El listener en tiempo real detecta cambios de otros módulos y actualiza automáticamente.' },
+];
+
+function iniciarTutorial(forzar = false) {
+    const visto = localStorage.getItem(_TUT_LLAVE);
+    if (visto && !forzar) return;
+    _tutPaso = 0;
+    document.getElementById('tutorial-overlay').classList.remove('oculto');
+    _renderTutPaso();
+}
+
+function _renderTutPaso() {
+    const paso  = _TUT_PASOS[_tutPaso];
+    const total = _TUT_PASOS.length;
+    const ring  = document.getElementById('tutorial-spotlight-ring');
+    const card  = document.getElementById('tutorial-card');
+
+    card.classList.remove('animando');
+    void card.offsetWidth;
+    card.classList.add('animando');
+
+    document.getElementById('tut-progress-bar').innerHTML =
+        _TUT_PASOS.map((_, i) =>
+            `<div class="tut-pip ${i < _tutPaso ? 'hecho' : i === _tutPaso ? 'activo' : ''}"></div>`
+        ).join('');
+
+    document.getElementById('tutorial-emoji').textContent  = paso.emoji;
+    document.getElementById('tutorial-titulo').textContent = paso.titulo;
+    document.getElementById('tutorial-texto').textContent  = paso.texto;
+    document.getElementById('tut-step-label').textContent  = `${_tutPaso + 1} / ${total}`;
+
+    document.getElementById('btn-tut-ant').style.visibility = _tutPaso === 0 ? 'hidden' : 'visible';
+    document.getElementById('btn-tut-sig').textContent = _tutPaso === total - 1 ? '✅ Finalizar' : 'Siguiente →';
+
+    if (paso.target) {
+        const el = document.querySelector(paso.target);
+        if (el) {
+            el.scrollIntoView({ behavior:'smooth', block:'center' });
+            setTimeout(() => _posicionarTutorial(el, card, ring), 400);
+        } else {
+            ring.style.display = 'none';
+            _centrarCard(card);
+        }
+    } else {
+        ring.style.display = 'none';
+        _centrarCard(card);
+    }
+}
+
+function _posicionarTutorial(el, card, ring) {
+    const rect  = el.getBoundingClientRect();
+    const pad   = 8;
+    const vp    = { w: window.innerWidth, h: window.innerHeight };
+    const cardW = 320, cardH = 272;
+
+    ring.style.display = 'block';
+    ring.style.top     = (rect.top    - pad) + 'px';
+    ring.style.left    = (rect.left   - pad) + 'px';
+    ring.style.width   = (rect.width  + pad * 2) + 'px';
+    ring.style.height  = (rect.height + pad * 2) + 'px';
+
+    let top;
+    if (rect.bottom + cardH + 20 < vp.h)    top = rect.bottom + 16;
+    else if (rect.top - cardH - 16 > 0)     top = rect.top - cardH - 16;
+    else                                     top = Math.max(12, (vp.h - cardH) / 2);
+
+    let left = rect.left + (rect.width / 2) - (cardW / 2);
+    left = Math.max(12, Math.min(left, vp.w - cardW - 12));
+
+    card.style.top       = top  + 'px';
+    card.style.left      = left + 'px';
+    card.style.transform = 'none';
+}
+
+function _centrarCard(card) {
+    card.style.top       = '50%';
+    card.style.left      = '50%';
+    card.style.transform = 'translate(-50%, -50%)';
+}
+
+function tutorialSiguiente() {
+    if (_tutPaso >= _TUT_PASOS.length - 1) { terminarTutorial(); return; }
+    _tutPaso++;
+    _renderTutPaso();
+}
+
+function tutorialAnterior() {
+    if (_tutPaso > 0) { _tutPaso--; _renderTutPaso(); }
+}
+
+function tutorialSaltar()   { terminarTutorial(); }
+
+function terminarTutorial() {
+    localStorage.setItem(_TUT_LLAVE, '1');
+    document.getElementById('tutorial-overlay').classList.add('oculto');
+    document.getElementById('tutorial-spotlight-ring').style.display = 'none';
+    window._mostrarToast && window._mostrarToast('🎓 Guía disponible en el botón del encabezado', 'info', 4000);
+}
+
+window.addEventListener('load', () => {
+    setTimeout(() => iniciarTutorial(false), 1000);
+});
+</script>
+
+</body>
+</html>
