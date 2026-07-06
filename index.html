@@ -3,391 +3,2399 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sagrada Delicia — Alta Repostería-catalogo</title>
-    
-    <!-- Fuentes Elegantes de Google -->
+    <title>Sagrada Delicia — Alta Repostería · v8.7</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍰</text></svg>">
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
-    
+
     <style>
+        /* ══════════════════════════════════════════
+           PALETA & BASE
+        ══════════════════════════════════════════ */
         :root {
             --bg-principal: #0a0a0a;
-            --bg-card: #141414;
-            --dorado: #d4af37;
+            --bg-card:      #141414;
+            --bg-modal:     #0f0f0f;
+            --dorado:       #d4af37;
             --dorado-hover: #ebd586;
-            --texto-claro: #fcfbf9;
+            --dorado-suave: rgba(212,175,55,0.12);
+            --texto-claro:  #fcfbf9;
             --texto-mutado: #a8a29e;
-            --borde-suave: #262626;
+            --borde-suave:  #262626;
+            --borde-dorado: rgba(212,175,55,0.35);
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        
-        body { 
-            background-color: var(--bg-principal); 
-            color: var(--texto-claro); 
-            font-family: 'Montserrat', sans-serif; 
-            line-height: 1.6; 
-            padding-bottom: 80px; 
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg-principal);
+            color: var(--texto-claro);
+            font-family: 'Montserrat', sans-serif;
+            line-height: 1.6;
+            padding-bottom: 100px;
             -webkit-font-smoothing: antialiased;
         }
-        
-        /* CABECERA ELEGANTE */
-        header { 
-            text-align: center; 
-            padding: 70px 20px 50px; 
-            background: radial-gradient(circle at center, #1f1d18 0%, var(--bg-principal) 100%);
-            border-bottom: 1px solid var(--borde-suave); 
-            position: relative;
+
+        /* ══════════════════════════════════════════
+           EFECTO A — GRANO + RESPLANDOR GLOBAL
+        ══════════════════════════════════════════ */
+        #sd-grain-layer {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            background-image:
+                radial-gradient(circle, rgba(255,255,255,0.09) 1px, transparent 1px),
+                radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px),
+                radial-gradient(circle, rgba(212,175,55,0.06)  1px, transparent 1px),
+                linear-gradient(118deg, transparent 0%, rgba(212,175,55,0.06) 38%, transparent 52%, rgba(212,175,55,0.04) 74%, transparent 100%);
+            background-size: 52px 52px, 19px 23px, 37px 31px, 300% 300%;
+            background-position: 0px 0px, 9px 13px, 22px 7px, 0% 50%;
+            animation: sd-shimmer 14s ease-in-out infinite, sd-grano-pulse 9s ease-in-out infinite alternate;
         }
-        
+
+        @keyframes sd-shimmer {
+            0%   { background-position: 0px 0px,   9px 13px,  22px 7px,  0% 50%; }
+            100% { background-position: 52px 31px, 19px 23px, 37px 31px, 100% 50%; }
+        }
+
+        @keyframes sd-grano-pulse {
+            0%   { opacity: 0.45; }
+            40%  { opacity: 0.80; }
+            70%  { opacity: 0.50; }
+            100% { opacity: 0.75; }
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            background: radial-gradient(ellipse 70% 60% at 50% 35%, rgba(212,175,55,0.09) 0%, transparent 70%);
+            animation: sd-breathe 7s ease-in-out infinite;
+        }
+
+        @keyframes sd-breathe {
+            0%, 100% { opacity: 0.5; transform: scale(1); }
+            50%       { opacity: 1;  transform: scale(1.09); }
+        }
+
+        /* contenido sobre los efectos de fondo */
+        header, .container, footer, .wpp-float, .modal-overlay {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ══════════════════════════════════════════
+           EFECTO C — PARTÍCULAS FLOTANTES (portafolio)
+        ══════════════════════════════════════════ */
+        #wrapper-portafolio {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sd-particle {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(212,175,55,0.5);
+            pointer-events: none;
+            animation: sd-float linear infinite;
+            z-index: 0;
+        }
+
+        @keyframes sd-float {
+            0%   { opacity: 0;   transform: translateY(0)      translateX(0); }
+            12%  { opacity: 0.7; }
+            85%  { opacity: 0.3; }
+            100% { opacity: 0;   transform: translateY(-240px) translateX(var(--pdx)); }
+        }
+
+        /* contenido del portafolio por encima de las partículas */
+        #wrapper-portafolio > * { position: relative; z-index: 1; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-principal); }
+        ::-webkit-scrollbar-thumb { background: var(--borde-suave); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--dorado); }
+
+        /* ══════════════════════════════════════════
+           HEADER
+        ══════════════════════════════════════════ */
+        header {
+            text-align: center;
+            padding: 70px 20px 50px;
+            background: radial-gradient(circle at center, #1f1d18 0%, var(--bg-principal) 100%);
+            border-bottom: 1px solid var(--borde-suave);
+        }
+
         .eyebrow {
             display: block;
             color: var(--dorado);
-            font-size: 0.75rem;
+            font-size: 0.72rem;
             text-transform: uppercase;
             letter-spacing: 4px;
             margin-bottom: 15px;
         }
 
-        h1 { 
-            font-family: 'Playfair Display', serif; 
-            color: var(--texto-claro); 
-            font-size: 3rem; 
-            font-weight: 700; 
-            letter-spacing: 1px; 
-            margin-bottom: 10px; 
-        }
-        
-        .divider { color: var(--dorado); font-size: 1.2rem; margin: 15px 0; opacity: 0.7; }
-        .subtitle { color: var(--texto-mutado); font-size: 0.95rem; font-weight: 300; letter-spacing: 2px; text-transform: uppercase; }
-
-        .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
-        
-        .section-title { 
+        h1 {
             font-family: 'Playfair Display', serif;
-            font-size: 2rem; 
-            color: var(--dorado); 
-            margin: 70px 0 35px; 
+            color: var(--texto-claro);
+            font-size: clamp(2.2rem, 5vw, 3rem);
+            font-weight: 700;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .divider { color: var(--dorado); font-size: 1.1rem; margin: 14px 0; opacity: 0.7; }
+        .subtitle { color: var(--texto-mutado); font-size: 0.9rem; font-weight: 300; letter-spacing: 2px; text-transform: uppercase; }
+        .year-est { color: var(--dorado); opacity: 0.5; letter-spacing: 2px; font-size: 0.8rem; margin-top: 10px; }
+
+        /* ══════════════════════════════════════════
+           LAYOUT
+        ══════════════════════════════════════════ */
+        .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+
+        .section-title {
+            font-family: 'Playfair Display', serif;
+            font-size: clamp(1.5rem, 4vw, 2rem);
+            color: var(--dorado);
+            margin: 70px 0 35px;
             text-align: center;
             font-style: italic;
         }
-        
-        /* Grid Layouts */
-        .grid-ofertas, .grid-menu, .grid-galeria { display: grid; gap: 30px; }
-        .grid-ofertas { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-        .grid-menu { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-        .grid-galeria { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
 
-        /* CARDS ELEGANTES */
-        .card { 
-            background: var(--bg-card); 
-            border: 1px solid var(--borde-suave); 
-            border-radius: 4px; 
-            overflow: hidden; 
-            display: flex; 
-            flex-direction: column; 
-            transition: transform 0.4s ease, border-color 0.4s ease; 
+        .section-subtitle {
+            text-align: center;
+            color: var(--texto-mutado);
+            font-size: 0.82rem;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-top: -22px;
+            margin-bottom: 35px;
         }
-        .card:hover { 
-            transform: translateY(-8px); 
-            border-color: var(--dorado); 
+
+        /* ══════════════════════════════════════════
+           GRID LAYOUTS
+        ══════════════════════════════════════════ */
+        .grid-ofertas    { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; }
+        .grid-menu       { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px; }
+        .grid-recetas, .grid-recetas-normal { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }
+        .grid-galeria    { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+        .grid-portafolio { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; }
+
+        /* ══════════════════════════════════════════
+           CARDS BASE
+        ══════════════════════════════════════════ */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--borde-suave);
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
         }
-        
-        .card-img { width: 100%; height: 280px; object-fit: cover; border-bottom: 1px solid var(--borde-suave); }
-        .card-body { padding: 30px 25px; flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; }
-        
-        .card-title { 
+        .card:hover {
+            transform: translateY(-6px);
+            border-color: var(--dorado);
+            box-shadow: 0 10px 28px rgba(212,175,55,0.10);
+        }
+
+        .card-img { width: 100%; height: 270px; object-fit: cover; border-bottom: 1px solid var(--borde-suave); display: block; }
+        .video-wrapper { position: relative; width: 100%; }
+        .video-wrapper video { width: 100%; display: block; object-fit: cover; }
+        .video-wrapper.estrella video { height: 400px; }
+        .video-wrapper.clasica video, .video-wrapper.montaje video { height: 270px; }
+        .btn-sound-pub {
+            position: absolute; bottom: 10px; right: 10px;
+            background: rgba(0,0,0,0.55); border: none; border-radius: 50%;
+            width: 32px; height: 32px; font-size: 0.8rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; backdrop-filter: blur(4px); z-index: 10;
+            transition: background 0.2s;
+        }
+        .btn-sound-pub:hover { background: rgba(0,0,0,0.85); }
+        .card-body { padding: 28px 24px; flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; }
+        .card-title {
             font-family: 'Playfair Display', serif;
-            font-size: 1.4rem; 
-            color: var(--texto-claro); 
-            margin-bottom: 12px; 
+            font-size: 1.35rem;
+            color: var(--texto-claro);
+            margin-bottom: 10px;
+            text-transform: capitalize;
         }
-        
-        /* Detalles Desplegables (OFERTAS) */
+        .card-desc {
+            font-size: 0.88rem;
+            color: var(--texto-mutado);
+            font-weight: 300;
+            margin-bottom: 22px;
+            flex: 1;
+            font-style: italic;
+            line-height: 1.55;
+        }
+
+        /* ══════════════════════════════════════════
+           OFERTAS
+        ══════════════════════════════════════════ */
+        .oferta-badge {
+            background: transparent;
+            color: var(--dorado);
+            padding: 5px 14px;
+            font-size: 0.68rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            border: 1px solid var(--dorado);
+            margin-bottom: 18px;
+            display: inline-block;
+        }
+
+        .precio-oferta {
+            font-family: 'Playfair Display', serif;
+            color: var(--dorado);
+            font-weight: 600;
+            font-size: 1.5rem;
+            margin-bottom: 18px;
+        }
+
         .btn-toggle-desc {
-            background: none;
-            border: none;
+            background: none; border: none;
             color: var(--texto-mutado);
             font-family: 'Montserrat', sans-serif;
-            font-size: 0.8rem;
-            letter-spacing: 1px;
-            cursor: pointer;
-            margin-bottom: 15px;
-            transition: color 0.3s;
-            text-transform: uppercase;
+            font-size: 0.75rem; letter-spacing: 1px;
+            cursor: pointer; margin-bottom: 14px;
+            transition: color 0.3s; text-transform: uppercase;
         }
         .btn-toggle-desc:hover { color: var(--dorado); }
-        
         .desc-oculta { display: none; }
-        .desc-visible { 
-            display: block; 
-            animation: fadeInDesc 0.4s ease forwards; 
-        }
-        @keyframes fadeInDesc {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+        .desc-visible { display: block; animation: fadeInDesc 0.35s ease forwards; }
+        @keyframes fadeInDesc { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+
+        .oferta-desc-texto {
+            font-size: 0.88rem; color: #d6d3d1;
+            font-weight: 300; margin-bottom: 20px;
+            font-style: italic; line-height: 1.5;
         }
 
-        .card-desc { font-size: 0.9rem; color: #d6d3d1; font-weight: 300; margin-bottom: 25px; flex: 1; font-style: italic; }
-        .card-desc-menu { font-size: 0.9rem; color: var(--texto-mutado); font-weight: 300; margin-bottom: 25px; flex: 1; }
-        
-        /* Precio (Solo Ofertas) */
-        .precio-oferta { 
-            font-family: 'Playfair Display', serif;
-            color: var(--dorado); 
-            font-weight: 600; 
-            font-size: 1.5rem; 
-            margin-bottom: 20px;
+        /* ══════════════════════════════════════════
+           CARDS MENÚ / CONFIGURADOR
+        ══════════════════════════════════════════ */
+        .card-menu-emoji {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            display: block;
         }
 
-        .oferta-badge { 
-            background: transparent; 
-            color: var(--dorado); 
-            padding: 6px 15px; 
-            font-size: 0.7rem; 
+        /* ── HERO CARD — Línea Estrella ── */
+        .grid-estrella {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 28px;
+        }
+        .card-estrella {
+            background: var(--card-bg);
+            border-radius: var(--card-radius);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            box-shadow: 0 0 0 1px rgba(212,175,55,0.35),
+                        0 8px 40px rgba(212,175,55,0.14),
+                        0 2px 10px rgba(0,0,0,0.5);
+            transition: transform 0.35s ease, box-shadow 0.35s ease;
+        }
+        .card-estrella:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 0 0 1px rgba(212,175,55,0.65),
+                        0 20px 60px rgba(212,175,55,0.22),
+                        0 4px 18px rgba(0,0,0,0.6);
+        }
+        .card-estrella-img {
+            width: 100%; height: 400px;
+            object-fit: cover; display: block;
+        }
+        .badge-estrella {
+            position: absolute; top: 16px; left: 16px;
+            background: rgba(212,175,55,0.9);
+            color: #0a0a0a;
+            padding: 5px 14px; border-radius: 20px;
+            font-size: 0.68rem; font-weight: 800;
+            letter-spacing: 1.2px; text-transform: uppercase;
+            backdrop-filter: blur(4px);
+        }
+        @media (max-width: 600px) {
+            .card-estrella-img { height: 280px; }
+            .grid-estrella { grid-template-columns: 1fr; }
+        }
+
+        .btn-configurar {
+            display: inline-block;
+            width: 100%;
+            background: transparent;
+            color: var(--dorado);
+            border: 1px solid var(--dorado);
+            padding: 13px;
+            font-size: 0.8rem;
             letter-spacing: 2px;
             text-transform: uppercase;
-            border: 1px solid var(--dorado); 
-            margin-bottom: 20px; 
-        }
-
-        /* Botones */
-        .btn-pedir { 
-            display: inline-block; 
-            width: 100%; 
-            background: transparent; 
-            color: var(--dorado); 
-            border: 1px solid var(--dorado); 
-            padding: 14px; 
-            font-size: 0.85rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            text-decoration: none; 
-            transition: all 0.3s ease; 
+            text-decoration: none;
+            transition: all 0.3s ease;
             margin-top: auto;
+            cursor: pointer;
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 500;
+            text-align: center;
+        }
+        .btn-configurar:hover { background: var(--dorado); color: var(--bg-principal); }
+
+        /* ══════════════════════════════════════════
+           BOTÓN PEDIR (ofertas y general)
+        ══════════════════════════════════════════ */
+        .btn-pedir {
+            display: inline-block;
+            width: 100%;
+            background: transparent;
+            color: var(--dorado);
+            border: 1px solid var(--dorado);
+            padding: 13px;
+            font-size: 0.82rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            margin-top: auto;
+            text-align: center;
+            font-family: 'Montserrat', sans-serif;
         }
         .btn-pedir:hover { background: var(--dorado); color: var(--bg-principal); font-weight: 500; }
 
-        /* GALERÍA */
-        .galeria-item { position: relative; overflow: hidden; aspect-ratio: 1/1; border: 1px solid var(--borde-suave); }
-        .galeria-item img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.6s ease; filter: brightness(0.9); }
-        .galeria-item:hover img { transform: scale(1.08); filter: brightness(1); }
-        .galeria-overlay { 
-            position: absolute; bottom: 0; left: 0; right: 0; 
-            background: linear-gradient(transparent, rgba(0,0,0,0.95)); 
-            padding: 30px 20px 15px; 
-            color: var(--dorado); 
+        /* ══════════════════════════════════════════
+           MODAL CONFIGURADOR
+        ══════════════════════════════════════════ */
+        .modal-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.82);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            backdrop-filter: blur(4px);
+        }
+        .modal-overlay.abierto { display: flex; animation: fadeModal 0.25s ease; }
+        @keyframes fadeModal { from{opacity:0} to{opacity:1} }
+
+        .modal-box {
+            background: var(--bg-modal);
+            border: 1px solid var(--borde-dorado);
+            border-radius: 4px;
+            width: 100%;
+            max-width: 620px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 36px 32px;
+            position: relative;
+        }
+
+        .modal-cerrar {
+            position: absolute; top: 16px; right: 20px;
+            background: none; border: none;
+            color: var(--texto-mutado); font-size: 1.4rem;
+            cursor: pointer; line-height: 1;
+            transition: color 0.2s;
+        }
+        .modal-cerrar:hover { color: var(--dorado); }
+
+        .modal-img {
+            width: 100%; height: 200px;
+            object-fit: cover;
+            border: 1px solid var(--borde-suave);
+            margin-bottom: 22px;
+            display: block;
+        }
+
+        .modal-eyebrow {
+            font-size: 0.68rem; letter-spacing: 3px;
+            text-transform: uppercase; color: var(--dorado);
+            opacity: 0.7; margin-bottom: 6px; display: block;
+        }
+
+        .modal-titulo {
             font-family: 'Playfair Display', serif;
-            font-style: italic;
-            font-size: 1.1rem; 
-            opacity: 0; transition: opacity 0.4s ease; 
+            font-size: 1.6rem; color: var(--texto-claro);
+            margin-bottom: 6px; font-weight: 700;
+            text-transform: capitalize;
+        }
+
+        .modal-desc {
+            font-size: 0.85rem; color: var(--texto-mutado);
+            font-style: italic; margin-bottom: 24px;
+            line-height: 1.55;
+        }
+
+        /* Grupos de opciones */
+        .cfg-grupo { margin-bottom: 20px; }
+        .cfg-grupo-label {
+            font-size: 0.68rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 1.5px;
+            color: var(--dorado); opacity: 0.8;
+            margin-bottom: 10px; display: block;
+        }
+        .cfg-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+        .cfg-pill {
+            background: transparent;
+            border: 1px solid var(--borde-suave);
+            color: var(--texto-mutado);
+            padding: 7px 14px;
+            font-size: 0.78rem;
+            font-family: 'Montserrat', sans-serif;
+            cursor: pointer;
+            border-radius: 2px;
+            transition: all 0.22s ease;
+            letter-spacing: 0.3px;
+        }
+        .cfg-pill:hover { border-color: var(--dorado); color: var(--dorado); }
+        .cfg-pill.seleccionada {
+            background: var(--dorado-suave);
+            border-color: var(--dorado);
+            color: var(--dorado);
+            font-weight: 600;
+        }
+        .cfg-pill-dot {
+            display: inline-block;
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        .cfg-nota {
+            font-size: 0.72rem; color: var(--texto-mutado);
+            margin-top: 4px; font-style: italic;
+            display: block;
+        }
+
+        .cfg-libre-label {
+            font-size: 0.74rem; font-weight: 500;
+            color: var(--texto-claro); opacity: 0.85;
+            margin-bottom: 5px; display: block;
+        }
+        .cfg-libre-input {
+            width: 100%;
+            background: var(--bg-principal);
+            border: 1px solid var(--borde-suave);
+            color: var(--texto-claro);
+            padding: 10px 12px;
+            font-size: 0.82rem;
+            font-family: 'Montserrat', sans-serif;
+            border-radius: 2px;
+            transition: border-color 0.22s ease;
+        }
+        .cfg-libre-input:focus { outline: none; border-color: var(--dorado); }
+        .cfg-libre-input::placeholder { color: #c8c4c0; opacity: 1; }
+        .cfg-fecha-input {
+            background: var(--bg-card);
+            color-scheme: light;
+        }
+
+        .cfg-separador {
+            border: none; border-top: 1px solid var(--borde-suave);
+            margin: 22px 0;
+        }
+
+        .btn-wpp-configurador {
+            display: block; width: 100%;
+            background: var(--dorado);
+            color: var(--bg-principal);
+            border: none; padding: 15px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 0.82rem; font-weight: 600;
+            letter-spacing: 2px; text-transform: uppercase;
+            cursor: pointer; transition: background 0.3s ease;
+            margin-top: 6px; text-decoration: none;
+            text-align: center;
+        }
+        .btn-wpp-configurador:hover { background: var(--dorado-hover); }
+
+        .cfg-resumen {
+            background: rgba(212,175,55,0.06);
+            border: 1px solid var(--borde-dorado);
+            padding: 12px 16px; margin-bottom: 16px;
+            font-size: 0.78rem; color: var(--texto-mutado);
+            line-height: 1.6;
+        }
+        .cfg-resumen strong { color: var(--dorado); }
+
+        /* ══════════════════════════════════════════
+           RECETAS PÚBLICAS
+        ══════════════════════════════════════════ */
+        .card-receta {
+            background: var(--bg-card);
+            border: 1px solid var(--borde-suave);
+            border-radius: 4px;
+            padding: 22px 20px;
+            display: flex; flex-direction: column; gap: 10px;
+            transition: border-color 0.3s ease;
+        }
+        .card-receta:hover { border-color: var(--borde-dorado); }
+
+        .receta-cat-badge {
+            display: inline-block;
+            font-size: 0.65rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1.5px;
+            padding: 3px 10px;
+            border-radius: 2px;
+            align-self: flex-start;
+        }
+
+        .receta-nombre {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.05rem; color: var(--texto-claro);
+            font-weight: 600;
+        }
+
+        .receta-origen {
+            font-size: 0.72rem; color: var(--dorado);
+            opacity: 0.7; text-transform: uppercase; letter-spacing: 1px;
+        }
+
+        .receta-desc {
+            font-size: 0.82rem; color: var(--texto-mutado);
+            font-style: italic; line-height: 1.5; flex: 1;
+        }
+
+        /* ══════════════════════════════════════════
+           RECETA INSIGNIA
+        ══════════════════════════════════════════ */
+        /* ── Accordion recetas V8.6 ── */
+        .recetas-accordion { margin-bottom: 12px; border-radius: 6px; overflow: hidden; }
+        .recetas-accordion-header {
+            display: flex; align-items: center; justify-content: space-between;
+            cursor: pointer; padding: 14px 20px;
+            background: rgba(212,175,55,0.07);
+            border: 1px solid rgba(212,175,55,0.22);
+            border-radius: 6px;
+            user-select: none;
+            transition: background 0.2s ease;
+        }
+        .recetas-accordion-header:hover { background: rgba(212,175,55,0.13); }
+        .recetas-accordion-header.collapsed { border-radius: 6px; }
+        .recetas-accordion-header:not(.collapsed) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-color: transparent; }
+        .recetas-accordion-header h3 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.05rem; font-weight: 700;
+            color: var(--dorado); letter-spacing: 1.5px;
+            text-transform: uppercase; margin: 0;
+        }
+        .recetas-accordion-meta {
+            display: flex; align-items: center; gap: 10px;
+        }
+        .recetas-accordion-count {
+            font-size: 0.68rem; font-weight: 700; letter-spacing: 1px;
+            color: var(--dorado); opacity: 0.55;
+            background: rgba(212,175,55,0.1);
+            border: 1px solid rgba(212,175,55,0.2);
+            border-radius: 20px; padding: 2px 9px;
+        }
+        .recetas-accordion-chevron {
+            font-size: 0.72rem; color: var(--dorado); opacity: 0.8;
+            transition: transform 0.3s ease;
+        }
+        .recetas-accordion-header.collapsed .recetas-accordion-chevron { transform: rotate(-90deg); }
+        .recetas-accordion-body {
+            overflow: hidden;
+            max-height: 5000px;
+            transition: max-height 0.45s ease, opacity 0.3s ease, padding 0.3s ease;
+            opacity: 1;
+            padding: 24px 0 8px;
+            border: 1px solid rgba(212,175,55,0.22);
+            border-top: none;
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
+        }
+        .recetas-accordion-body.collapsed { max-height: 0; opacity: 0; padding: 0; border: none; }
+        /* ── Badge Nueva Receta ── */
+        .badge-nueva-receta {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: linear-gradient(135deg, rgba(167,139,250,0.18), rgba(212,175,55,0.12));
+            border: 1px solid rgba(167,139,250,0.45);
+            color: #c4b5fd;
+            font-size: 0.68rem; font-weight: 800;
+            letter-spacing: 1.5px; text-transform: uppercase;
+            padding: 4px 12px; border-radius: 20px;
+            margin: 6px 0 2px;
+        }
+        /* badge sobre insignia */
+        .badge-nueva-insignia {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: linear-gradient(135deg, rgba(167,139,250,0.2), rgba(212,175,55,0.1));
+            border: 1px solid rgba(167,139,250,0.5);
+            color: #c4b5fd;
+            font-size: 0.7rem; font-weight: 800;
+            letter-spacing: 1.5px; text-transform: uppercase;
+            padding: 4px 14px; border-radius: 20px;
+            margin: 4px 0 6px;
+        }
+        .grid-recetas-insignia {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 24px;
+            margin-bottom: 36px;
+        }
+        .card-receta-insignia {
+            background: var(--bg-card);
+            border: 1px solid rgba(167,139,250,0.35);
+            border-radius: 4px;
+            padding: 0;
+            display: flex; flex-direction: column;
+            transition: border-color 0.3s ease;
+            overflow: hidden;
+        }
+        .card-receta-insignia:hover { border-color: #a78bfa; }
+        .card-receta-insignia .insignia-img {
+            width: 100%; height: 280px;
+            object-fit: cover;
+            border-bottom: 1px solid rgba(167,139,250,0.2);
+        }
+        .card-receta-insignia .insignia-body {
+            padding: 22px 22px 20px;
+            display: flex; flex-direction: column; gap: 10px; flex: 1;
+        }
+        .badge-insignia {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 0.62rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1.8px;
+            padding: 4px 12px;
+            border-radius: 2px;
+            background: rgba(167,139,250,0.12);
+            color: #a78bfa;
+            border: 1px solid rgba(167,139,250,0.3);
+            align-self: flex-start;
+        }
+        .insignia-nombre {
+            font-family: "Playfair Display", serif;
+            font-size: 1.22rem; color: var(--texto-claro);
+            font-weight: 700; line-height: 1.3;
+        }
+        .insignia-origen {
+            font-size: 0.72rem; color: #a78bfa;
+            opacity: 0.8; text-transform: uppercase; letter-spacing: 1px;
+        }
+        .insignia-desc {
+            font-size: 0.85rem; color: var(--texto-mutado);
+            font-style: italic; line-height: 1.6; flex: 1;
+        }
+        .btn-pedir-receta {
+            margin-top: 6px;
+            padding: 10px 18px;
+            background: rgba(167,139,250,0.1);
+            border: 1px solid rgba(167,139,250,0.4);
+            color: #a78bfa;
+            border-radius: 3px;
+            font-size: 0.8rem; font-weight: 600;
+            cursor: pointer; letter-spacing: 0.5px;
+            transition: background 0.2s ease, border-color 0.2s ease;
+            align-self: flex-start;
+        }
+        .btn-pedir-receta:hover {
+            background: rgba(167,139,250,0.2);
+            border-color: #a78bfa;
+        }
+        .btn-pedir-receta-normal {
+            margin-top: 6px;
+            padding: 8px 16px;
+            background: rgba(212,175,55,0.07);
+            border: 1px solid rgba(212,175,55,0.3);
+            color: var(--dorado);
+            border-radius: 3px;
+            font-size: 0.78rem; font-weight: 600;
+            cursor: pointer; letter-spacing: 0.5px;
+            transition: background 0.2s ease, border-color 0.2s ease;
+            align-self: flex-start;
+        }
+        .btn-pedir-receta-normal:hover {
+            background: rgba(212,175,55,0.15);
+            border-color: var(--dorado);
+        }
+
+        /* ══════════════════════════════════════════
+           GALERÍA
+        ══════════════════════════════════════════ */
+        .galeria-item {
+            position: relative; overflow: hidden;
+            aspect-ratio: 1/1;
+            border: 1px solid var(--borde-suave);
+            cursor: pointer;
+        }
+        .galeria-item img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            transition: transform 0.55s ease;
+            filter: brightness(0.88);
+        }
+        .galeria-item:hover img { transform: scale(1.08); filter: brightness(1); }
+        .galeria-overlay {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,0.92));
+            padding: 28px 16px 14px;
+            color: var(--dorado);
+            font-family: 'Playfair Display', serif;
+            font-style: italic; font-size: 0.95rem;
+            opacity: 0; transition: opacity 0.35s ease;
             text-align: center;
         }
         .galeria-item:hover .galeria-overlay { opacity: 1; }
 
-        /* LOADER */
-        .loader { text-align: center; padding: 100px 20px; color: var(--dorado); font-family: 'Playfair Display', serif; font-style: italic; font-size: 1.2rem; }
-        
-        /* PIE DE PÁGINA */
-        footer { 
-            text-align: center; 
-            padding: 60px 20px 40px; 
-            border-top: 1px solid var(--borde-suave);
-            margin-top: 60px;
+        /* ══════════════════════════════════════════
+           PORTAFOLIO DE OBRAS
+        ══════════════════════════════════════════ */
+        .card-obra {
+            background: var(--bg-card);
+            border: 1px solid var(--borde-suave);
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
         }
-        footer p { color: var(--texto-mutado); font-size: 0.85rem; letter-spacing: 1px; }
-        .footer-wpp { color: var(--dorado); text-decoration: none; font-weight: 500; }
+        .card-obra:hover {
+            transform: translateY(-5px);
+            border-color: var(--borde-dorado);
+            box-shadow: 0 12px 32px rgba(212,175,55,0.09);
+        }
 
-        /* WHATSAPP FLOTANTE */
+        .card-obra-img {
+            width: 100%;
+            height: 300px;
+            object-fit: cover;
+            display: block;
+            filter: brightness(0.92);
+            transition: filter 0.4s ease;
+        }
+        .card-obra:hover .card-obra-img { filter: brightness(1); }
+
+        .card-obra-body {
+            padding: 22px 20px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .obra-linea {
+            font-size: 0.65rem;
+            color: var(--dorado);
+            opacity: 0.75;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 600;
+        }
+
+        .obra-receta {
+            font-size: 0.65rem;
+            color: var(--texto-mutado);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            opacity: 0.7;
+        }
+
+        .obra-nombre {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.15rem;
+            color: var(--texto-claro);
+            font-weight: 600;
+            line-height: 1.3;
+        }
+
+        .obra-desc {
+            font-size: 0.82rem;
+            color: var(--texto-mutado);
+            font-style: italic;
+            line-height: 1.55;
+            flex: 1;
+        }
+
+        .obra-fecha {
+            font-size: 0.65rem;
+            color: var(--texto-mutado);
+            opacity: 0.5;
+            letter-spacing: 1px;
+            margin-top: 4px;
+        }
+
+        .obra-separador {
+            border: none;
+            border-top: 1px solid var(--borde-suave);
+            margin: 4px 0;
+        }
+
+        .btn-obra-wpp {
+            display: block;
+            width: 100%;
+            background: transparent;
+            color: var(--dorado);
+            border: 1px solid var(--borde-dorado);
+            padding: 11px;
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            text-align: center;
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 500;
+            margin-top: 4px;
+        }
+        .btn-obra-wpp:hover {
+            background: var(--dorado);
+            color: var(--bg-principal);
+            border-color: var(--dorado);
+        }
+
+        /* ══════════════════════════════════════════
+           LOADER
+        ══════════════════════════════════════════ */
+        .loader {
+            text-align: center; padding: 100px 20px;
+            color: var(--dorado);
+            font-family: 'Playfair Display', serif;
+            font-style: italic; font-size: 1.15rem;
+        }
+
+        /* ══════════════════════════════════════════
+           FOOTER
+        ══════════════════════════════════════════ */
+        footer {
+            text-align: center;
+            padding: 60px 20px 40px;
+            border-top: 1px solid var(--borde-suave);
+            margin-top: 70px;
+        }
+        footer p { color: var(--texto-mutado); font-size: 0.83rem; letter-spacing: 1px; }
+        .footer-wpp { color: var(--dorado); text-decoration: none; font-weight: 500; }
+        .footer-wpp:hover { color: var(--dorado-hover); }
+
+        /* ══════════════════════════════════════════
+           WPP FLOTANTE
+        ══════════════════════════════════════════ */
+        /* ── MONTAJE CHIPS ── */
+        .montaje-card-seleccionable {
+            position: relative; cursor: pointer;
+            transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
+            border: 2px solid transparent;
+        }
+        .montaje-card-seleccionable.seleccionado {
+            border-color: rgba(192,132,252,0.7);
+            box-shadow: 0 0 0 3px rgba(192,132,252,0.15);
+            transform: translateY(-2px);
+        }
+        .montaje-card-check {
+            position: absolute; top: 10px; right: 10px;
+            width: 24px; height: 24px; border-radius: 50%;
+            background: var(--bg-card); border: 2px solid rgba(192,132,252,0.4);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; transition: all 0.18s; z-index: 2;
+        }
+        .montaje-card-seleccionable.seleccionado .montaje-card-check {
+            background: rgba(192,132,252,0.85); border-color: rgba(192,132,252,0.9);
+            color: #fff;
+        }
+        /* ── PILOTO: pista visual sobre el primer aro de montaje ── */
+        .montaje-hint {
+            position: absolute; top: -6px; right: 34px;
+            display: flex; align-items: flex-start; gap: 4px;
+            z-index: 3; pointer-events: none;
+            animation: sd-hint-fade 0.4s ease-out, sd-hint-bounce 1.8s ease-in-out 0.4s infinite;
+        }
+        .montaje-hint svg { width: 34px; height: 26px; overflow: visible; }
+        .montaje-hint-label {
+            background: rgba(192,132,252,0.95); color: #1a0f26;
+            font-size: 0.66rem; font-weight: 700; letter-spacing: 0.3px;
+            padding: 4px 8px; border-radius: 4px; white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+            transform: translateY(2px);
+        }
+        @keyframes sd-hint-fade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes sd-hint-bounce {
+            0%, 100% { transform: translate(0,0) rotate(-4deg); }
+            50%      { transform: translate(3px,-3px) rotate(-4deg); }
+        }
+        @media (max-width: 480px) {
+            .montaje-hint { right: 30px; }
+            .montaje-hint-label { font-size: 0.6rem; padding: 3px 6px; }
+        }
+        /* ── BARRA COMBO MONTAJE ── */
+        #montaje-combo-bar {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: var(--bg-card);
+            border-top: 1px solid rgba(192,132,252,0.35);
+            padding: 12px 24px;
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+            z-index: 200;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(.4,0,.2,1);
+            box-shadow: 0 -4px 24px rgba(0,0,0,0.5);
+        }
+        #montaje-combo-bar.visible { transform: translateY(0); }
+        #montaje-combo-names {
+            flex: 1; font-size: 0.82rem; color: rgba(255,255,255,0.65);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        #montaje-combo-names strong { color: rgba(192,132,252,0.9); margin-right: 6px; }
+        .btn-combo-wpp {
+            background: rgba(192,132,252,0.15);
+            color: rgba(192,132,252,0.95);
+            border: 1px solid rgba(192,132,252,0.45);
+            border-radius: 6px; padding: 9px 20px;
+            font-size: 0.85rem; font-weight: 600; cursor: pointer;
+            white-space: nowrap; transition: all 0.2s; text-decoration: none;
+        }
+        .btn-combo-wpp:hover {
+            background: rgba(192,132,252,0.3);
+            border-color: rgba(192,132,252,0.8);
+        }
+        .btn-combo-limpiar {
+            background: transparent; color: rgba(255,255,255,0.35);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px; padding: 9px 14px;
+            font-size: 0.82rem; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-combo-limpiar:hover { color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.3); }
+
         .wpp-float {
-            position: fixed; bottom: 25px; right: 25px; background-color: #25D366; color: white;
-            width: 55px; height: 55px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-            font-size: 30px; box-shadow: 0 4px 15px rgba(37, 211, 102, 0.4); z-index: 100; transition: transform 0.3s;
+            position: fixed; bottom: 25px; right: 25px;
+            background: var(--bg-card);
+            color: var(--dorado);
+            border: 1px solid var(--dorado);
+            width: 54px; height: 54px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 150; transition: all 0.3s;
             text-decoration: none;
         }
-        .wpp-float:hover { transform: scale(1.1); }
+        .wpp-float:hover {
+            transform: scale(1.1);
+            background: var(--dorado);
+            color: var(--bg-principal);
+            box-shadow: 0 4px 18px rgba(212,175,55,0.4);
+        }
+
+        /* ══════════════════════════════════════════
+           RESPONSIVE
+        ══════════════════════════════════════════ */
+        @media (max-width: 640px) {
+            .modal-box { padding: 24px 18px; }
+            .modal-titulo { font-size: 1.3rem; }
+            .grid-recetas { grid-template-columns: 1fr; }
+            .grid-portafolio { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 480px) {
+            .grid-galeria { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        /* ══ BLOQUE INTRODUCTORIO ══ */
+        .intro-bloque {
+            text-align: center;
+            padding: 52px 24px 44px;
+            border-bottom: 1px solid var(--borde-suave);
+            background: linear-gradient(to bottom, rgba(212,175,55,0.04) 0%, transparent 100%);
+            position: relative; z-index: 1;
+        }
+        .intro-frase {
+            font-family: 'Playfair Display', serif;
+            font-style: italic;
+            font-size: clamp(0.98rem, 2.2vw, 1.28rem);
+            color: var(--texto-claro);
+            font-weight: 400;
+            line-height: 1.85;
+            max-width: 620px;
+            margin: 0 auto 22px;
+            opacity: 0.88;
+        }
+        .intro-frase strong {
+            font-style: normal;
+            color: var(--dorado);
+            font-weight: 600;
+        }
+        .intro-divider {
+            color: var(--dorado);
+            opacity: 0.35;
+            font-size: 0.9rem;
+            letter-spacing: 8px;
+            margin-bottom: 18px;
+        }
+        .intro-tags {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+        .intro-tag {
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 2.5px;
+            color: var(--dorado);
+            opacity: 0.55;
+            transition: opacity 0.2s;
+        }
+        .intro-tag:hover { opacity: 0.9; }
+        @media (max-width: 600px) {
+            .intro-bloque { padding: 36px 18px 32px; }
+            .intro-tags { gap: 14px; }
+        }
     </style>
 </head>
 <body>
 
-    <header>
-
-        <div align;style="width: 100%;">
-  <img
-      src="https://res.cloudinary.com/dv7lelmoy/image/upload/v1782263129/JQLB0329_ynelcv.jpg"
-    alt="logo"
-    style="width: 33%; height: auto;"
-  >
+<div id="sd-grain-layer" aria-hidden="true" style="position:fixed;inset:0;z-index:0;pointer-events:none;"></div>
+<!-- MODAL CONFIGURADOR -->
+<div class="modal-overlay" id="modal-configurador" onclick="cerrarModalSiOverlay(event)">
+    <div class="modal-box" id="modal-box">
+        <button class="modal-cerrar" onclick="cerrarModal()" aria-label="Cerrar">✕</button>
+        <div id="modal-contenido"></div>
+    </div>
 </div>
 
-        
-        <span class="eyebrow">Repostería Fina</span>
-        <h1>Sagrada Delicia</h1>
-        <div class="divider">✦</div>
-        <p class="subtitle">Diseño de Autor</p>
-        <p style="color:Tomato;">1985</p>
-    </header>
-
-    <div class="container">
-        <div id="loader" class="loader">Preparando el menú...🧠+🥣</div>
-
-        <div id="contenido-catalogo" style="display: none;">
-            
-            <!-- SECCIÓN 1: OFERTAS Y EDICIONES ESPECIALES (Muestra precios y detalles ocultos) -->
-            <div id="wrapper-ofertas" style="display: none;">
-                <h2 class="section-title">Ediciones Especiales</h2>
-                <div id="grid-ofertas" class="grid-ofertas"></div>
-            </div>
-
-            <!-- SECCIÓN 2: MENÚ BASE (SIN precios) -->
-            <h2 class="section-title">Colección Clásica</h2>
-            <div id="grid-menu" class="grid-menu"></div>
-
-            <!-- SECCIÓN 3: GALERÍA DE TRABAJOS -->
-            <div id="wrapper-galeria" style="display: none;">
-                <h2 class="section-title">» Obras Recientes </h2>
-                <div id="grid-galeria" class="grid-galeria"></div>
-            </div>
-
-        </div>
+<!-- ════════════════════════════════════
+     HEADER
+════════════════════════════════════ -->
+<header>
+    <div style="text-align:center; width:100%; margin-bottom: 24px;">
+        <img src="https://res.cloudinary.com/dv7lelmoy/image/upload/v1782263129/JQLB0329_ynelcv.jpg"
+            alt="Sagrada Delicia"
+            style="width:clamp(120px,28%,200px); height:auto; object-fit:contain;">
     </div>
+    <span class="eyebrow">Repostería Fina</span>
+    <h1>Sagrada Delicia</h1>
+    <div class="divider">✦</div>
+    <p class="subtitle">Diseño de Autor</p>
+    <p class="year-est">Est. 1985</p>
+<P>—</P>
+<p style="margin-top:20px;">
+        <a href="ADMIN.html"
+           style="font-size:1rem; letter-spacing:11px; text-transform:uppercase; color:var(--dorado); text-decoration:none; opacity:0.55; border-bottom:1px solid rgba(212,175,55,0.25); padding-bottom:2px; transition:opacity 0.2s;"
+           onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.55'">
+            🥚ADMIN
+        </a>
+    </p>
+</header>
 
-    <footer>
-        <div style="font-size: 24px; color: var(--dorado); margin-bottom: 15px;">✧</div>
-        <p>Cali, Colombia</p>
-        <p style="margin: 10px 0;">Contáctanos vía WhatsApp: <a href="https://wa.me/573183110524" class="footer-wpp">+57 318 3110524</a></p>
-        <p style="margin-top: 20px; font-size: 0.7rem; opacity: 0.4;">© 2024 Sagrada Delicia. Todos los derechos reservados.</p>
-    </footer>
+<!-- ════════════════════════════════════
+     INTRO — Presentación de la marca
+════════════════════════════════════ -->
+<section class="intro-bloque">
+    <p class="intro-frase">
+        Repostería artesanal de autor, desde Cali para el mundo.<br>
+        Cada pieza diseñada desde cero: <strong>ingredientes de primera</strong>,<br>
+        recetas propias y más de 35 años de <strong>obsesión por el detalle</strong>.
+    </p>
+    <div class="intro-divider">✦ · · · ✦</div>
+    <div class="intro-tags">
+        <span class="intro-tag">✦ Sin moldes genéricos</span>
+        <span class="intro-tag">✦ Ingredientes de primera</span>
+        <span class="intro-tag">✦ Pedidos enteramente a medida</span>
+    </div>
+</section>
 
-    <!-- Botón flotante WhatsApp -->
-    <a href="https://wa.me/573183110524" class="wpp-float" target="_blank" aria-label="WhatsApp">
-        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="currentColor" viewBox="0 0 16 16">
-            <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/>
-        </svg>
-    </a>
+<div class="container">
+    <div id="loader" class="loader">Preparando el menú... 🧠 + 🥣</div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    <div id="contenido-catalogo" style="display:none;">
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyAeAWVCyu_qUSVo11uToAgGKqSYhdU1ABI",
-            authDomain: "sagrada-delicia-central.firebaseapp.com",
-            projectId: "sagrada-delicia-central",
-            storageBucket: "sagrada-delicia-central.firebasestorage.app",
-            messagingSenderId: "474340023357",
-            appId: "1:474340023357:web:bd7a643fa77733eaaede54"
+        <!-- SECCIÓN 1: EDICIONES ESPECIALES (Ofertas con precio) -->
+        <div id="wrapper-ofertas" style="display:none;">
+            <h2 class="section-title">Ediciones Especiales</h2>
+            <p class="section-subtitle">Disponibilidad limitada · Con precio cerrado</p>
+            <div id="grid-ofertas" class="grid-ofertas"></div>
+        </div>
+
+        <!-- SECCIÓN 2: FUERTE DE LA CASA (Líneas Estrella) -->
+        <div id="wrapper-estrella" style="display:none;">
+            <h2 class="section-title">Nuestro Fuerte</h2>
+            <p class="section-subtitle">Lo que nos define · Elaborado con amor y obsesión</p>
+            <div id="grid-estrella" class="grid-estrella"></div>
+        </div>
+
+        <!-- SECCIÓN 2.3: NUESTRAS FÓRMULAS (cerca del fuerte) -->
+        <div id="wrapper-recetas" style="display:none;">
+            <h2 class="section-title">Nuestros Sabores...</h2>
+            <p class="section-subtitle">Recetas de autor disponibles para tu pedido</p>
+            <div id="grid-recetas"></div>
+        </div>
+
+        <!-- BUSCADOR DE PRODUCTOS V6.19 -->
+        <div id="wrapper-buscador" style="margin: 24px 0 8px;">
+            <input type="text" id="busq-publico" placeholder="🔍 Buscar producto..."
+                oninput="_buscarProductos(this.value)"
+                style="width:100%; box-sizing:border-box; padding:12px 18px; border-radius:12px;
+                    border:1px solid var(--borde-suave); background:var(--bg-card,#1a1a1a);
+                    color:var(--txt,#f5f0e8); font-size:0.9rem; outline:none;">
+        </div>
+
+        <!-- SECCIÓN 2.6: COLECCIÓN CLÁSICA -->
+        <div id="wrapper-menu" style="display:none;">
+            <h2 class="section-title">Otras Delicias...</h2>
+            <p class="section-subtitle">Configura tu pedido · Sin precios en vitrina</p>
+            <div id="grid-menu" class="grid-menu"></div>
+        </div>
+
+        <!-- SECCIÓN 2.5: MENÚ SELECTIVO -->
+        <div id="wrapper-menu-selectivo" style="display:none;">
+            <h2 class="section-title">Menú Selectivo</h2>
+            <p class="section-subtitle">Elige tus opciones · Nosotros nos encargamos del resto</p>
+            <div id="grid-menu-selectivo" class="grid-menu"></div>
+        </div>
+
+        <!-- SECCIÓN 2.7: MINI TREATS -->
+        <div id="wrapper-mini-treats" style="display:none;">
+            <h2 class="section-title">Mesa Dulce (Mini Treats)...</h2>
+            <p class="section-subtitle">Delicias pequeñas · Pedido mínimo por producto</p>
+            <div id="grid-mini-treats" class="grid-menu"></div>
+        </div>
+
+        <!-- SECCIÓN 4: GALERÍA -->
+        <div id="wrapper-galeria" style="display:none;">
+            <h2 class="section-title">» Obras Recientes</h2>
+            <div id="grid-galeria" class="grid-galeria"></div>
+        </div>
+
+        <!-- SECCIÓN 4.5: MONTAJES Y DISEÑO DE EVENTO -->
+        <div id="wrapper-montaje" style="display:none;">
+            <h2 class="section-title">🎪 Montajes y Diseño de Evento</h2>
+            <p class="section-subtitle">Producciones a medida · Cotización personalizada</p>
+            <div id="grid-montaje" class="grid-menu"></div>
+        </div>
+
+        <!-- SECCIÓN 5: PORTAFOLIO DE OBRAS (desde DB_HISTORIAL publicado:true) -->
+        <div id="wrapper-portafolio" style="display:none;">
+            <h2 class="section-title">Portafolio de Obras</h2>
+            <p class="section-subtitle">Trabajos realizados · Cada pieza, única</p>
+            <div id="grid-portafolio" class="grid-portafolio"></div>
+        </div>
+
+    </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+    <div style="font-size:22px; color:var(--dorado); margin-bottom:14px;">✧</div>
+    <p>Cali, Colombia</p>
+    <p style="margin:10px 0;">Contáctanos vía WhatsApp:
+        <a href="https://wa.me/573183110524" class="footer-wpp" target="_blank">+57 318 311 0524</a>
+    </p>
+    <p style="margin-top:20px;">
+        <a href="NOSOTROS.html"
+           style="font-size:1rem; letter-spacing:8px; text-transform:uppercase; color:var(--dorado); text-decoration:none; opacity:0.55; border-bottom:1px solid rgba(212,175,55,0.25); padding-bottom:2px; transition:opacity 0.2s;"
+           onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.55'">
+            💜Sobre Nosotras
+        </a>
+    </p>
+<P>—</P>
+<p style="margin-top:20px;">
+        <a href="ADMIN.html"
+           style="font-size:1rem; letter-spacing:11px; text-transform:uppercase; color:var(--dorado); text-decoration:none; opacity:0.55; border-bottom:1px solid rgba(212,175,55,0.25); padding-bottom:2px; transition:opacity 0.2s;"
+           onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.55'">
+            🥚ADMIN
+        </a>
+    </p>
+
+    <p style="margin-top:20px; font-size:0.68rem; opacity:0.35;">
+        © 2026 Sagrada Delicia. Todos los derechos reservados.
+    </p>
+    <p style="margin-top:10px; font-size:0.68rem; opacity:0.28;">
+        Diseñado por: Marto 🧠 · martowave@gmail.com
+    </p>
+</footer>
+
+<!-- WPP FLOTANTE -->
+<!-- BARRA COMBO MONTAJE -->
+<div id="montaje-combo-bar">
+    <div id="montaje-combo-names"><strong id="montaje-combo-cnt">0</strong> productos seleccionados</div>
+    <button class="btn-combo-limpiar" onclick="_limpiarComboMontaje()">↺ Limpiar</button>
+    <button class="btn-combo-wpp" onclick="_cotizarComboMontaje()">Cotizar Combo → WhatsApp ✦</button>
+</div>
+
+<a href="https://wa.me/573183110524" class="wpp-float" target="_blank" aria-label="WhatsApp">
+    <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/>
+    </svg>
+</a>
+
+<!-- ════════════════════════════════════
+     FIREBASE + LÓGICA
+════════════════════════════════════ -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey:            "AIzaSyAeAWVCyu_qUSVo11uToAgGKqSYhdU1ABI",
+        authDomain:        "sagrada-delicia-central.firebaseapp.com",
+        projectId:         "sagrada-delicia-central",
+        storageBucket:     "sagrada-delicia-central.firebasestorage.app",
+        messagingSenderId: "474340023357",
+        appId:             "1:474340023357:web:bd7a643fa77733eaaede54"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    const WHATSAPP_NUM = "573183110524";
+
+    /* ── Helpers ── */
+    function _moneda(val) {
+        return new Intl.NumberFormat('es-CO', {
+            style: 'currency', currency: 'COP', minimumFractionDigits: 0
+        }).format(val || 0);
+    }
+
+    /* ① _esc corregido: escapa también la comilla simple para proteger los onclick */
+    function _esc(str) {
+        return String(str || '')
+            .replace(/&/g,  '&amp;')
+            .replace(/"/g,  '&quot;')
+            .replace(/'/g,  '&#39;')
+            .replace(/</g,  '&lt;')
+            .replace(/>/g,  '&gt;');
+    }
+
+    function _wppLink(texto) {
+        return `https://wa.me/${WHATSAPP_NUM}?text=${encodeURIComponent(texto)}`;
+    }
+
+    /* ══════════════════════════════════════════
+       MODAL CONFIGURADOR
+    ══════════════════════════════════════════ */
+
+    // Estado de selecciones activas
+    let _selecciones    = {};
+    let _cfgActivo      = null;  // producto activo en modal
+    let _selMenuSelectivo = {};  // estado separado para modal selectivo
+
+    window.abrirConfigurador = function(prodId, saborPreset) {
+        const cfg = window._CONFIGURADOR[prodId];
+        if (!cfg) return;
+        _cfgActivo = prodId;
+        _selecciones[prodId] = _selecciones[prodId] || {
+            tamanio: null, sabor: null, relleno: null, decoracion: null, libres: {}
+        };
+        if (!_selecciones[prodId].libres) _selecciones[prodId].libres = {};
+        if (saborPreset) _selecciones[prodId].sabor = saborPreset;
+        _renderizarModal(prodId, cfg);
+        document.getElementById('modal-configurador').classList.add('abierto');
+        document.body.style.overflow = 'hidden';
+    };
+
+    window.cerrarModal = function() {
+        document.getElementById('modal-configurador').classList.remove('abierto');
+        document.body.style.overflow = '';
+        _cfgActivo = null;
+    };
+
+    window.cerrarModalSiOverlay = function(e) {
+        if (e.target === document.getElementById('modal-configurador')) cerrarModal();
+    };
+
+    window.toggleDescripcion = function(uid) {
+        const p   = document.getElementById('desc-' + uid);
+        const btn = document.getElementById('btn-' + uid);
+        if (!p) return;
+        const oculto = p.classList.contains('desc-oculta');
+        p.classList.toggle('desc-oculta',  !oculto);
+        p.classList.toggle('desc-visible', oculto);
+        if (btn) btn.textContent = oculto ? 'Ocultar detalles ✕' : 'Ver detalles del diseño ✦';
+    };
+
+    function _selPill(prodId, campo, valor) {
+        if (!_selecciones[prodId]) _selecciones[prodId] = {};
+        // Toggle: si ya estaba seleccionado, deseleccionar
+        _selecciones[prodId][campo] = _selecciones[prodId][campo] === valor ? null : valor;
+        _renderizarModal(prodId, window._CONFIGURADOR[prodId]);
+    }
+    window._selPill = _selPill;
+
+    function _setLibre(prodId, campoId, valor) {
+        if (!_selecciones[prodId]) _selecciones[prodId] = {};
+        if (!_selecciones[prodId].libres) _selecciones[prodId].libres = {};
+        _selecciones[prodId].libres[campoId] = valor;
+        /* No se re-renderiza el modal aquí para no perder el foco del input
+           mientras el cliente escribe. El resumen/WPP se arma al reabrir o enviar. */
+    }
+    window._setLibre = _setLibre;
+
+    function _setFechaEvento(prodId, valorISO) {
+        if (!_selecciones[prodId]) _selecciones[prodId] = {};
+        _selecciones[prodId].fechaEvento = valorISO || '';
+        _renderizarModal(prodId, window._CONFIGURADOR[prodId]);
+    }
+    window._setFechaEvento = _setFechaEvento;
+
+    /* Convierte 'YYYY-MM-DD' a 'MARTES, 18 DE ABRIL 2026' */
+    function _formatearFechaEs(valorISO) {
+        if (!valorISO) return '';
+        const dias = ['DOMINGO','LUNES','MARTES','MIÉRCOLES','JUEVES','VIERNES','SÁBADO'];
+        const meses = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+        const [y, m, d] = valorISO.split('-').map(Number);
+        if (!y || !m || !d) return '';
+        const fecha = new Date(y, m - 1, d);
+        return `${dias[fecha.getDay()]}, ${d} DE ${meses[m - 1]} ${y}`;
+    }
+    window._formatearFechaEs = _formatearFechaEs;
+
+    /* ══════════════════════════════════════════
+       MODAL SELECTIVO — funciones nuevas V6.7
+       Estado separado: _selMenuSelectivo
+       No toca _selecciones, _selPill, _renderizarModal
+    ══════════════════════════════════════════ */
+
+    window.abrirModalSelectivo = function(lineaId, linea) {
+        if (!_selMenuSelectivo[lineaId]) _selMenuSelectivo[lineaId] = {};
+        _renderizarModalSelectivo(lineaId, linea);
+        document.getElementById('modal-configurador').classList.add('abierto');
+        document.body.style.overflow = 'hidden';
+    };
+
+    function _renderizarModalSelectivo(lineaId, linea) {
+        const sel    = _selMenuSelectivo[lineaId] || {};
+        const grupos = linea.grupos || [];
+
+        /* Resumen de selecciones */
+        const resumenLineas = grupos
+            .filter(g => sel[g.id])
+            .map(g => `<strong>${_esc(g.nombre)}:</strong> ${_esc(sel[g.id])}`);
+
+        const resumenHTML = resumenLineas.length > 0
+            ? `<div class="cfg-resumen">${resumenLineas.join(' · ')}</div>`
+            : '';
+
+        /* Grupos de selección — uno por grupo */
+        const gruposHTML = grupos.map(grupo => {
+            const opcionesHTML = (grupo.opciones || []).map(op => {
+                const activa = sel[grupo.id] === op ? 'seleccionada' : '';
+                return `<button class="cfg-pill ${activa}"
+                    onclick="_selPillSelectivo('${_esc(lineaId)}', '${_esc(grupo.id)}', '${_esc(op)}')"
+                    >${_esc(op)}</button>`;
+            }).join('');
+
+            return `<div class="cfg-grupo">
+                <span class="cfg-grupo-label">${_esc(grupo.nombre)}</span>
+                <div class="cfg-pills">${opcionesHTML || '<span style="color:var(--texto-mutado); font-size:0.8rem; font-style:italic;">Sin opciones definidas.</span>'}</div>
+            </div>`;
+        }).join('');
+
+        /* Mensaje WPP */
+        const selItems = grupos
+            .filter(g => sel[g.id])
+            .map(g => `${g.nombre}: ${sel[g.id]}`);
+
+        const msgWpp = [
+            `¡Hola Sagrada Delicia! ✨ Quiero cotizar: *${linea.nombre || lineaId}*.`,
+            ...selItems,
+            `\n¿Me puedes dar información y precio?`
+        ].filter(Boolean).join('\n');
+
+        const haySel = selItems.length > 0;
+
+        document.getElementById('modal-contenido').innerHTML = `
+            <span class="modal-eyebrow">Menú Selectivo</span>
+            <div class="modal-titulo">${_esc(linea.nombre || lineaId)}</div>
+            <hr class="cfg-separador">
+            ${gruposHTML}
+            <hr class="cfg-separador">
+            ${resumenHTML}
+            <a class="btn-wpp-configurador"
+                href="${_wppLink(msgWpp)}"
+                target="_blank">
+                ${haySel ? '✉ Enviar Selección por WhatsApp' : '✉ Cotizar por WhatsApp'}
+            </a>
+            <p style="text-align:center; font-size:0.68rem; color:var(--texto-mutado); margin-top:10px; letter-spacing:1px;">
+                SIN PRECIOS · RESPUESTA PERSONALIZADA
+            </p>`;
+    }
+
+    function _selPillSelectivo(lineaId, grupoId, valor) {
+        if (!_selMenuSelectivo[lineaId]) _selMenuSelectivo[lineaId] = {};
+        /* Toggle: si ya estaba seleccionado, deseleccionar */
+        _selMenuSelectivo[lineaId][grupoId] =
+            _selMenuSelectivo[lineaId][grupoId] === valor ? null : valor;
+
+        /* Reconstruir la linea desde el DOM no es práctico —
+           buscamos en los datos cargados */
+        const linea = (window._MENU_SELECTIVO || []).find(l => l.id === lineaId);
+        if (linea) _renderizarModalSelectivo(lineaId, linea);
+    }
+    window._selPillSelectivo = _selPillSelectivo;
+
+    function _renderizarModal(prodId, cfg) {
+        const sel = _selecciones[prodId] || {};
+        const imgSrc = cfg.imagen_url
+            ? cfg.imagen_url
+            : `https://placehold.co/600x300/141414/d4af37?text=${encodeURIComponent(cfg.nombre||prodId)}`;
+
+        /* Pills helper */
+        const pillsHTML = (campo, items, notaFn) => {
+            if (!items || items.length === 0) return '';
+            return items.map((item, i) => {
+                const esObj   = typeof item === 'object';
+                const valor   = esObj ? (item.label || item.nombre || String(i)) : item;
+                const nota    = esObj ? (item.nota || '') : '';
+                const catColor = esObj ? (item.catColor || '') : '';
+                const catNombre = esObj ? (item.categoria || '') : '';
+                const activa  = sel[campo] === valor ? 'seleccionada' : '';
+                const dotHTML = catColor
+                    ? `<span class="cfg-pill-dot" style="background:${catColor};"></span>` : '';
+                const tituloPill = [catNombre, nota].filter(Boolean).join(' · ');
+                return `<button class="cfg-pill ${activa}"
+                    style="${catColor && !activa ? `border-color:${catColor}55;` : ''}"
+                    onclick="_selPill('${_esc(prodId)}', '${campo}', '${_esc(valor)}')"
+                    title="${_esc(tituloPill)}">${dotHTML}${_esc(valor)}</button>
+                    ${nota && activa ? `<span class="cfg-nota">↳ ${_esc(nota)}</span>` : ''}`;
+            }).join('');
         };
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+        /* Resumen selecciones */
+        const libresVals = Object.entries(sel.libres || {}).filter(([id, v]) => v && v.trim() !== '');
+        const libresLabels = (cfg.campos_libres || []).reduce((acc, g) => {
+            (g.campos || []).forEach(c => { acc[c.id] = c.etiqueta; });
+            return acc;
+        }, {});
 
-        const WHATSAPP_NUM = "573183110524"; 
+        const resumenLineas = [
+            sel.fechaEvento ? `<strong>📅 Fecha:</strong> ${_esc(_formatearFechaEs(sel.fechaEvento))}` : null,
+            sel.tamanio    ? `<strong>Tamaño:</strong> ${_esc(sel.tamanio)}`       : null,
+            sel.sabor      ? `<strong>Sabor:</strong> ${_esc(sel.sabor)}`           : null,
+            sel.relleno    ? `<strong>Relleno:</strong> ${_esc(sel.relleno)}`       : null,
+            sel.decoracion ? `<strong>Decoración:</strong> ${_esc(sel.decoracion)}` : null,
+            ...libresVals.map(([id, v]) => `<strong>${_esc(libresLabels[id] || 'Detalle')}:</strong> ${_esc(v)}`),
+        ].filter(Boolean);
 
-        // === FUNCIÓN GLOBAL PARA EL ONCLICK ===
-        window.toggleDescripcion = function(id) {
-            const parrafo = document.getElementById(`desc-${id}`);
-            const boton = document.getElementById(`btn-${id}`);
-            
-            if (parrafo.classList.contains('desc-oculta')) {
-                parrafo.classList.remove('desc-oculta');
-                parrafo.classList.add('desc-visible');
-                boton.innerText = "Ocultar detalles ✕";
-            } else {
-                parrafo.classList.remove('desc-visible');
-                parrafo.classList.add('desc-oculta');
-                boton.innerText = "Ver detalles del diseño ✦";
+        const resumenHTML = resumenLineas.length > 0
+            ? `<div class="cfg-resumen">${resumenLineas.join(' · ')}</div>`
+            : '';
+
+        const haySel = resumenLineas.length > 0;
+
+        /* Secciones opcionales */
+        const secTam  = (cfg.tamanios     || []).length > 0
+            ? `<div class="cfg-grupo">
+                <span class="cfg-grupo-label">📐 Tamaño</span>
+                <div class="cfg-pills">${pillsHTML('tamanio', cfg.tamanios)}</div>
+               </div>` : '';
+
+        const secSab  = (cfg.sabores      || []).length > 0
+            ? `<div class="cfg-grupo">
+                <span class="cfg-grupo-label">✨ Sabor / Fórmula</span>
+                <div class="cfg-pills">${pillsHTML('sabor', cfg.sabores)}</div>
+               </div>` : '';
+
+        const secRel  = (cfg.rellenos     || []).length > 0
+            ? `<div class="cfg-grupo">
+                <span class="cfg-grupo-label">🍰 Relleno</span>
+                <div class="cfg-pills">${pillsHTML('relleno', cfg.rellenos)}</div>
+               </div>` : '';
+
+        const secDec  = (cfg.decoraciones || []).length > 0
+            ? `<div class="cfg-grupo">
+                <span class="cfg-grupo-label">🎀 Decoración & Toppers</span>
+                <div class="cfg-pills">${pillsHTML('decoracion', cfg.decoraciones)}</div>
+               </div>` : '';
+
+        const secLibres = (cfg.campos_libres || []).length > 0
+            ? (cfg.campos_libres || []).map(g => `
+                <div class="cfg-grupo">
+                    <span class="cfg-grupo-label">${_esc(g.grupo)}</span>
+                    ${(g.campos || []).map(c => `
+                        <label class="cfg-libre-label">${_esc(c.etiqueta || '')}</label>
+                        <input type="text" class="cfg-libre-input"
+                            placeholder="${_esc(c.placeholder || '')}"
+                            value="${_esc((sel.libres || {})[c.id] || '')}"
+                            oninput="_setLibre('${_esc(prodId)}', '${_esc(c.id)}', this.value)"
+                            style="margin-bottom:8px;">
+                    `).join('')}
+                </div>`).join('')
+            : '';
+
+        const sinOpciones = !secTam && !secSab && !secRel && !secDec && !secLibres;
+
+        /* Fecha del evento — obligatoria, se muestra siempre que haya algo que configurar */
+        const secFecha = !sinOpciones
+            ? `<div class="cfg-grupo">
+                <span class="cfg-grupo-label">📅 Fecha del evento <span style="color:var(--accent-secundario,#c084fc);">*obligatorio</span></span>
+                <input type="date" class="cfg-libre-input cfg-fecha-input"
+                    value="${_esc(sel.fechaEvento || '')}"
+                    oninput="_setFechaEvento('${_esc(prodId)}', this.value)"
+                    style="margin-bottom:6px;">
+                ${sel.fechaEvento
+                    ? `<span class="cfg-nota">↳ ${_formatearFechaEs(sel.fechaEvento)}</span>`
+                    : `<span class="cfg-nota" style="color:var(--accent-secundario,#c084fc);">↳ Selecciona la fecha para poder cotizar</span>`}
+               </div>` : '';
+
+        const faltaFecha = !sinOpciones && !sel.fechaEvento;
+
+        document.getElementById('modal-contenido').innerHTML = `
+            <img src="${_esc(imgSrc)}" class="modal-img"
+                alt="${_esc(cfg.nombre || prodId)}"
+                onerror="this.src='https://placehold.co/600x300/141414/d4af37?text=Sagrada+Delicia'">
+
+            <span class="modal-eyebrow">Configurar Pedido</span>
+            <div class="modal-titulo">${_esc(cfg.nombre || prodId)}</div>
+            ${cfg.descripcion ? `<p class="modal-desc">${_esc(cfg.descripcion)}</p>` : ''}
+
+            ${sinOpciones
+                ? `<p style="color:var(--texto-mutado); font-size:0.82rem; font-style:italic; margin-bottom:20px; text-align:center;">
+                    Escríbenos y diseñamos juntos tu pedido personalizado.</p>`
+                : `<hr class="cfg-separador">
+                   ${secTam}${secSab}${secRel}${secDec}${secLibres}${secFecha}
+                   <hr class="cfg-separador">
+                   ${resumenHTML}`
             }
-        };
 
-        function formatearMoneda(val) { 
-            return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val); 
+            <a class="btn-wpp-configurador"
+                href="#"
+                onclick="event.preventDefault(); if(${faltaFecha ? 'true' : 'false'}){ return; } _abrirWppDesdeModal('${_esc(prodId)}');"
+                target="_blank"
+                style="${faltaFecha ? 'opacity:0.45; cursor:not-allowed; pointer-events:auto;' : ''}"
+                title="${faltaFecha ? 'Selecciona la fecha del evento para continuar' : ''}">
+                ${faltaFecha ? '📅 Selecciona la fecha para cotizar' : (haySel ? '✉ Enviar Configuración por WhatsApp' : '✉ Cotizar por WhatsApp')}
+            </a>
+            <p style="text-align:center; font-size:0.68rem; color:var(--texto-mutado); margin-top:10px; letter-spacing:1px;">
+                SIN PRECIOS · RESPUESTA PERSONALIZADA
+            </p>
+        `;
+    }
+
+    /* Construye el mensaje de WhatsApp leyendo el estado MÁS RECIENTE de
+       _selecciones (incluye campos libres) y abre el enlace. Se llama al
+       hacer click en el botón, así siempre toma lo último escrito por el
+       cliente sin necesidad de re-renderizar el modal en cada tecla. */
+    function _abrirWppDesdeModal(prodId) {
+        const cfg = window._CONFIGURADOR[prodId];
+        if (!cfg) return;
+        const sel = _selecciones[prodId] || {};
+
+        /* Blindaje: si el producto tiene configurador con opciones, la fecha es obligatoria */
+        const tieneOpciones = (cfg.tamanios||[]).length || (cfg.sabores||[]).length ||
+            (cfg.rellenos||[]).length || (cfg.decoraciones||[]).length || (cfg.campos_libres||[]).length;
+        if (tieneOpciones && !sel.fechaEvento) {
+            window._mostrarToastPublico && window._mostrarToastPublico('📅 Selecciona la fecha del evento para continuar');
+            return;
         }
 
-        function generarLinkWpp(producto, predefinido = '') {
-            let msj = `¡Hola Sagrada Delicia! ✨ Me interesa información sobre: *${producto}*.`;
-            if(predefinido) msj += ` (Vi la oferta especial de ${predefinido}).`;
-            return `https://wa.me/${WHATSAPP_NUM}?text=${encodeURIComponent(msj)}`;
+        const libresLabels = (cfg.campos_libres || []).reduce((acc, g) => {
+            (g.campos || []).forEach(c => { acc[c.id] = c.etiqueta; });
+            return acc;
+        }, {});
+        const libresVals = Object.entries(sel.libres || {}).filter(([id, v]) => v && v.trim() !== '');
+
+        const partes = [
+            `¡Hola Sagrada Delicia! ✨ Quiero cotizar un *${cfg.nombre || prodId}*.`,
+            sel.fechaEvento ? `📅 Fecha del evento: ${_formatearFechaEs(sel.fechaEvento)}` : '',
+            sel.tamanio    ? `📐 Tamaño: ${sel.tamanio}`       : '',
+            sel.sabor      ? `✨ Sabor: ${sel.sabor}`           : '',
+            sel.relleno    ? `🍰 Relleno: ${sel.relleno}`       : '',
+            sel.decoracion ? `🎀 Decoración: ${sel.decoracion}` : '',
+            ...libresVals.map(([id, v]) => `📝 ${libresLabels[id] || 'Detalle'}: ${v}`),
+            `\n¿Me puedes dar información y precio?`,
+        ].filter(Boolean).join('\n');
+
+        window.open(_wppLink(partes), '_blank');
+    }
+    window._abrirWppDesdeModal = _abrirWppDesdeModal;
+
+    /* ══════════════════════════════════════════
+       MONTAJE — SELECCIÓN MÚLTIPLE + COMBO WPP
+    ══════════════════════════════════════════ */
+    const _selMontajePublico = new Set();
+
+    window._toggleRecetasAccordion = function(header) {
+        const body = header.nextElementSibling;
+        const isCollapsed = header.classList.contains('collapsed');
+        header.classList.toggle('collapsed', !isCollapsed);
+        body.classList.toggle('collapsed', !isCollapsed);
+    };
+
+    window._buscarProductos = function(q) {
+        const busq = q.toLowerCase().trim();
+
+        /* ── 1. Grids de productos principales ── */
+        ['grid-menu', 'grid-menu-selectivo', 'grid-montaje'].forEach(gridId => {
+            const grid = document.getElementById(gridId);
+            if (!grid) return;
+            grid.querySelectorAll('.card, .card-estrella').forEach(card => {
+                const titulo = card.querySelector('.card-title');
+                const nombre = titulo ? titulo.textContent.toLowerCase() : '';
+                card.style.display = (!busq || nombre.includes(busq)) ? '' : 'none';
+            });
+        });
+
+        /* ── 2. Mini Treats — cards anidadas en sub-grids ── */
+        const wrapperMt = document.getElementById('wrapper-mini-treats');
+        if (wrapperMt) {
+            wrapperMt.querySelectorAll('.card').forEach(card => {
+                const titulo = card.querySelector('.card-title');
+                const nombre = titulo ? titulo.textContent.toLowerCase() : '';
+                card.style.display = (!busq || nombre.includes(busq)) ? '' : 'none';
+            });
         }
 
-        async function cargarCatalogo() {
-            try {
-                const snapshot = await getDoc(doc(db, "publico", "menu"));
-                if (!snapshot.exists()) throw new Error("No hay datos");
+        /* ── 3. Portafolio de Obras ── */
+        const gridPortafolio = document.getElementById('grid-portafolio');
+        if (gridPortafolio) {
+            gridPortafolio.querySelectorAll('.card-obra').forEach(card => {
+                const nombre  = (card.querySelector('.obra-nombre')  || {}).textContent || '';
+                const linea   = (card.querySelector('.obra-linea')   || {}).textContent || '';
+                const receta  = (card.querySelector('.obra-receta')  || {}).textContent || '';
+                const texto   = (nombre + ' ' + linea + ' ' + receta).toLowerCase();
+                card.style.display = (!busq || texto.includes(busq)) ? '' : 'none';
+            });
+        }
 
-                const data = snapshot.data();
-                const gridOfertas = document.getElementById('grid-ofertas');
-                const gridMenu = document.getElementById('grid-menu');
-                const gridGaleria = document.getElementById('grid-galeria');
+        /* ── 4. Recetas — reconstruir acordeones filtrando por nombre o "nueva/nuevas" ── */
+        const todasRecetas = window._RECETAS_PUBLICAS || [];
+        if (todasRecetas.length > 0 && typeof _getCats === 'function') {
+            const esQueryNueva = busq === 'nueva' || busq === 'nuevas';
+            const filtradas = !busq ? todasRecetas
+                : esQueryNueva
+                    ? todasRecetas.filter(r => r.esNueva === true)
+                    : todasRecetas.filter(r => (r.nombre || '').toLowerCase().includes(busq));
 
-                // 1. EDICIONES ESPECIALES (Con OnClick)
-                if (data.ofertas && data.ofertas.length > 0) {
-                    document.getElementById('wrapper-ofertas').style.display = 'block';
-                    gridOfertas.innerHTML = data.ofertas.map((of, index) => {
-                        const uid = of.id || `oferta-${index}`; // Aseguramos un ID único
-                        return `
-                        <div class="card">
-                            <img src="${of.imagen || 'https://placehold.co/600x400/141414/d4af37?text=Especial'}" class="card-img" alt="${of.nombre}">
-                            <div class="card-body">
-                                <span class="oferta-badge">Edición Limitada</span>
-                                <h3 class="card-title">${of.nombre}</h3>
-                                
-                                <button id="btn-${uid}" class="btn-toggle-desc" onclick="toggleDescripcion('${uid}')">
-                                    Ver detalles del diseño ✦
-                                </button>
-                                
-                                <p id="desc-${uid}" class="card-desc desc-oculta">${of.descripcion}</p>
-                                
-                                <div class="precio-oferta">${formatearMoneda(of.precioVenta)}</div>
-                                <a href="${generarLinkWpp(of.nombre, formatearMoneda(of.precioVenta))}" target="_blank" class="btn-pedir">Reservar Ahora</a>
-                            </div>
+            const insignia = filtradas.filter(r => _getCats(r).includes('insignia'));
+            const resto    = filtradas.filter(r => !_getCats(r).includes('insignia'));
+            document.getElementById('grid-recetas').innerHTML = _buildRecetasHTML(insignia, resto);
+
+            /* Mostrar/ocultar wrapper según si hay resultados */
+            const wrapper = document.getElementById('wrapper-recetas');
+            if (wrapper) wrapper.style.display = filtradas.length > 0 ? 'block' : 'none';
+        }
+    };
+
+    window._toggleSoundPub = function(btn, video) {
+        if (!video) return;
+        video.muted = !video.muted;
+        btn.textContent = video.muted ? '🔇' : '🔊';
+    };
+
+    function _toggleMontajePublico(prodId, evt) {
+        /* Si el click viene del btn-configurar (stopPropagation), no hacer nada */
+        if (evt && evt.defaultPrevented) return;
+        const card  = document.getElementById('mc-' + prodId);
+        const check = document.getElementById('mc-check-' + prodId);
+        if (!card) return;
+        if (_selMontajePublico.has(prodId)) {
+            _selMontajePublico.delete(prodId);
+            card.classList.remove('seleccionado');
+            check.textContent = '';
+        } else {
+            _selMontajePublico.add(prodId);
+            card.classList.add('seleccionado');
+            check.textContent = '✓';
+        }
+        _actualizarComboBar();
+    }
+
+    function _actualizarComboBar() {
+        const bar = document.getElementById('montaje-combo-bar');
+        const cnt = document.getElementById('montaje-combo-cnt');
+        const names = document.getElementById('montaje-combo-names');
+        if (!bar) return;
+        const sel = [..._selMontajePublico];
+        if (sel.length === 0) {
+            bar.classList.remove('visible');
+            return;
+        }
+        bar.classList.add('visible');
+        const cfg = window._CONFIGURADOR || {};
+        const nameList = sel.map(id => cfg[id]?.nombre || id).join(', ');
+        cnt.textContent = sel.length;
+        names.innerHTML = `<strong>${sel.length} seleccionado${sel.length > 1 ? 's'  : ''}</strong>${nameList}`;
+    }
+
+    function _limpiarComboMontaje() {
+        _selMontajePublico.clear();
+        document.querySelectorAll('.montaje-card-seleccionable').forEach(c => c.classList.remove('seleccionado'));
+        document.querySelectorAll('[id^="mc-check-"]').forEach(c => c.textContent = '');
+        _actualizarComboBar();
+    }
+
+    function _cotizarComboMontaje() {
+        const cfg  = window._CONFIGURADOR || {};
+        const sel  = [..._selMontajePublico];
+        const lineas = sel.map(prodId => {
+            const nombre = cfg[prodId]?.nombre || prodId;
+            const opciones = _selecciones[prodId] || {};
+            const partes = [`🎪 *${nombre}*`];
+            if (opciones.tamanio)     partes.push(`  · Tamaño: ${opciones.tamanio}`);
+            if (opciones.sabor)       partes.push(`  · Sabor: ${opciones.sabor}`);
+            if (opciones.relleno)     partes.push(`  · Relleno: ${opciones.relleno}`);
+            if (opciones.decoracion)  partes.push(`  · Decoración: ${opciones.decoracion}`);
+            if (opciones.fechaEvento) partes.push(`  · Fecha: ${opciones.fechaEvento}`);
+            if (opciones.libres) {
+                Object.entries(opciones.libres).forEach(([k, v]) => {
+                    if (v) partes.push(`  · ${k}: ${v}`);
+                });
+            }
+            return partes.join('\n');
+        });
+        const msg = [
+            `¡Hola Sagrada Delicia! ✨ Quiero cotizar un *combo de montaje*:\n`,
+            ...lineas,
+            `\n¿Me pueden dar información y precio para este conjunto?`
+        ].join('\n');
+        window.open(_wppLink(msg), '_blank');
+    }
+
+    window._toggleMontajePublico  = _toggleMontajePublico;
+    window._limpiarComboMontaje   = _limpiarComboMontaje;
+    window._cotizarComboMontaje   = _cotizarComboMontaje;
+
+    /* ══════════════════════════════════════════
+       CARGA PRINCIPAL
+    ══════════════════════════════════════════ */
+    window._CONFIGURADOR    = {};
+    window._MENU_SELECTIVO  = [];
+
+    async function cargarCatalogo() {
+        try {
+            /* ── Lecturas en paralelo (publico/menu + operaciones/taller) ── */
+            const [snap, snapTallerResult] = await Promise.all([
+                getDoc(doc(db, "publico", "menu")),
+                getDoc(doc(db, "operaciones", "taller")).catch(() => null)
+            ]);
+
+            if (!snap.exists()) throw new Error("Sin datos en publico/menu");
+
+            const data = snap.data();
+
+            /* ── 1. OFERTAS — filtrar es_oferta: true ── */
+            const ofertas = (data.ofertas || []).filter(o => o.es_oferta === true);
+            if (ofertas.length > 0) {
+                document.getElementById('wrapper-ofertas').style.display = 'block';
+                document.getElementById('grid-ofertas').innerHTML = ofertas.map((of, idx) => {
+                    const uid    = of.id || `oferta-${idx}`;
+                    const imgSrc = of.imagen
+                        || `https://placehold.co/600x400/141414/d4af37?text=${encodeURIComponent(of.nombre || 'Especial')}`;
+                    return `
+                    <div class="card">
+                        <img src="${_esc(imgSrc)}" class="card-img" alt="${_esc(of.nombre || '')}"
+                            onerror="this.src='https://placehold.co/600x400/141414/d4af37?text=Sagrada+Delicia'">
+                        <div class="card-body">
+                            <span class="oferta-badge">Edición Limitada</span>
+                            <h3 class="card-title">${_esc(of.nombre || '—')}</h3>
+
+                            ${of.descripcion ? `
+                            <button id="btn-${uid}" class="btn-toggle-desc" onclick="toggleDescripcion('${uid}')">
+                                Ver detalles del diseño ✦
+                            </button>
+                            <p id="desc-${uid}" class="oferta-desc-texto desc-oculta">${_esc(of.descripcion)}</p>
+                            ` : ''}
+
+                            <div class="precio-oferta">${_moneda(of.precioVenta)}</div>
+                            <a href="${_wppLink(`¡Hola Sagrada Delicia! ✨ Vi la oferta especial de *${of.nombre}* por ${_moneda(of.precioVenta)}. ¿Aún está disponible?`)}"
+                                target="_blank" class="btn-pedir">Reservar Ahora</a>
                         </div>
-                        `;
+                    </div>`;
+                }).join('');
+            }
+
+            /* ── 2. COLECCIÓN — desde configurador{} ── */
+            const configurador = data.configurador || {};
+            window._CONFIGURADOR = configurador;
+
+            const prodClaves = Object.keys(configurador)
+                .sort((a, b) => (configurador[a].orden ?? 9999) - (configurador[b].orden ?? 9999));
+
+            /* Fallback: si no hay configurador, intentar menu{} legacy */
+            const menuLegacy = data.menu || {};
+
+            if (prodClaves.length > 0) {
+                const claves_montaje  = prodClaves.filter(id => configurador[id]?.esMontaje);
+                const claves_estrella = prodClaves.filter(id => !configurador[id]?.esMontaje && configurador[id]?.esEstrella);
+                const claves_normal   = prodClaves.filter(id => !configurador[id]?.esMontaje && !configurador[id]?.esEstrella);
+
+                /* ── Líneas Estrella → hero section ── */
+                if (claves_estrella.length > 0) {
+                    document.getElementById('wrapper-estrella').style.display = 'block';
+                    document.getElementById('grid-estrella').innerHTML = claves_estrella.map(prodId => {
+                        const cfg    = configurador[prodId];
+                        const imgSrc = cfg.imagen_url
+                            || `https://placehold.co/700x400/141414/d4af37?text=${encodeURIComponent(cfg.nombre || prodId)}`;
+                        const tieneOpciones = (cfg.tamanios||[]).length || (cfg.sabores||[]).length
+                            || (cfg.rellenos||[]).length || (cfg.decoraciones||[]).length
+                            || (cfg.campos_libres||[]).length;
+                        const msId    = cfg.menuSelectivoId || null;
+                        const msLinea = msId ? (window._MENU_SELECTIVO||[]).find(l => l.id === msId) : null;
+                        const btnOnclick = msLinea
+                            ? `abrirModalSelectivo('${_esc(msId)}', window._MENU_SELECTIVO.find(l=>l.id==='${_esc(msId)}'))`
+                            : `abrirConfigurador('${_esc(prodId)}')`;
+                        const btnLabel = msLinea ? 'Seleccionar Opciones ✦'
+                            : (tieneOpciones ? 'Configurar Pedido ✦' : 'Cotizar ✦');
+
+                        /* V6.17 — video reemplaza imagen: Cloudinary → <video>+🔊 · YouTube → <iframe> */
+                        const _getMedia = (url, cssClass, tipo) => {
+                            if (!url) return null;
+                            if (url.includes('cloudinary.com')) {
+                                const vid = `vid-${Math.random().toString(36).slice(2,7)}`;
+                                return `<div class="video-wrapper ${tipo}"><video id="${vid}" src="${url}" autoplay loop muted playsinline></video><button class="btn-sound-pub" onclick="event.stopPropagation();_toggleSoundPub(this,document.getElementById('${vid}'))">🔇</button></div>`;
+                            }
+                            try { const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([a-zA-Z0-9_-]{11})/); return m ? `<iframe src="https://www.youtube.com/embed/${m[1]}?rel=0&modestbranding=1" class="${cssClass}" frameborder="0" allow="accelerometer;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe>` : null; } catch { return null; }
+                        };
+                        const mediaHTML = _getMedia(cfg.video_url, 'card-estrella-img', 'estrella')
+                            || `<img src="${_esc(imgSrc)}" class="card-estrella-img" alt="${_esc(cfg.nombre || prodId)}" onerror="this.src='https://placehold.co/700x400/141414/d4af37?text=${encodeURIComponent(cfg.nombre||prodId)}'">`;
+
+                        return `
+                        <div class="card-estrella">
+                            <span class="badge-estrella">⭐ Fuerte de la Casa</span>
+                            ${mediaHTML}
+                            <div class="card-body">
+                                ${!cfg.imagen_url && !cfg.video_url && cfg.emoji ? `<span class="card-menu-emoji">${cfg.emoji}</span>` : ''}
+                                <h3 class="card-title" style="font-size:1.3rem;">${_esc(cfg.nombre || prodId)}</h3>
+                                ${cfg.descripcion ? `<p class="card-desc">${_esc(cfg.descripcion)}</p>` : ''}
+                                <button class="btn-configurar" onclick="${btnOnclick}" style="margin-top:auto;">
+                                    ${btnLabel}
+                                </button>
+                            </div>
+                        </div>`;
                     }).join('');
                 }
 
-                // 2. MENÚ CLÁSICO (Sin precios)
-                if (data.menu) {
-                    let htmlMenu = '';
-                    Object.values(data.menu).forEach(prod => {
-                        htmlMenu += `
-                            <div class="card">
-                                <img src="${prod.imagen || 'https://placehold.co/600x400/141414/a8a29e?text='+prod.nombre}" class="card-img" alt="${prod.nombre}">
-                                <div class="card-body">
-                                    <h3 class="card-title">${prod.nombre.replace(/_/g, ' ')}</h3>
-                                    <p class="card-desc-menu">${prod.descripcion || 'Creación artesanal personalizada, diseño de autor exclusivo.'}</p>
-                                    <a href="${generarLinkWpp(prod.nombre.replace(/_/g, ' '))}" target="_blank" class="btn-pedir">Cotizar Personalizado</a>
+                /* ── Líneas normales → colección clásica ── */
+                if (claves_normal.length > 0) {
+                    document.getElementById('wrapper-menu').style.display = 'block';
+                    document.getElementById('grid-menu').innerHTML = claves_normal.map(prodId => {
+                        const cfg    = configurador[prodId];
+                        const imgSrc = cfg.imagen_url
+                            || `https://placehold.co/600x400/141414/a8a29e?text=${encodeURIComponent(cfg.nombre || prodId)}`;
+                        const tieneOpciones = (cfg.tamanios||[]).length || (cfg.sabores||[]).length
+                            || (cfg.rellenos||[]).length || (cfg.decoraciones||[]).length
+                            || (cfg.campos_libres||[]).length;
+                        const msId    = cfg.menuSelectivoId || null;
+                        const msLinea = msId ? (window._MENU_SELECTIVO||[]).find(l => l.id === msId) : null;
+                        const btnOnclick = msLinea
+                            ? `abrirModalSelectivo('${_esc(msId)}', window._MENU_SELECTIVO.find(l=>l.id==='${_esc(msId)}'))`
+                            : `abrirConfigurador('${_esc(prodId)}')`;
+                        const btnLabel = msLinea ? 'Seleccionar Opciones ✦'
+                            : (tieneOpciones ? 'Configurar Pedido ✦' : 'Cotizar ✦');
+
+                        const _getMedia2 = (url, cssClass, tipo) => {
+                            if (!url) return null;
+                            if (url.includes('cloudinary.com')) {
+                                const vid = `vid-${Math.random().toString(36).slice(2,7)}`;
+                                return `<div class="video-wrapper ${tipo}"><video id="${vid}" src="${url}" autoplay loop muted playsinline></video><button class="btn-sound-pub" onclick="event.stopPropagation();_toggleSoundPub(this,document.getElementById('${vid}'))">🔇</button></div>`;
+                            }
+                            try { const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([a-zA-Z0-9_-]{11})/); return m ? `<iframe src="https://www.youtube.com/embed/${m[1]}?rel=0&modestbranding=1" class="${cssClass}" frameborder="0" allow="accelerometer;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe>` : null; } catch { return null; }
+                        };
+                        const mediaHTML2 = _getMedia2(cfg.video_url, 'card-img', 'clasica')
+                            || `<img src="${_esc(imgSrc)}" class="card-img" alt="${_esc(cfg.nombre || prodId)}" onerror="this.src='https://placehold.co/600x400/141414/a8a29e?text=${encodeURIComponent(cfg.nombre||prodId)}'">`;
+
+                        return `
+                        <div class="card">
+                            ${mediaHTML2}
+                            <div class="card-body">
+                                ${!cfg.imagen_url && !cfg.video_url && cfg.emoji ? `<span class="card-menu-emoji">${cfg.emoji}</span>` : ''}
+                                <h3 class="card-title">${_esc(cfg.nombre || prodId)}</h3>
+                                ${cfg.descripcion ? `<p class="card-desc">${_esc(cfg.descripcion)}</p>` : ''}
+                                <button class="btn-configurar" onclick="${btnOnclick}">
+                                    ${btnLabel}
+                                </button>
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+
+                /* ── Líneas Montaje → chips multi-seleccionables + combo WPP ── */
+                if (claves_montaje.length > 0) {
+                    document.getElementById('wrapper-montaje').style.display = 'block';
+                    document.getElementById('grid-montaje').innerHTML = claves_montaje.map((prodId, mtIdx) => {
+                        const cfg    = configurador[prodId];
+                        const imgSrc = cfg.imagen_url
+                            || `https://placehold.co/600x400/141414/a8a29e?text=${encodeURIComponent(cfg.nombre || prodId)}`;
+                        const tieneOpciones = (cfg.tamanios||[]).length || (cfg.sabores||[]).length
+                            || (cfg.rellenos||[]).length || (cfg.decoraciones||[]).length
+                            || (cfg.campos_libres||[]).length;
+                        const msId    = cfg.menuSelectivoId || null;
+                        const msLinea = msId ? (window._MENU_SELECTIVO||[]).find(l => l.id === msId) : null;
+                        const cfgOnclick = msLinea
+                            ? `abrirModalSelectivo('${_esc(msId)}', window._MENU_SELECTIVO.find(l=>l.id==='${_esc(msId)}'))`
+                            : `abrirConfigurador('${_esc(prodId)}')`;
+                        const cfgLabel = msLinea ? 'Configurar ✦'
+                            : (tieneOpciones ? 'Configurar ✦' : 'Ver detalle ✦');
+
+                        /* Piloto: solo en la primera tarjeta, se oculta con la primera selección */
+                        const hintHTML = mtIdx === 0 ? `
+                            <div class="montaje-hint" id="montaje-hint">
+                                <svg viewBox="0 0 34 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M4 4 C 10 2, 22 4, 28 14" stroke="rgba(192,132,252,0.95)" stroke-width="2" stroke-linecap="round"/>
+                                    <path d="M22 11 L 28 14 L 23 19" stroke="rgba(192,132,252,0.95)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                                </svg>
+                                <span class="montaje-hint-label">Toca para agrupar tu cotización</span>
+                            </div>` : '';
+
+                        const _getMedia3 = (url, cssClass, tipo) => {
+                            if (!url) return null;
+                            if (url.includes('cloudinary.com')) {
+                                const vid = `vid-${Math.random().toString(36).slice(2,7)}`;
+                                return `<div class="video-wrapper ${tipo}"><video id="${vid}" src="${url}" autoplay loop muted playsinline></video><button class="btn-sound-pub" onclick="event.stopPropagation();_toggleSoundPub(this,document.getElementById('${vid}'))">🔇</button></div>`;
+                            }
+                            try { const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([a-zA-Z0-9_-]{11})/); return m ? `<iframe src="https://www.youtube.com/embed/${m[1]}?rel=0&modestbranding=1" class="${cssClass}" frameborder="0" allow="accelerometer;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe>` : null; } catch { return null; }
+                        };
+                        const mediaHTML3 = _getMedia3(cfg.video_url, 'card-img', 'montaje')
+                            || `<img src="${_esc(imgSrc)}" class="card-img" alt="${_esc(cfg.nombre || prodId)}" onerror="this.src='https://placehold.co/600x400/141414/a8a29e?text=${encodeURIComponent(cfg.nombre||prodId)}'">`;
+
+                        return `
+                        <div class="card montaje-card-seleccionable" id="mc-${_esc(prodId)}"
+                             onclick="_toggleMontajePublico('${_esc(prodId)}', event)">
+                            ${hintHTML}
+                            <div class="montaje-card-check" id="mc-check-${_esc(prodId)}"></div>
+                            ${mediaHTML3}
+                            <div class="card-body">
+                                ${!cfg.imagen_url && !cfg.video_url && cfg.emoji ? `<span class="card-menu-emoji">${cfg.emoji}</span>` : ''}
+                                <h3 class="card-title">${_esc(cfg.nombre || prodId)}</h3>
+                                ${cfg.descripcion ? `<p class="card-desc">${_esc(cfg.descripcion)}</p>` : ''}
+                                <button class="btn-configurar" onclick="${cfgOnclick}; event.stopPropagation();">
+                                    ${cfgLabel}
+                                </button>
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+
+            } else if (Object.keys(menuLegacy).length > 0) {
+                /* Legacy menu{} */
+                document.getElementById('wrapper-menu').style.display = 'block';
+                document.getElementById('grid-menu').innerHTML = Object.values(menuLegacy).map(prod => {
+                    const nombre = prod.nombre || '';
+                    return `
+                    <div class="card">
+                        <img src="${_esc(prod.imagen || `https://placehold.co/600x400/141414/a8a29e?text=${encodeURIComponent(nombre)}`)}"
+                            class="card-img" alt="${_esc(nombre)}">
+                        <div class="card-body">
+                            <h3 class="card-title">${_esc(nombre.replace(/_/g,' '))}</h3>
+                            <p class="card-desc">${_esc(prod.descripcion || 'Creación artesanal personalizada.')}</p>
+                            <a href="${_wppLink(`¡Hola Sagrada Delicia! ✨ Me interesa información sobre: *${nombre.replace(/_/g,' ')}*.`)}"
+                                target="_blank" class="btn-pedir">Cotizar Personalizado</a>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+            /* Si no hay nada, wrapper-menu queda oculto (display:none) */
+
+            /* ── 2.5 MENÚ SELECTIVO ── */
+            const menuSelectivo = data.DB_MENU_SELECTIVO || [];
+            window._MENU_SELECTIVO = menuSelectivo;
+            if (menuSelectivo.length > 0) {
+                document.getElementById('wrapper-menu-selectivo').style.display = 'block';
+                document.getElementById('grid-menu-selectivo').innerHTML = menuSelectivo.map(linea => {
+                    const imgSrc = linea.imagen_url
+                        || `https://placehold.co/600x400/141414/d4af37?text=${encodeURIComponent(linea.nombre || 'Menú')}`;
+                    return `
+                    <div class="card">
+                        <img src="${_esc(imgSrc)}" class="card-img" alt="${_esc(linea.nombre || '')}"
+                            onerror="this.src='https://placehold.co/600x400/141414/d4af37?text=Sagrada+Delicia'">
+                        <div class="card-body">
+                            <h3 class="card-title">${_esc(linea.nombre || linea.id)}</h3>
+                            <p class="card-desc" style="font-size:0.8rem;">
+                                ${(linea.grupos||[]).map(g => _esc(g.nombre)).filter(Boolean).join(' · ') || 'Menú personalizado'}
+                            </p>
+                            <button class="btn-configurar"
+                                onclick="abrirModalSelectivo('${_esc(linea.id)}', ${JSON.stringify(linea).replace(/"/g,'&quot;')})">
+                                Seleccionar Opciones ✦
+                            </button>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            /* ── 2.7 MINI TREATS (agrupados por campo grupo) ── */
+            const miniTreats = data.mini_treats || [];
+            if (miniTreats.length > 0) {
+                document.getElementById('wrapper-mini-treats').style.display = 'block';
+
+                /* Agrupar: primero los que tienen grupo, luego sin grupo */
+                const grupos = {};
+                const sinGrupo = [];
+                miniTreats.forEach(p => {
+                    const g = (p.grupo || '').trim();
+                    if (g) { if (!grupos[g]) grupos[g] = []; grupos[g].push(p); }
+                    else sinGrupo.push(p);
+                });
+
+                const _renderMtCard = p => {
+                    const imgSrc = p.imagen_url
+                        || `https://placehold.co/600x400/141414/d4af37?text=${encodeURIComponent(p.nombre || 'Mini Treat')}`;
+                    const minimoLabel = p.minimo
+                        ? `<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(212,175,55,0.1);border:1px solid rgba(212,175,55,0.3);border-radius:3px;padding:5px 12px;font-size:0.72rem;font-weight:600;color:var(--dorado);letter-spacing:1px;text-transform:uppercase;margin-bottom:14px;">📦 Mínimo ${p.minimo} unidades</div>`
+                        : '';
+                    const msgWpp = [
+                        `¡Hola Sagrada Delicia! ✨ Quiero cotizar *${p.nombre}*.`,
+                        p.minimo ? `📦 Entiendo que el mínimo es ${p.minimo} unidades.` : '',
+                        `\n¿Me puedes dar información y precio?`
+                    ].filter(Boolean).join('\n');
+                    return `
+                    <div class="card">
+                        <img src="${_esc(imgSrc)}" class="card-img" alt="${_esc(p.nombre || '')}"
+                            onerror="this.src='https://placehold.co/600x400/141414/d4af37?text=Sagrada+Delicia'">
+                        <div class="card-body">
+                            <h3 class="card-title">${_esc(p.nombre || '—')}</h3>
+                            ${minimoLabel}
+                            ${p.descripcion ? `<p class="card-desc">${_esc(p.descripcion)}</p>` : ''}
+                            <a class="btn-pedir" href="${_wppLink(msgWpp)}" target="_blank">
+                                Cotizar ✦
+                            </a>
+                        </div>
+                    </div>`;
+                };
+
+                let mtHTML = '';
+                /* Grupos nombrados */
+                Object.keys(grupos).forEach(g => {
+                    mtHTML += `<h3 style="grid-column:1 / -1;width:100%;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--dorado);opacity:0.7;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(212,175,55,0.2);">${_esc(g)}</h3>`;
+                    mtHTML += `<div class="grid-menu" style="grid-column:1 / -1;margin-bottom:8px;">` + grupos[g].map(_renderMtCard).join('') + `</div>`;
+                });
+                /* Sin grupo */
+                if (sinGrupo.length > 0) {
+                    if (Object.keys(grupos).length > 0) {
+                        mtHTML += `<h3 style="grid-column:1 / -1;width:100%;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--dorado);opacity:0.7;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(212,175,55,0.2);">Otros</h3>`;
+                    }
+                    mtHTML += `<div class="grid-menu" style="grid-column:1 / -1;">` + sinGrupo.map(_renderMtCard).join('') + `</div>`;
+                }
+
+                document.getElementById('grid-mini-treats').innerHTML = mtHTML;
+            }
+
+            /* ── 3. RECETAS PÚBLICAS ── */
+            const recetas = (data.recetas_publicas || []);
+            if (recetas.length > 0) {
+                document.getElementById('wrapper-recetas').style.display = 'block';
+
+                /* ── Separar insignias del resto ── */
+                const _getCats = window._getCats = r => {
+                    if (Array.isArray(r.categorias)) return r.categorias.map(c => c.toLowerCase());
+                    if (r.categoria) return [r.categoria.toLowerCase()];
+                    return [];
+                };
+                const recetasInsignia = recetas.filter(r => _getCats(r).includes('insignia'));
+                const recetasResto    = recetas.filter(r => !_getCats(r).includes('insignia'));
+
+                /* ── Render card insignia ── */
+                const _renderInsignia = r => {
+                    const imgSrc = r.imagen_url || '';
+                    const origen = r.productoOrigen ? r.productoOrigen.replace(/_/g,' ') : '';
+                    return `
+                    <div class="card-receta-insignia">
+                        ${imgSrc ? `<img src="${_esc(imgSrc)}" alt="${_esc(r.nombre||'')}"
+                            class="insignia-img"
+                            onerror="this.style.display='none'">` : ''}
+                        <div class="insignia-body">
+                            <span class="badge-insignia">✦ Receta Insignia</span>
+                            <div class="insignia-nombre">${_esc(r.nombre || '—')}</div>
+                            ${r.esNueva ? `<span class="badge-nueva-insignia">✦ Nueva Receta</span>` : ''}
+                            ${origen ? `<div class="insignia-origen">✦ ${_esc(origen)}</div>` : ''}
+                            ${r.descripcion
+                                ? `<div class="insignia-desc">${_esc(r.descripcion)}</div>`
+                                : `<div class="insignia-desc" style="color:#44536a;">Sin descripción disponible.</div>`}
+                            ${r.productoOrigen
+                                ? `<button class="btn-pedir-receta" onclick="abrirConfigurador(&apos;${_esc(r.productoOrigen)}&apos;, &apos;${_esc(r.nombre)}&apos;)">Pedir esta receta ✦</button>`
+                                : ''}
+                        </div>
+                    </div>`;
+                };
+
+                /* ── Render card normal ── */
+                const _renderReceta = r => {
+                    const catColor = r.catColor || '#d4af37';
+                    const imgSrc   = r.imagen_url || '';
+                    const cats     = _getCats(r).filter(c => c !== 'insignia');
+                    const catLabel = cats.length ? cats.join(', ') : (r.categoria || '');
+                    return `
+                    <div class="card-receta">
+                        ${imgSrc ? `<img src="${_esc(imgSrc)}" alt="${_esc(r.nombre||'')}"
+                            style="width:100%;height:180px;object-fit:cover;border-radius:2px;margin-bottom:12px;border:1px solid var(--borde-suave);"
+                            onerror="this.style.display='none'">` : ''}
+                        ${catLabel ? `<span class="receta-cat-badge"
+                            style="background:${catColor}18; color:${catColor}; border:1px solid ${catColor}44;">
+                            ${_esc(catLabel)}</span>` : ''}
+                        <div class="receta-nombre">${_esc(r.nombre || '—')}</div>
+                        ${r.esNueva ? `<span class="badge-nueva-receta">✦ Nueva Receta</span>` : ''}
+                        ${r.productoOrigen ? `<div class="receta-origen">✦ ${_esc(r.productoOrigen.replace(/_/g,' '))}</div>` : ''}
+                        ${r.descripcion
+                            ? `<div class="receta-desc">${_esc(r.descripcion)}</div>`
+                            : `<div class="receta-desc" style="color:#44536a;">Sin descripción disponible.</div>`}
+                        ${r.productoOrigen
+                            ? `<button class="btn-pedir-receta-normal" onclick="abrirConfigurador(&apos;${_esc(r.productoOrigen)}&apos;, &apos;${_esc(r.nombre)}&apos;)">Pedir ✦</button>`
+                            : ''}
+                    </div>`;
+                };
+
+                /* ── Guardar para buscador ── */
+                window._RECETAS_PUBLICAS = recetas;
+
+                /* ── Montar HTML ── */
+                const _buildRecetasHTML = window._buildRecetasHTML = (recetasInsignia, recetasResto) => {
+                    /* Orden fijo de categorías */
+                    const CAT_ORDER = ['tradicionales', 'combinadas', 'gourmet'];
+                    const CAT_LABEL = {
+                        'tradicionales': 'Tradicionales',
+                        'combinadas':    'Combinadas',
+                        'gourmet':       'Gourmet'
+                    };
+
+                    /* Agrupar resto por categoría normalizada */
+                    const grupos = {};
+                    CAT_ORDER.forEach(c => { grupos[c] = []; });
+                    grupos['__otros__'] = [];
+
+                    recetasResto.forEach(r => {
+                        const cats = _getCats(r).filter(c => c !== 'insignia');
+                        const key  = CAT_ORDER.find(c => cats.includes(c)) || '__otros__';
+                        grupos[key].push(r);
+                    });
+
+                    let html = '';
+
+                    /* Insignia — siempre expandida */
+                    if (recetasInsignia.length > 0) {
+                        const cols = recetasInsignia.length === 1 ? '1fr'
+                            : recetasInsignia.length === 2 ? '1fr 1fr'
+                            : 'repeat(auto-fill, minmax(320px, 1fr))';
+                        html += `
+                        <div class="recetas-accordion" style="margin-bottom:20px;">
+                            <div class="recetas-accordion-header" onclick="_toggleRecetasAccordion(this)">
+                                <h3>✦ Recetas Insignia</h3>
+                                <div class="recetas-accordion-meta">
+                                    <span class="recetas-accordion-count">${recetasInsignia.length}</span>
+                                    <span class="recetas-accordion-chevron">▼</span>
                                 </div>
                             </div>
-                        `;
+                            <div class="recetas-accordion-body">
+                                <div class="grid-recetas-insignia" style="grid-template-columns:${cols};padding:0 0 8px;">${recetasInsignia.map(_renderInsignia).join('')}</div>
+                            </div>
+                        </div>`;
+                    }
+
+                    /* Categorías fijas — colapsadas */
+                    CAT_ORDER.forEach(cat => {
+                        if (!grupos[cat] || grupos[cat].length === 0) return;
+                        html += `
+                        <div class="recetas-accordion">
+                            <div class="recetas-accordion-header collapsed" onclick="_toggleRecetasAccordion(this)">
+                                <h3>${CAT_LABEL[cat]}</h3>
+                                <div class="recetas-accordion-meta">
+                                    <span class="recetas-accordion-count">${grupos[cat].length}</span>
+                                    <span class="recetas-accordion-chevron">▼</span>
+                                </div>
+                            </div>
+                            <div class="recetas-accordion-body collapsed">
+                                <div class="grid-recetas" style="padding:0 4px;">${grupos[cat].map(_renderReceta).join('')}</div>
+                            </div>
+                        </div>`;
                     });
-                    gridMenu.innerHTML = htmlMenu;
-                }
 
-                // 3. GALERÍA / OBRAS
-                if (data.galeria && data.galeria.length > 0) {
-                    document.getElementById('wrapper-galeria').style.display = 'block';
-                    gridGaleria.innerHTML = data.galeria.map(item => `
-                        <div class="galeria-item">
-                            <img src="${item.imagen || 'https://placehold.co/400x400/141414/333333'}" loading="lazy" alt="${item.nombre}">
-                            <div class="galeria-overlay">${item.nombre}</div>
-                        </div>
-                    `).join('');
-                }
+                    /* Otros Sabores — colapsado */
+                    if (grupos['__otros__'].length > 0) {
+                        html += `
+                        <div class="recetas-accordion">
+                            <div class="recetas-accordion-header collapsed" onclick="_toggleRecetasAccordion(this)">
+                                <h3>Otros Sabores</h3>
+                                <div class="recetas-accordion-meta">
+                                    <span class="recetas-accordion-count">${grupos['__otros__'].length}</span>
+                                    <span class="recetas-accordion-chevron">▼</span>
+                                </div>
+                            </div>
+                            <div class="recetas-accordion-body collapsed">
+                                <div class="grid-recetas" style="padding:0 4px;">${grupos['__otros__'].map(_renderReceta).join('')}</div>
+                            </div>
+                        </div>`;
+                    }
 
-                document.getElementById('loader').style.display = 'none';
-                document.getElementById('contenido-catalogo').style.display = 'block';
+                    return html;
+                };
 
-            } catch (error) {
-                console.error(error);
-                document.getElementById('loader').innerHTML = 'Nuestro menú está siendo actualizado. Vuelve en unos minutos.';
+                document.getElementById('grid-recetas').innerHTML =
+                    _buildRecetasHTML(recetasInsignia, recetasResto);
             }
-        }
 
-        window.onload = cargarCatalogo;
-    </script>
-    <p style="margin-top: 20px; font-size: 0.7rem; opacity: 0.3;">Diseñado por: Marto 🧠<br>martowave@gmail.com</p>
+            /* ── 4. GALERÍA ── */
+            const galeria = data.galeria || [];
+            if (galeria.length > 0) {
+                document.getElementById('wrapper-galeria').style.display = 'block';
+                document.getElementById('grid-galeria').innerHTML = galeria.map(item => `
+                    <div class="galeria-item">
+                        <img src="${_esc(item.imagen || 'https://placehold.co/400x400/141414/333333')}"
+                            loading="lazy" alt="${_esc(item.nombre || '')}">
+                        ${item.nombre ? `<div class="galeria-overlay">${_esc(item.nombre)}</div>` : ''}
+                    </div>`).join('');
+            }
+
+            /* ── 5. PORTAFOLIO — ya leído en paralelo al inicio ── */
+            try {
+                const snapTaller = snapTallerResult;
+                if (snapTaller && snapTaller.exists()) {
+                    const taller   = snapTaller.data();
+                    const historial = Array.isArray(taller.DB_HISTORIAL) ? taller.DB_HISTORIAL : [];
+                    const obras     = historial.filter(e => e.publicado === true);
+
+                    if (obras.length > 0) {
+                        document.getElementById('wrapper-portafolio').style.display = 'block';
+                        document.getElementById('grid-portafolio').innerHTML = obras.map(obra => {
+                            const imgSrc = obra.imagen_url
+                                || `https://placehold.co/600x400/141414/d4af37?text=${encodeURIComponent(obra.nombre || 'Obra')}`;
+
+                            const lineaLabel  = obra.linea
+                                ? obra.linea.replace(/_/g, ' ').toUpperCase()
+                                : '';
+
+                            const recetaLabel = obra.receta || obra.sabor || '';
+
+                            const fechaLabel  = obra.fecha
+                                ? new Date(obra.fecha).toLocaleDateString('es-CO', {
+                                    day: '2-digit', month: 'long', year: 'numeric'
+                                  })
+                                : '';
+
+                            const msgWpp = [
+                                `¡Hola Sagrada Delicia! ✨ Vi una obra en su portafolio que me encantó.`,
+                                `🎂 *${obra.nombre || 'Sin nombre'}*`,
+                                lineaLabel  ? `✦ Línea: ${lineaLabel}` : '',
+                                recetaLabel ? `✨ Receta: ${recetaLabel}` : '',
+                                `\n¿Pueden hacer algo similar para mí?`
+                            ].filter(Boolean).join('\n');
+
+                            return `
+                            <div class="card-obra">
+                                <img class="card-obra-img"
+                                    src="${_esc(imgSrc)}"
+                                    alt="${_esc(obra.nombre || 'Obra')}"
+                                    loading="lazy"
+                                    onerror="this.src='https://placehold.co/600x400/141414/d4af37?text=Sagrada+Delicia'">
+                                <div class="card-obra-body">
+                                    ${lineaLabel  ? `<div class="obra-linea">✦ ${_esc(lineaLabel)}</div>` : ''}
+                                    ${recetaLabel ? `<div class="obra-receta">· ${_esc(recetaLabel)}</div>` : ''}
+                                    <div class="obra-nombre">${_esc(obra.nombre || '—')}</div>
+                                    ${obra.descripcion
+                                        ? `<div class="obra-desc">${_esc(obra.descripcion)}</div>`
+                                        : ''}
+                                    ${fechaLabel ? `<div class="obra-fecha">${_esc(fechaLabel)}</div>` : ''}
+                                    <hr class="obra-separador">
+                                    <a class="btn-obra-wpp"
+                                        href="${_wppLink(msgWpp)}"
+                                        target="_blank">
+                                        Cotizar este estilo ✦
+                                    </a>
+                                </div>
+                            </div>`;
+                        }).join('');
+                    }
+                }
+            } catch (errTaller) {
+                /* Si falla la lectura del taller, el portafolio queda oculto — no bloquea el resto */
+                console.warn('Portafolio no disponible:', errTaller);
+            }
+
+            /* Mostrar todo */
+            document.getElementById('loader').style.display      = 'none';
+            document.getElementById('contenido-catalogo').style.display = 'block';
+
+        } catch (err) {
+            console.error('Error cargando catálogo:', err);
+            document.getElementById('loader').innerHTML =
+                'Nuestro menú está siendo actualizado. Vuelve en unos minutos. ✦';
+        }
+    }
+
+    /* Cerrar modal con Escape */
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') cerrarModal();
+    });
+
+    document.addEventListener('DOMContentLoaded', cargarCatalogo);
+</script>
+
+<!-- EFECTO C PARTICULAS -->
+<script>
+(function(){
+    var wrapper = document.getElementById('wrapper-portafolio');
+    if(!wrapper) return;
+    var obs = new MutationObserver(function(m, o){
+        if(wrapper.style.display !== 'none'){
+            spawn(wrapper); o.disconnect();
+        }
+    });
+    obs.observe(wrapper,{attributes:true,attributeFilter:['style']});
+    function spawn(el){
+        for(var i=0;i<22;i++){
+            var p=document.createElement('span');
+            p.className='sd-particle';
+            var s=Math.random()>0.55?3:2;
+            p.style.width=s+'px';
+            p.style.height=s+'px';
+            p.style.left=(Math.random()*100)+'%';
+            p.style.bottom=(Math.random()*20)+'px';
+            p.style.setProperty('--pdx',(Math.random()*36-18)+'px');
+            p.style.animationDuration=(5+Math.random()*7)+'s';
+            p.style.animationDelay=(Math.random()*8)+'s';
+            p.style.opacity='0';
+            el.appendChild(p);
+        }
+    }
+})();
+</script>
+<!-- PARALLAX GRANO + SCROLL + MOUSE -->
+<script>
+(function(){
+    var g        = null;
+    var ticking  = false;
+    var scrollY  = 0;
+    var mouseX   = 0;
+    var mouseY   = 0;
+    var curX     = 0;
+    var curY     = 0;
+    var RAF      = null;
+
+    function getG() {
+        if (!g) g = document.getElementById('sd-grain-layer');
+        return g;
+    }
+
+    function render() {
+        /* suavizado exponencial hacia el mouse — inercia magnética */
+        curX += (mouseX - curX) * 0.06;
+        curY += (mouseY - curY) * 0.06;
+
+        var el = getG();
+        if (el) {
+            /* cada capa se mueve a fracción distinta: profundidad de capas */
+            var l1x = (curX * 0.022 + scrollY * 0.07).toFixed(2);
+            var l1y = (curY * 0.018 + scrollY * 0.18).toFixed(2);
+            var l2x = (9  + curX * 0.010 + scrollY * 0.04).toFixed(2);
+            var l2y = (13 + curY * 0.032 + scrollY * 0.09).toFixed(2);
+            var l3x = (22 + curX * 0.038 + scrollY * 0.06).toFixed(2);
+            var l3y = (7  + curY * 0.014 + scrollY * 0.12).toFixed(2);
+            el.style.backgroundPosition =
+                l1x+'px '+l1y+'px, '+
+                l2x+'px '+l2y+'px, '+
+                l3x+'px '+l3y+'px, '+
+                '0% 50%';
+        }
+        RAF = requestAnimationFrame(render);
+    }
+
+    window.addEventListener('mousemove', function(e) {
+        mouseX = e.clientX - window.innerWidth  * 0.5;
+        mouseY = e.clientY - window.innerHeight * 0.5;
+    }, {passive: true});
+
+    window.addEventListener('scroll', function() {
+        scrollY = window.scrollY;
+    }, {passive: true});
+
+    /* arrancar el loop una sola vez */
+    render();
+})();
+</script>
 
 </body>
 </html>
