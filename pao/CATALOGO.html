@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sagrada Delicia — Catálogo & Historial V5.16</title>
+    <title>Sagrada Delicia — Catálogo & Historial V5.17</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📖</text></svg>">
 
     <!-- ╔══════════════════════════════════════════════════════════════╗
          ║  FIREBASE MODULE V2                                         ║
          ║  onSnapshot  → escucha operaciones/taller en tiempo real   ║
+         ║  onSnapshot2 → escucha publico/menu (V5.17: menu+treats)  ║
          ║  updateDoc   → anti-pisado por campo:                      ║
          ║    DB_HISTORIAL   → guardarHistorialEnCloud                 ║
          ║    DB_RECETAS     → guardarRecetasEnCloud (NUEVO)          ║
@@ -33,7 +34,8 @@
         const db           = getFirestore(app);
         const docTallerRef = doc(db, "operaciones", "taller");
         const docMenuRef   = doc(db, "publico",     "menu");
-        let unsubscribe    = null;
+        let unsubscribe     = null;
+        let unsubscribeMenu = null; /* V5.17: listener publico/menu */
 
         /* ── UI helpers ── */
         function setBadge(estado, texto) {
@@ -97,6 +99,32 @@
             if (unsubscribe) { unsubscribe(); unsubscribe = null; }
         }
 
+        /* ── V5.17: LISTENER publico/menu → DB_MENU_SELECTIVO + mini_treats ── */
+        function iniciarListenerMenu() {
+            if (unsubscribeMenu) return;
+            if (!syncActivo()) return;
+
+            unsubscribeMenu = onSnapshot(docMenuRef, (snap) => {
+                if (!snap.exists()) return;
+                const data = snap.data();
+
+                if (data.DB_MENU_SELECTIVO && Array.isArray(data.DB_MENU_SELECTIVO)) {
+                    localStorage.setItem('sd_menu_selectivo_v17', JSON.stringify(data.DB_MENU_SELECTIVO));
+                    if (typeof window._onMenuUpdate === 'function') window._onMenuUpdate(data.DB_MENU_SELECTIVO);
+                }
+                if (data.mini_treats && Array.isArray(data.mini_treats)) {
+                    localStorage.setItem('sd_mini_treats_v17', JSON.stringify(data.mini_treats));
+                    if (typeof window._onMiniTreatsUpdate === 'function') window._onMiniTreatsUpdate(data.mini_treats);
+                }
+            }, (err) => {
+                console.error('onSnapshot menu error:', err);
+            });
+        }
+
+        function detenerListenerMenu() {
+            if (unsubscribeMenu) { unsubscribeMenu(); unsubscribeMenu = null; }
+        }
+
         /* ── GUARDAR HISTORIAL ── */
         window.guardarHistorialEnCloud = async function(historial) {
             if (!syncActivo()) { setBadge('offline','🔕 Sync desactivado'); return; }
@@ -155,17 +183,21 @@
         window.forzarSyncManual = function() {
             if (!navigator.onLine) { window._mostrarToast('⚠️ Sin conexión','warn'); return; }
             detenerListener();
-            setTimeout(iniciarListenerTiempoReal, 300);
+            detenerListenerMenu();
+            setTimeout(() => { iniciarListenerTiempoReal(); iniciarListenerMenu(); }, 300);
             window._mostrarToast('☁️ Reconectando listener en tiempo real...','info');
         };
 
-        window._iniciarListener = iniciarListenerTiempoReal;
-        window._detenerListener = detenerListener;
+        window._iniciarListener     = iniciarListenerTiempoReal;
+        window._detenerListener     = detenerListener;
+        window._iniciarListenerMenu = iniciarListenerMenu;   /* V5.17 */
+        window._detenerListenerMenu = detenerListenerMenu;   /* V5.17 */
 
         window.addEventListener('online', () => {
             if (!syncActivo()) return;
             window._mostrarToast('🌐 Conexión restaurada','info');
-            if (!unsubscribe) iniciarListenerTiempoReal();
+            if (!unsubscribe)     iniciarListenerTiempoReal();
+            if (!unsubscribeMenu) iniciarListenerMenu();     /* V5.17 */
         });
         window.addEventListener('offline', () => {
             setBadge('offline','🔌 Sin red — modo local');
@@ -173,8 +205,12 @@
         });
 
         document.addEventListener('DOMContentLoaded', () => {
-            if (navigator.onLine && syncActivo()) iniciarListenerTiempoReal();
-            else if (!navigator.onLine) setBadge('offline','🔌 Sin red — modo local');
+            if (navigator.onLine && syncActivo()) {
+                iniciarListenerTiempoReal();
+                iniciarListenerMenu(); /* V5.17: carga DB_MENU_SELECTIVO y mini_treats desde publico/menu */
+            } else if (!navigator.onLine) {
+                setBadge('offline','🔌 Sin red — modo local');
+            }
         });
     </script>
 
@@ -1064,6 +1100,19 @@ window._onCloudUpdate = function(data) {
     /* Refrescar configurador si hay producto seleccionado */
     const sel = document.getElementById('cfg-sel-producto');
     if (sel && sel.value) renderizarConfiguradorProducto(sel.value);
+};
+
+/* ── V5.17: Callbacks listener publico/menu ── */
+window._onMenuUpdate = function(menuCloud) {
+    DB_MENU_SELECTIVO = menuCloud;
+    localStorage.setItem(LLAVE_MENU_SELECTIVO, JSON.stringify(DB_MENU_SELECTIVO));
+    renderizarMenuSelectivo();
+};
+
+window._onMiniTreatsUpdate = function(treatsCloud) {
+    DB_MINI_TREATS = treatsCloud;
+    localStorage.setItem(LLAVE_MINI_TREATS, JSON.stringify(DB_MINI_TREATS));
+    renderizarMiniTreats();
 };
 
 /* ══════════════════════════════════════════════
