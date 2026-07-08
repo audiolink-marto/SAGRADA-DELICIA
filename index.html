@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sagrada Delicia — Alta Repostería · v8.8</title>
+    <title>Sagrada Delicia — Alta Repostería · v9.3</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍰</text></svg>">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,17 +14,40 @@
         /* ══════════════════════════════════════════
            PALETA & BASE
         ══════════════════════════════════════════ */
+        /* ══ TEMA CLARO (default) ══ */
         :root {
-            --bg-principal: #0a0a0a;
-            --bg-card:      #141414;
-            --bg-modal:     #0f0f0f;
-            --dorado:       #d4af37;
-            --dorado-hover: #ebd586;
-            --dorado-suave: rgba(212,175,55,0.12);
-            --texto-claro:  #fcfbf9;
-            --texto-mutado: #a8a29e;
-            --borde-suave:  #262626;
-            --borde-dorado: rgba(212,175,55,0.35);
+            --bg-principal:   #f5f0e8;
+            --bg-card:        #fffdf8;
+            --bg-modal:       #ede8df;
+            --dorado:         #a07820;
+            --dorado-hover:   #c9981a;
+            --dorado-suave:   rgba(160,120,32,0.22);
+            --texto-claro:    #1c1712;
+            --texto-mutado:   #7a6f65;
+            --borde-suave:    #d9d2c5;
+            --borde-dorado:   rgba(160,120,32,0.30);
+            --texto-neutro:   rgba(80,60,30,0.65);
+            --borde-neutro:   rgba(80,60,30,0.18);
+            --overlay-modal:  rgba(60,40,10,0.55);
+            --sombra-card:    rgba(160,120,32,0.10);
+        }
+
+        /* ══ TEMA OSCURO ══ */
+        html.tema-oscuro {
+            --bg-principal:   #0a0a0a;
+            --bg-card:        #141414;
+            --bg-modal:       #0f0f0f;
+            --dorado:         #d4af37;
+            --dorado-hover:   #ebd586;
+            --dorado-suave:   rgba(212,175,55,0.12);
+            --texto-claro:    #fcfbf9;
+            --texto-mutado:   #a8a29e;
+            --borde-suave:    #262626;
+            --borde-dorado:   rgba(212,175,55,0.35);
+            --texto-neutro:   rgba(255,255,255,0.65);
+            --borde-neutro:   rgba(255,255,255,0.12);
+            --overlay-modal:  rgba(0,0,0,0.82);
+            --sombra-card:    rgba(0,0,0,0.35);
         }
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -48,10 +71,10 @@
             z-index: 0;
             pointer-events: none;
             background-image:
-                radial-gradient(circle, rgba(255,255,255,0.09) 1px, transparent 1px),
-                radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px),
-                radial-gradient(circle, rgba(212,175,55,0.06)  1px, transparent 1px),
-                linear-gradient(118deg, transparent 0%, rgba(212,175,55,0.06) 38%, transparent 52%, rgba(212,175,55,0.04) 74%, transparent 100%);
+                radial-gradient(circle, var(--dorado-suave) 1px, transparent 1px),
+                radial-gradient(circle, var(--dorado-suave) 1px, transparent 1px),
+                radial-gradient(circle, var(--dorado-suave) 1px, transparent 1px),
+                linear-gradient(118deg, transparent 0%, var(--dorado-suave) 38%, transparent 52%, var(--dorado-suave) 74%, transparent 100%);
             background-size: 52px 52px, 19px 23px, 37px 31px, 300% 300%;
             background-position: 0px 0px, 9px 13px, 22px 7px, 0% 50%;
             animation: sd-shimmer 14s ease-in-out infinite, sd-grano-pulse 9s ease-in-out infinite alternate;
@@ -75,7 +98,7 @@
             inset: 0;
             z-index: 0;
             pointer-events: none;
-            background: radial-gradient(ellipse 70% 60% at 50% 35%, rgba(212,175,55,0.09) 0%, transparent 70%);
+            background: radial-gradient(ellipse 70% 60% at 50% 35%, var(--dorado-suave) 0%, transparent 70%);
             animation: sd-breathe 7s ease-in-out infinite;
         }
 
@@ -128,9 +151,13 @@
         ══════════════════════════════════════════ */
         header {
             text-align: center;
-            padding: 70px 20px 50px;
-            background: radial-gradient(circle at center, #1f1d18 0%, var(--bg-principal) 100%);
-            border-bottom: 1px solid var(--borde-suave);
+            padding: 70px 20px 55px;
+            background:
+                radial-gradient(ellipse 60% 70% at 50% 0%,  var(--dorado-suave) 0%, transparent 65%),
+                radial-gradient(ellipse 90% 50% at 50% 110%, var(--dorado-suave) 0%, transparent 60%),
+                linear-gradient(180deg, var(--bg-modal) 0%, var(--bg-principal) 55%, var(--bg-principal) 100%);
+            border-bottom: 1px solid var(--borde-dorado);
+            box-shadow: 0 4px 32px var(--sombra-card), 0 1px 0 var(--borde-dorado);
         }
 
         .eyebrow {
@@ -149,6 +176,7 @@
             font-weight: 700;
             letter-spacing: 1px;
             margin-bottom: 10px;
+            text-shadow: 0 1px 2px rgba(160,120,32,0.10);
         }
 
         .divider { color: var(--dorado); font-size: 1.1rem; margin: 14px 0; opacity: 0.7; }
@@ -185,7 +213,7 @@
         .grid-ofertas    { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; }
         .grid-menu       { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px; }
         .grid-recetas, .grid-recetas-normal { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }
-        .grid-galeria    { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+        .grid-galeria    { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
         .grid-portafolio { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; }
 
         /* ══════════════════════════════════════════
@@ -320,7 +348,7 @@
         .badge-estrella {
             position: absolute; top: 16px; left: 16px;
             background: rgba(212,175,55,0.9);
-            color: #0a0a0a;
+            color: var(--bg-principal);
             padding: 5px 14px; border-radius: 20px;
             font-size: 0.68rem; font-weight: 800;
             letter-spacing: 1.2px; text-transform: uppercase;
@@ -328,7 +356,6 @@
         }
         @media (max-width: 600px) {
             .card-estrella-img { height: 280px; }
-            .grid-estrella { grid-template-columns: 1fr; }
         }
 
         .btn-configurar {
@@ -378,7 +405,7 @@
         .modal-overlay {
             display: none;
             position: fixed; inset: 0;
-            background: rgba(0,0,0,0.82);
+            background: var(--overlay-modal);
             z-index: 200;
             align-items: center;
             justify-content: center;
@@ -734,13 +761,27 @@
             position: relative; overflow: hidden;
             aspect-ratio: 1/1;
             border: 1px solid var(--borde-suave);
+            border-radius: 6px;
             cursor: pointer;
+            /* fade-in entrada */
+            opacity: 0;
+            transform: translateY(12px);
+            transition: opacity 0.5s ease, transform 0.5s ease,
+                        border-color 0.35s ease, box-shadow 0.35s ease;
+        }
+        .galeria-item.sd-visible {
+            opacity: 1;
+            transform: translateY(0);
         }
         .galeria-item img {
             width: 100%; height: 100%;
             object-fit: cover;
-            transition: transform 0.55s ease;
+            transition: transform 0.55s ease, filter 0.35s ease;
             filter: brightness(0.88);
+        }
+        .galeria-item:hover {
+            border-color: var(--borde-dorado);
+            box-shadow: 0 8px 24px rgba(212,175,55,0.12);
         }
         .galeria-item:hover img { transform: scale(1.08); filter: brightness(1); }
         .galeria-overlay {
@@ -754,6 +795,49 @@
             text-align: center;
         }
         .galeria-item:hover .galeria-overlay { opacity: 1; }
+        /* Overlay visible en dispositivos táctiles */
+        @media (hover: none) {
+            .galeria-overlay { opacity: 0.85; }
+        }
+
+        /* ── Lightbox galería ── */
+        #sd-lightbox {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.93);
+            z-index: 300;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            backdrop-filter: blur(6px);
+            cursor: zoom-out;
+        }
+        #sd-lightbox.abierto { display: flex; animation: fadeModal 0.22s ease; }
+        #sd-lightbox img {
+            max-width: 92vw;
+            max-height: 88vh;
+            object-fit: contain;
+            border-radius: 4px;
+            box-shadow: 0 0 0 1px rgba(212,175,55,0.25), 0 24px 60px rgba(0,0,0,0.7);
+            cursor: default;
+        }
+        #sd-lightbox-caption {
+            position: absolute; bottom: 28px; left: 0; right: 0;
+            text-align: center;
+            color: var(--dorado);
+            font-family: 'Playfair Display', serif;
+            font-style: italic; font-size: 1rem;
+            opacity: 0.85;
+            pointer-events: none;
+        }
+        #sd-lightbox-close {
+            position: absolute; top: 18px; right: 22px;
+            background: none; border: none;
+            color: rgba(255,255,255,0.5); font-size: 1.6rem;
+            cursor: pointer; line-height: 1;
+            transition: color 0.2s;
+        }
+        #sd-lightbox-close:hover { color: var(--dorado); }
 
         /* ══════════════════════════════════════════
            PORTAFOLIO DE OBRAS
@@ -775,7 +859,7 @@
 
         .card-obra-img {
             width: 100%;
-            height: 300px;
+            aspect-ratio: 4/3;
             object-fit: cover;
             display: block;
             filter: brightness(0.92);
@@ -794,7 +878,7 @@
         .obra-linea {
             font-size: 0.65rem;
             color: var(--dorado);
-            opacity: 0.75;
+            opacity: 0.9;
             text-transform: uppercase;
             letter-spacing: 2px;
             font-weight: 600;
@@ -805,7 +889,7 @@
             color: var(--texto-mutado);
             text-transform: uppercase;
             letter-spacing: 1.5px;
-            opacity: 0.7;
+            opacity: 0.9;
         }
 
         .obra-nombre {
@@ -943,11 +1027,11 @@
             z-index: 200;
             transform: translateY(100%);
             transition: transform 0.3s cubic-bezier(.4,0,.2,1);
-            box-shadow: 0 -4px 24px rgba(0,0,0,0.5);
+            box-shadow: 0 -4px 24px var(--sombra-card);
         }
         #montaje-combo-bar.visible { transform: translateY(0); }
         #montaje-combo-names {
-            flex: 1; font-size: 0.82rem; color: rgba(255,255,255,0.65);
+            flex: 1; font-size: 0.82rem; color: var(--texto-neutro);
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         #montaje-combo-names strong { color: rgba(192,132,252,0.9); margin-right: 6px; }
@@ -964,12 +1048,12 @@
             border-color: rgba(192,132,252,0.8);
         }
         .btn-combo-limpiar {
-            background: transparent; color: rgba(255,255,255,0.35);
-            border: 1px solid rgba(255,255,255,0.12);
+            background: transparent; color: var(--texto-neutro);
+            border: 1px solid var(--borde-neutro);
             border-radius: 6px; padding: 9px 14px;
             font-size: 0.82rem; cursor: pointer; transition: all 0.2s;
         }
-        .btn-combo-limpiar:hover { color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.3); }
+        .btn-combo-limpiar:hover { color: var(--texto-claro); border-color: var(--borde-suave); }
 
         .wpp-float {
             position: fixed; bottom: 25px; right: 25px;
@@ -995,11 +1079,19 @@
         @media (max-width: 640px) {
             .modal-box { padding: 24px 18px; }
             .modal-titulo { font-size: 1.3rem; }
-            .grid-recetas { grid-template-columns: 1fr; }
-            .grid-portafolio { grid-template-columns: 1fr; }
         }
         @media (max-width: 480px) {
-            .grid-galeria { grid-template-columns: repeat(2, 1fr); }
+            /* galeria: scroll horizontal, sin necesidad de columnas fijas */
+        }
+
+        /* ══════════════════════════════════════════
+           PERFORMANCE — FX reducidos
+        ══════════════════════════════════════════ */
+        /* Mobile pequeño: apagar FX por rendimiento */
+        @media (max-width: 480px) {
+            #sd-grain-layer { animation: none !important; opacity: 0.25; }
+            body::after     { animation: none !important; opacity: 0.35; }
+            .sd-particle    { display: none !important; }
         }
 
         /* ══ BLOQUE INTRODUCTORIO ══ */
@@ -1053,11 +1145,149 @@
             .intro-bloque { padding: 36px 18px 32px; }
             .intro-tags { gap: 14px; }
         }
+        /* ══════════════════════════════════════════
+           SCROLL CARRUSEL HORIZONTAL — v9.0
+           Todas las secciones con imágenes pasan
+           a desplazamiento lateral (swipe).
+        ══════════════════════════════════════════ */
+
+        /* ── Contenedores principales ── */
+        #grid-ofertas,
+        #grid-estrella,
+        #grid-menu,
+        #grid-menu-selectivo,
+        #grid-montaje,
+        #grid-galeria,
+        #grid-portafolio,
+        .grid-recetas-insignia,
+        .grid-recetas,
+        #grid-mini-treats .grid-menu {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            overflow-x: auto;
+            overflow-y: visible;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(212,175,55,0.35) transparent;
+            padding-bottom: 12px;
+            padding-right: 20px;
+        }
+
+
+
+        /* ── Webkit scrollbar — finita y dorada ── */
+        #grid-ofertas::-webkit-scrollbar,
+        #grid-estrella::-webkit-scrollbar,
+        #grid-menu::-webkit-scrollbar,
+        #grid-menu-selectivo::-webkit-scrollbar,
+        #grid-montaje::-webkit-scrollbar,
+        #grid-galeria::-webkit-scrollbar,
+        #grid-portafolio::-webkit-scrollbar,
+        .grid-recetas-insignia::-webkit-scrollbar,
+        .grid-recetas::-webkit-scrollbar,
+        #grid-mini-treats .grid-menu::-webkit-scrollbar { height: 3px; }
+
+        #grid-ofertas::-webkit-scrollbar-track,
+        #grid-estrella::-webkit-scrollbar-track,
+        #grid-menu::-webkit-scrollbar-track,
+        #grid-menu-selectivo::-webkit-scrollbar-track,
+        #grid-montaje::-webkit-scrollbar-track,
+        #grid-galeria::-webkit-scrollbar-track,
+        #grid-portafolio::-webkit-scrollbar-track,
+        .grid-recetas-insignia::-webkit-scrollbar-track,
+        .grid-recetas::-webkit-scrollbar-track,
+        #grid-mini-treats .grid-menu::-webkit-scrollbar-track { background: transparent; }
+
+        #grid-ofertas::-webkit-scrollbar-thumb,
+        #grid-estrella::-webkit-scrollbar-thumb,
+        #grid-menu::-webkit-scrollbar-thumb,
+        #grid-menu-selectivo::-webkit-scrollbar-thumb,
+        #grid-montaje::-webkit-scrollbar-thumb,
+        #grid-galeria::-webkit-scrollbar-thumb,
+        #grid-portafolio::-webkit-scrollbar-thumb,
+        .grid-recetas-insignia::-webkit-scrollbar-thumb,
+        .grid-recetas::-webkit-scrollbar-thumb,
+        #grid-mini-treats .grid-menu::-webkit-scrollbar-thumb {
+            background: rgba(212,175,55,0.4);
+            border-radius: 2px;
+        }
+
+        /* ── Snap + ancho fijo por sección ── */
+        #grid-ofertas > *                { flex: 0 0 300px; width: 300px; scroll-snap-align: start; }
+        #grid-estrella > *               { flex: 0 0 340px; width: 340px; scroll-snap-align: start; }
+        #grid-menu > *                   { flex: 0 0 280px; width: 280px; scroll-snap-align: start; }
+        #grid-menu-selectivo > *         { flex: 0 0 280px; width: 280px; scroll-snap-align: start; }
+        #grid-montaje > *                { flex: 0 0 280px; width: 280px; scroll-snap-align: start; }
+        #grid-galeria > *                { flex: 0 0 200px; width: 200px; scroll-snap-align: start; }
+        #grid-portafolio > *             { flex: 0 0 280px; width: 280px; scroll-snap-align: start; }
+        .grid-recetas-insignia > *       { flex: 0 0 320px; width: 320px; scroll-snap-align: start; }
+        .grid-recetas > *                { flex: 0 0 240px; width: 240px; scroll-snap-align: start; }
+        #grid-mini-treats .grid-menu > * { flex: 0 0 240px; width: 240px; scroll-snap-align: start; }
+
+        /* ── Mini Treats: wrapper vertical para títulos de grupo ── */
+        #grid-mini-treats {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 0 !important;
+            overflow: visible !important;
+        }
+
+        /* ── Hint sutil: gradiente derecho en secciones ── */
+        .seccion-contenedor-carrusel {
+            position: relative;
+        }
+        .seccion-contenedor-carrusel::after {
+            content: '';
+            position: absolute;
+            right: 0; top: 0; bottom: 0;
+            width: 48px;
+            background: linear-gradient(to right, transparent, var(--bg-seccion, #0c0c0c) 90%);
+            pointer-events: none;
+            z-index: 2;
+            border-radius: 0 4px 4px 0;
+        }
+
+
+        /* ══════════════════════════════════════════
+           TOGGLE TEMA
+        ══════════════════════════════════════════ */
+        #btn-tema {
+            position: fixed;
+            top: 18px; left: 18px;
+            z-index: 500;
+            width: 42px; height: 42px;
+            border-radius: 50%;
+            border: 1px solid var(--borde-dorado);
+            background: var(--bg-card);
+            color: var(--dorado);
+            font-size: 1.1rem;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 12px var(--sombra-card);
+            transition: all 0.25s ease;
+            backdrop-filter: blur(6px);
+        }
+        #btn-tema:hover {
+            background: var(--dorado);
+            color: var(--bg-card);
+            transform: scale(1.08);
+            box-shadow: 0 4px 18px var(--borde-dorado);
+        }
+
     </style>
 </head>
 <body>
 
 <div id="sd-grain-layer" aria-hidden="true" style="position:fixed;inset:0;z-index:0;pointer-events:none;"></div>
+<!-- LIGHTBOX GALERÍA -->
+<div id="sd-lightbox" onclick="sdLightboxCerrar()">
+    <button id="sd-lightbox-close" onclick="sdLightboxCerrar()" aria-label="Cerrar">✕</button>
+    <img id="sd-lightbox-img" src="" alt="">
+    <div id="sd-lightbox-caption"></div>
+</div>
+
 <!-- MODAL CONFIGURADOR -->
 <div class="modal-overlay" id="modal-configurador" onclick="cerrarModalSiOverlay(event)">
     <button class="modal-cerrar" onclick="cerrarModal()" aria-label="Cerrar">✕</button>
@@ -1069,6 +1299,8 @@
 <!-- ════════════════════════════════════
      HEADER
 ════════════════════════════════════ -->
+<button id="btn-tema" title="Cambiar tema" aria-label="Cambiar tema">☀️</button>
+
 <header>
     <div style="text-align:center; width:100%; margin-bottom: 24px;">
         <img src="https://res.cloudinary.com/dv7lelmoy/image/upload/v1782263129/JQLB0329_ynelcv.jpg"
@@ -1225,7 +1457,7 @@
     <button class="btn-combo-wpp" onclick="_cotizarComboMontaje()">Cotizar Combo → WhatsApp ✦</button>
 </div>
 
-<a href="https://wa.me/573183110524" class="wpp-float" target="_blank" aria-label="WhatsApp">
+<a id="btn-wpp-float" href="https://wa.me/573183110524" class="wpp-float" target="_blank" aria-label="WhatsApp">
     <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" fill="currentColor" viewBox="0 0 16 16">
         <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/>
     </svg>
@@ -1270,7 +1502,11 @@
     }
 
     function _wppLink(texto) {
-        return `https://wa.me/${WHATSAPP_NUM}?text=${encodeURIComponent(texto)}`;
+        const esMobil = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
+        const txt = encodeURIComponent(texto);
+        return esMobil
+            ? `whatsapp://send?phone=${WHATSAPP_NUM}&text=${txt}`
+            : `https://wa.me/${WHATSAPP_NUM}?text=${txt}`;
     }
 
     /* ══════════════════════════════════════════
@@ -1360,6 +1596,8 @@
 
     window.abrirModalSelectivo = function(lineaId, linea) {
         if (!_selMenuSelectivo[lineaId]) _selMenuSelectivo[lineaId] = {};
+        if (!_selMenuSelectivo[lineaId]._nombre)     _selMenuSelectivo[lineaId]._nombre     = '';
+        if (!_selMenuSelectivo[lineaId]._fechaEvento) _selMenuSelectivo[lineaId]._fechaEvento = '';
         _renderizarModalSelectivo(lineaId, linea);
         document.getElementById('modal-configurador').classList.add('abierto');
         document.body.style.overflow = 'hidden';
@@ -1373,6 +1611,9 @@
         const resumenLineas = grupos
             .filter(g => sel[g.id])
             .map(g => `<strong>${_esc(g.nombre)}:</strong> ${_esc(sel[g.id])}`);
+
+        if (sel._nombre)     resumenLineas.unshift(`<strong>👤 Nombre:</strong> ${_esc(sel._nombre)}`);
+        if (sel._fechaEvento) resumenLineas.push(`<strong>📅 Fecha:</strong> ${_esc(_formatearFechaEs(sel._fechaEvento))}`);
 
         const resumenHTML = resumenLineas.length > 0
             ? `<div class="cfg-resumen">${resumenLineas.join(' · ')}</div>`
@@ -1393,30 +1634,66 @@
             </div>`;
         }).join('');
 
-        /* Mensaje WPP */
+        /* Mensaje WPP reformateado */
         const selItems = grupos
             .filter(g => sel[g.id])
-            .map(g => `${g.nombre}: ${sel[g.id]}`);
+            .map(g => `✦ ${g.nombre}: ${sel[g.id]}`);
+
+        const faltaFecha = !sel._fechaEvento;
 
         const msgWpp = [
-            `¡Hola Sagrada Delicia! ✨ Quiero cotizar: *${linea.nombre || lineaId}*.`,
+            `¡Hola Sagrada Delicia! ✨`,
+            `Quiero cotizar: *${linea.nombre || lineaId}*`,
+            ``,
+            `📋 *Mi selección:*`,
+            `━━━━━━━━━━━━━━━`,
+            sel._nombre      ? `👤 Nombre: ${sel._nombre}`                          : '',
             ...selItems,
-            `\n¿Me puedes dar información y precio?`
-        ].filter(Boolean).join('\n');
+            sel._fechaEvento ? `📅 Fecha de entrega: ${_formatearFechaEs(sel._fechaEvento)}` : '',
+            `━━━━━━━━━━━━━━━`,
+            ``,
+            `¿Me pueden dar información y precio?`
+        ].filter(s => s !== null && s !== undefined && !(s === '' && selItems.length === 0)).join('\n');
 
-        const haySel = selItems.length > 0;
+        const haySel = selItems.length > 0 || sel._nombre;
 
         document.getElementById('modal-contenido').innerHTML = `
             <span class="modal-eyebrow">Menú Selectivo</span>
             <div class="modal-titulo">${_esc(linea.nombre || lineaId)}</div>
             <hr class="cfg-separador">
+
+            <!-- Nombre del cliente -->
+            <div class="cfg-grupo">
+                <span class="cfg-grupo-label">👤 Nombre</span>
+                <input type="text" class="cfg-libre-input"
+                    placeholder="¿Cómo te llamas?"
+                    value="${_esc(sel._nombre || '')}"
+                    oninput="_setNombreSelectivo('${_esc(lineaId)}', this.value)"
+                    style="margin-bottom:6px;">
+            </div>
+
             ${gruposHTML}
+
+            <!-- Fecha de entrega -->
+            <div class="cfg-grupo">
+                <span class="cfg-grupo-label">📅 Fecha de entrega <span style="color:var(--accent-secundario,#c084fc);">*obligatorio</span></span>
+                <input type="date" class="cfg-libre-input cfg-fecha-input"
+                    value="${_esc(sel._fechaEvento || '')}"
+                    oninput="_setFechaSelectivo('${_esc(lineaId)}', this.value)"
+                    style="margin-bottom:6px;">
+                ${sel._fechaEvento
+                    ? `<span class="cfg-nota">↳ ${_formatearFechaEs(sel._fechaEvento)}</span>`
+                    : `<span class="cfg-nota" style="color:var(--accent-secundario,#c084fc);">↳ Selecciona la fecha de entrega para continuar</span>`}
+            </div>
+
             <hr class="cfg-separador">
             ${resumenHTML}
             <a class="btn-wpp-configurador"
-                href="${_wppLink(msgWpp)}"
-                target="_blank">
-                ${haySel ? '✉ Enviar Selección por WhatsApp' : '✉ Cotizar por WhatsApp'}
+                href="${faltaFecha ? '#' : _wppLink(msgWpp)}"
+                ${faltaFecha ? 'onclick="event.preventDefault(); window._mostrarToastPublico && window._mostrarToastPublico(\'📅 Selecciona la fecha de entrega para continuar\');"' : ''}
+                target="_blank"
+                style="${faltaFecha ? 'opacity:0.45; cursor:not-allowed;' : ''}">
+                ${faltaFecha ? '📅 Selecciona la fecha para cotizar' : (haySel ? '✉ Enviar Selección por WhatsApp' : '✉ Cotizar por WhatsApp')}
             </a>
             <p style="text-align:center; font-size:0.68rem; color:var(--texto-mutado); margin-top:10px; letter-spacing:1px;">
                 SIN PRECIOS · RESPUESTA PERSONALIZADA
@@ -1435,6 +1712,20 @@
         if (linea) _renderizarModalSelectivo(lineaId, linea);
     }
     window._selPillSelectivo = _selPillSelectivo;
+
+    window._setNombreSelectivo = function(lineaId, valor) {
+        if (!_selMenuSelectivo[lineaId]) _selMenuSelectivo[lineaId] = {};
+        _selMenuSelectivo[lineaId]._nombre = valor;
+        const linea = (window._MENU_SELECTIVO || []).find(l => l.id === lineaId);
+        if (linea) _renderizarModalSelectivo(lineaId, linea);
+    };
+
+    window._setFechaSelectivo = function(lineaId, valor) {
+        if (!_selMenuSelectivo[lineaId]) _selMenuSelectivo[lineaId] = {};
+        _selMenuSelectivo[lineaId]._fechaEvento = valor;
+        const linea = (window._MENU_SELECTIVO || []).find(l => l.id === lineaId);
+        if (linea) _renderizarModalSelectivo(lineaId, linea);
+    };
 
     function _renderizarModal(prodId, cfg) {
         const sel = _selecciones[prodId] || {};
@@ -1598,17 +1889,24 @@
         const libresVals = Object.entries(sel.libres || {}).filter(([id, v]) => v && v.trim() !== '');
 
         const partes = [
-            `¡Hola Sagrada Delicia! ✨ Quiero cotizar un *${cfg.nombre || prodId}*.`,
-            sel.fechaEvento ? `📅 Fecha del evento: ${_formatearFechaEs(sel.fechaEvento)}` : '',
-            sel.tamanio    ? `📐 Tamaño: ${sel.tamanio}`       : '',
-            sel.sabor      ? `✨ Sabor: ${sel.sabor}`           : '',
-            sel.relleno    ? `🍰 Relleno: ${sel.relleno}`       : '',
-            sel.decoracion ? `🎀 Decoración: ${sel.decoracion}` : '',
+            `¡Hola Sagrada Delicia! ✨`,
+            `Quiero cotizar un *${cfg.nombre || prodId}*`,
+            ``,
+            `📋 *Detalles de mi pedido:*`,
+            `━━━━━━━━━━━━━━━`,
+            sel.nombre      ? `👤 Nombre: ${sel.nombre}`                                  : '',
+            sel.fechaEvento ? `📅 Fecha de entrega: ${_formatearFechaEs(sel.fechaEvento)}` : '',
+            sel.tamanio     ? `📐 Tamaño: ${sel.tamanio}`                                  : '',
+            sel.sabor       ? `✨ Sabor: ${sel.sabor}`                                     : '',
+            sel.relleno     ? `🍰 Relleno: ${sel.relleno}`                                 : '',
+            sel.decoracion  ? `🎀 Decoración: ${sel.decoracion}`                           : '',
             ...libresVals.map(([id, v]) => `📝 ${libresLabels[id] || 'Detalle'}: ${v}`),
-            `\n¿Me puedes dar información y precio?`,
+            `━━━━━━━━━━━━━━━`,
+            ``,
+            `¿Me pueden dar información y precio?`,
         ].filter(Boolean).join('\n');
 
-        window.open(_wppLink(partes), '_blank');
+        window.location.href = _wppLink(partes);
     }
     window._abrirWppDesdeModal = _abrirWppDesdeModal;
 
@@ -1734,24 +2032,31 @@
             const nombre = cfg[prodId]?.nombre || prodId;
             const opciones = _selecciones[prodId] || {};
             const partes = [`🎪 *${nombre}*`];
-            if (opciones.tamanio)     partes.push(`  · Tamaño: ${opciones.tamanio}`);
-            if (opciones.sabor)       partes.push(`  · Sabor: ${opciones.sabor}`);
-            if (opciones.relleno)     partes.push(`  · Relleno: ${opciones.relleno}`);
-            if (opciones.decoracion)  partes.push(`  · Decoración: ${opciones.decoracion}`);
-            if (opciones.fechaEvento) partes.push(`  · Fecha: ${opciones.fechaEvento}`);
+            if (opciones.nombre)      partes.push(`  👤 Nombre: ${opciones.nombre}`);
+            if (opciones.tamanio)     partes.push(`  📐 Tamaño: ${opciones.tamanio}`);
+            if (opciones.sabor)       partes.push(`  ✨ Sabor: ${opciones.sabor}`);
+            if (opciones.relleno)     partes.push(`  🍰 Relleno: ${opciones.relleno}`);
+            if (opciones.decoracion)  partes.push(`  🎀 Decoración: ${opciones.decoracion}`);
+            if (opciones.fechaEvento) partes.push(`  📅 Fecha de entrega: ${_formatearFechaEs(opciones.fechaEvento)}`);
             if (opciones.libres) {
                 Object.entries(opciones.libres).forEach(([k, v]) => {
-                    if (v) partes.push(`  · ${k}: ${v}`);
+                    if (v) partes.push(`  📝 ${k}: ${v}`);
                 });
             }
             return partes.join('\n');
         });
         const msg = [
-            `¡Hola Sagrada Delicia! ✨ Quiero cotizar un *combo de montaje*:\n`,
-            ...lineas,
-            `\n¿Me pueden dar información y precio para este conjunto?`
+            `¡Hola Sagrada Delicia! ✨`,
+            `Quiero cotizar un *combo de montaje*`,
+            ``,
+            `📋 *Productos seleccionados:*`,
+            `━━━━━━━━━━━━━━━`,
+            ...lineas.map((l, i) => (i < lineas.length - 1 ? l + '\n' : l)),
+            `━━━━━━━━━━━━━━━`,
+            ``,
+            `¿Me pueden dar información y precio para este conjunto?`
         ].join('\n');
-        window.open(_wppLink(msg), '_blank');
+        window.location.href = _wppLink(msg);
     }
 
     window._toggleMontajePublico  = _toggleMontajePublico;
@@ -1800,7 +2105,7 @@
                             ` : ''}
 
                             <div class="precio-oferta">${_moneda(of.precioVenta)}</div>
-                            <a href="${_wppLink(`¡Hola Sagrada Delicia! ✨ Vi la oferta especial de *${of.nombre}* por ${_moneda(of.precioVenta)}. ¿Aún está disponible?`)}"
+                            <a href="${_wppLink(`¡Hola Sagrada Delicia! ✨\nQuiero reservar una oferta especial.\n\n📋 *Detalles:*\n━━━━━━━━━━━━━━━\n🎂 Oferta: *${of.nombre}*\n💰 Precio: ${_moneda(of.precioVenta)}\n━━━━━━━━━━━━━━━\n\n¿Aún está disponible?`)}"
                                 target="_blank" class="btn-pedir">Reservar Ahora</a>
                         </div>
                     </div>`;
@@ -1981,7 +2286,7 @@
                         <div class="card-body">
                             <h3 class="card-title">${_esc(nombre.replace(/_/g,' '))}</h3>
                             <p class="card-desc">${_esc(prod.descripcion || 'Creación artesanal personalizada.')}</p>
-                            <a href="${_wppLink(`¡Hola Sagrada Delicia! ✨ Me interesa información sobre: *${nombre.replace(/_/g,' ')}*.`)}"
+                            <a href="${_wppLink(`¡Hola Sagrada Delicia! ✨\nMe interesa cotizar un producto.\n\n📋 *Detalles:*\n━━━━━━━━━━━━━━━\n🎂 Producto: *${nombre.replace(/_/g,' ')}*\n━━━━━━━━━━━━━━━\n\n¿Me pueden dar información y precio?`)}"
                                 target="_blank" class="btn-pedir">Cotizar Personalizado</a>
                         </div>
                     </div>`;
@@ -2036,9 +2341,15 @@
                         ? `<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(212,175,55,0.1);border:1px solid rgba(212,175,55,0.3);border-radius:3px;padding:5px 12px;font-size:0.72rem;font-weight:600;color:var(--dorado);letter-spacing:1px;text-transform:uppercase;margin-bottom:14px;">📦 Mínimo ${p.minimo} unidades</div>`
                         : '';
                     const msgWpp = [
-                        `¡Hola Sagrada Delicia! ✨ Quiero cotizar *${p.nombre}*.`,
-                        p.minimo ? `📦 Entiendo que el mínimo es ${p.minimo} unidades.` : '',
-                        `\n¿Me puedes dar información y precio?`
+                        `¡Hola Sagrada Delicia! ✨`,
+                        `Quiero cotizar *${p.nombre}*`,
+                        ``,
+                        `📋 *Detalles:*`,
+                        `━━━━━━━━━━━━━━━`,
+                        p.minimo ? `📦 Mínimo: ${p.minimo} unidades` : '',
+                        `━━━━━━━━━━━━━━━`,
+                        ``,
+                        `¿Me pueden dar información y precio?`
                     ].filter(Boolean).join('\n');
                     return `
                     <div class="card">
@@ -2263,11 +2574,17 @@
                                 : '';
 
                             const msgWpp = [
-                                `¡Hola Sagrada Delicia! ✨ Vi una obra en su portafolio que me encantó.`,
-                                `🎂 *${obra.nombre || 'Sin nombre'}*`,
-                                lineaLabel  ? `✦ Línea: ${lineaLabel}` : '',
+                                `¡Hola Sagrada Delicia! ✨`,
+                                `Vi una obra en su portafolio que me encantó.`,
+                                ``,
+                                `📋 *Detalles de la obra:*`,
+                                `━━━━━━━━━━━━━━━`,
+                                `🎂 Obra: *${obra.nombre || 'Sin nombre'}*`,
+                                lineaLabel  ? `✦ Línea: ${lineaLabel}`    : '',
                                 recetaLabel ? `✨ Receta: ${recetaLabel}` : '',
-                                `\n¿Pueden hacer algo similar para mí?`
+                                `━━━━━━━━━━━━━━━`,
+                                ``,
+                                `¿Pueden hacer algo similar para mí?`
                             ].filter(Boolean).join('\n');
 
                             return `
@@ -2318,6 +2635,79 @@
     });
 
     document.addEventListener('DOMContentLoaded', cargarCatalogo);
+</script>
+
+<!-- GALERÍA: LIGHTBOX + FADE-IN -->
+<script>
+(function(){
+    /* ── Lightbox ── */
+    var lb     = document.getElementById('sd-lightbox');
+    var lbImg  = document.getElementById('sd-lightbox-img');
+    var lbCap  = document.getElementById('sd-lightbox-caption');
+
+    window.sdLightboxAbrir = function(src, caption) {
+        lbImg.src = src;
+        lbCap.textContent = caption || '';
+        lb.classList.add('abierto');
+        document.body.style.overflow = 'hidden';
+    };
+
+    window.sdLightboxCerrar = function() {
+        lb.classList.remove('abierto');
+        document.body.style.overflow = '';
+        lbImg.src = '';
+    };
+
+    document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape') sdLightboxCerrar();
+    });
+
+    /* ── Click en items de galería (delegado en el grid) ── */
+    document.addEventListener('click', function(e){
+        var item = e.target.closest('.galeria-item');
+        if (!item) return;
+        var img     = item.querySelector('img');
+        var overlay = item.querySelector('.galeria-overlay');
+        if (img) sdLightboxAbrir(img.src, overlay ? overlay.textContent.trim() : '');
+    });
+
+    /* ── Fade-in con IntersectionObserver ── */
+    var obs = new IntersectionObserver(function(entries){
+        entries.forEach(function(entry){
+            if (entry.isIntersecting) {
+                entry.target.classList.add('sd-visible');
+                obs.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.08 });
+
+    /* Observar items ya renderizados y los que se agreguen dinámicamente */
+    function observarItems() {
+        document.querySelectorAll('.galeria-item:not(.sd-visible)').forEach(function(el){
+            obs.observe(el);
+        });
+    }
+
+    /* Escuchar cuando el grid de galería se pueble desde Firebase */
+    var gridObs = new MutationObserver(observarItems);
+    var grid = document.getElementById('grid-galeria');
+    if (grid) gridObs.observe(grid, { childList: true });
+    observarItems();
+})();
+</script>
+
+<!-- BTN FLOTANTE WPP — enlace dinámico móvil/desktop -->
+<script>
+(function(){
+    var WHATSAPP_NUM = "573183110524";
+    var texto = "Hola... Estaba mirando el catalogo y me gustaría ampliar la información sobre algunos de sus productos, gracias.";
+    var esMobil = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
+    var link = esMobil
+        ? "whatsapp://send?phone=" + WHATSAPP_NUM + "&text=" + encodeURIComponent(texto)
+        : "https://wa.me/" + WHATSAPP_NUM + "?text=" + encodeURIComponent(texto);
+    var btn = document.getElementById('btn-wpp-float');
+    if (btn) btn.href = link;
+})();
 </script>
 
 <!-- EFECTO C PARTICULAS -->
@@ -2403,5 +2793,37 @@
 })();
 </script>
 
+
+
+    <script>
+        /* ── Toggle tema claro / oscuro ── */
+        (function() {
+            var btn   = document.getElementById('btn-tema');
+            var html  = document.documentElement;
+            var CLAVE = 'sd-tema';
+
+            function aplicar(tema) {
+                if (tema === 'oscuro') {
+                    html.classList.add('tema-oscuro');
+                    btn.textContent = '🌙';
+                    btn.title = 'Cambiar a tema claro';
+                } else {
+                    html.classList.remove('tema-oscuro');
+                    btn.textContent = '☀️';
+                    btn.title = 'Cambiar a tema oscuro';
+                }
+                localStorage.setItem(CLAVE, tema);
+            }
+
+            // Leer preferencia guardada o usar claro por defecto
+            var guardado = localStorage.getItem(CLAVE) || 'claro';
+            aplicar(guardado);
+
+            btn.addEventListener('click', function() {
+                var actual = html.classList.contains('tema-oscuro') ? 'oscuro' : 'claro';
+                aplicar(actual === 'oscuro' ? 'claro' : 'oscuro');
+            });
+        })();
+    </script>
 </body>
 </html>
