@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sagrada Delicia — Admin v1.4</title>
+    <title>Sagrada Delicia — Admin v1.5</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔐</text></svg>">
     <style>
         :root {
@@ -27,6 +27,8 @@
             align-items: center;
             justify-content: center;
             padding: 24px;
+            padding-top: max(24px, env(safe-area-inset-top));
+            padding-bottom: max(24px, env(safe-area-inset-bottom));
         }
 
         /* ── Logo ── */
@@ -60,27 +62,60 @@
             color: var(--sub);
             margin-bottom: 24px;
         }
-        #input-pin {
-            width: 100%;
+        #input-pin { display: none; } /* input físico oculto, se usa solo para capturar teclado */
+
+        /* ── Casillas de PIN ── */
+        .pin-dots {
+            display: flex;
+            justify-content: center;
+            gap: 14px;
+            margin-bottom: 22px;
+        }
+        .pin-dot {
+            width: 46px;
+            height: 54px;
             background: var(--bg);
             border: 1px solid var(--border);
             border-radius: 10px;
-            color: var(--texto);
-            font-size: 1.6rem;
-            letter-spacing: 10px;
-            text-align: center;
-            padding: 14px;
-            outline: none;
-            transition: border-color 0.2s;
-            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--accent);
+            transition: border-color 0.15s, transform 0.15s;
         }
-        #input-pin:focus { border-color: var(--accent); }
-        #input-pin.error { border-color: var(--accent-err); animation: shake 0.35s; }
+        .pin-dot.filled { border-color: var(--accent); }
+        .pin-dot.error { border-color: var(--accent-err); animation: shake 0.35s; }
         @keyframes shake {
             0%,100% { transform: translateX(0); }
             25%      { transform: translateX(-8px); }
             75%      { transform: translateX(8px); }
         }
+
+        /* ── Teclado numérico táctil ── */
+        .pin-keypad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .pin-key {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--texto);
+            font-size: 1.3rem;
+            font-weight: 600;
+            padding: 16px 0;
+            cursor: pointer;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            transition: background 0.12s, transform 0.08s;
+        }
+        .pin-key:active { background: rgba(192,132,252,0.18); transform: scale(0.94); }
+        .pin-key.pin-key-empty { visibility: hidden; pointer-events: none; }
+        .pin-key.pin-key-back { font-size: 1.1rem; color: var(--sub); }
         #btn-entrar {
             width: 100%;
             padding: 13px;
@@ -93,6 +128,7 @@
             cursor: pointer;
             letter-spacing: 1px;
             transition: background 0.2s;
+            margin-top: 4px;
         }
         #btn-entrar:hover { background: rgba(192,132,252,0.2); }
         #msg-error {
@@ -126,7 +162,8 @@
             background: var(--bg-card);
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 20px 16px;
+            padding: 24px 16px;
+            min-height: 108px;
             text-align: center;
             cursor: pointer;
             text-decoration: none;
@@ -134,15 +171,21 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
             gap: 8px;
-            transition: border-color 0.2s, transform 0.18s, box-shadow 0.2s;
+            -webkit-tap-highlight-color: transparent;
+            transition: border-color 0.2s, transform 0.12s, box-shadow 0.2s, background 0.12s;
         }
         .mod-card:hover {
             border-color: var(--accent);
             transform: translateY(-3px);
             box-shadow: 0 8px 24px rgba(192,132,252,0.15);
         }
-        .mod-icon { font-size: 1.8rem; }
+        .mod-card:active {
+            background: rgba(192,132,252,0.12);
+            transform: scale(0.96);
+        }
+        .mod-icon { font-size: 2rem; }
         .mod-nombre {
             font-size: 0.8rem;
             font-weight: 700;
@@ -222,8 +265,25 @@
 <!-- PIN -->
 <div id="pantalla-pin">
     <h2>Acceso Administrativo</h2>
+
+    <div class="pin-dots" id="pin-dots"></div>
+
+    <div class="pin-keypad">
+        <div class="pin-key" data-key="1">1</div>
+        <div class="pin-key" data-key="2">2</div>
+        <div class="pin-key" data-key="3">3</div>
+        <div class="pin-key" data-key="4">4</div>
+        <div class="pin-key" data-key="5">5</div>
+        <div class="pin-key" data-key="6">6</div>
+        <div class="pin-key" data-key="7">7</div>
+        <div class="pin-key" data-key="8">8</div>
+        <div class="pin-key" data-key="9">9</div>
+        <div class="pin-key pin-key-empty"></div>
+        <div class="pin-key" data-key="0">0</div>
+        <div class="pin-key pin-key-back" data-key="back">⌫</div>
+    </div>
+
     <input type="password" id="input-pin" maxlength="8"
-        placeholder="· · · ·"
         onkeydown="if(event.key==='Enter') verificarPin()"
         oninput="limpiarError()">
     <button id="btn-entrar" onclick="verificarPin()">Entrar</button>
@@ -310,24 +370,70 @@
        PIN — cambiar aquí cuando se necesite
     ═══════════════════════════════════ */
     const PIN_ADMIN = '1234';
+    let pinBuffer = '';
+
+    function renderPinDots() {
+        const cont = document.getElementById('pin-dots');
+        cont.innerHTML = '';
+        const largo = Math.max(PIN_ADMIN.length, pinBuffer.length, 4);
+        for (let i = 0; i < largo; i++) {
+            const dot = document.createElement('div');
+            dot.className = 'pin-dot' + (i < pinBuffer.length ? ' filled' : '');
+            dot.textContent = i < pinBuffer.length ? '•' : '';
+            cont.appendChild(dot);
+        }
+    }
+
+    function agregarDigitoPin(d) {
+        limpiarError();
+        pinBuffer += d;
+        document.getElementById('input-pin').value = pinBuffer;
+        renderPinDots();
+        if (pinBuffer.length >= PIN_ADMIN.length) verificarPin();
+    }
+
+    function borrarDigitoPin() {
+        limpiarError();
+        pinBuffer = pinBuffer.slice(0, -1);
+        document.getElementById('input-pin').value = pinBuffer;
+        renderPinDots();
+    }
 
     function verificarPin() {
-        const val = document.getElementById('input-pin').value;
+        const val = document.getElementById('input-pin').value || pinBuffer;
         if (val === PIN_ADMIN) {
             sessionStorage.setItem('sd_admin_ok', 'true');
             mostrarHub();
         } else {
-            const inp = document.getElementById('input-pin');
             document.getElementById('msg-error').textContent = 'PIN incorrecto. Intentá de nuevo.';
-            inp.classList.add('error');
-            inp.value = '';
-            setTimeout(() => inp.classList.remove('error'), 400);
+            document.querySelectorAll('.pin-dot').forEach(d => d.classList.add('error'));
+            setTimeout(() => {
+                document.querySelectorAll('.pin-dot').forEach(d => d.classList.remove('error'));
+                pinBuffer = '';
+                document.getElementById('input-pin').value = '';
+                renderPinDots();
+            }, 400);
         }
     }
 
     function limpiarError() {
         document.getElementById('msg-error').textContent = '';
     }
+
+    // Teclado táctil en pantalla
+    document.querySelectorAll('.pin-key[data-key]').forEach(key => {
+        key.addEventListener('click', () => {
+            const k = key.dataset.key;
+            if (k === 'back') borrarDigitoPin();
+            else agregarDigitoPin(k);
+        });
+    });
+
+    // Soporte para teclado físico (desktop)
+    document.getElementById('input-pin').addEventListener('input', (e) => {
+        pinBuffer = e.target.value;
+        renderPinDots();
+    });
 
     function mostrarHub() {
         document.getElementById('pantalla-pin').style.display  = 'none';
@@ -339,14 +445,16 @@
         sessionStorage.removeItem('sd_admin_ok');
         document.getElementById('pantalla-hub').style.display = 'none';
         document.getElementById('pantalla-pin').style.display = 'block';
+        pinBuffer = '';
         document.getElementById('input-pin').value = '';
         document.getElementById('msg-error').textContent = '';
+        renderPinDots();
     }
 
     /* Auto-entrar si ya autenticado en esta sesión */
     window.addEventListener('DOMContentLoaded', () => {
+        renderPinDots();
         if (sessionStorage.getItem('sd_admin_ok') === 'true') mostrarHub();
-        else document.getElementById('input-pin').focus();
         initPolvo();
     });
 
