@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sagrada Delicia — Líneas de Negocio V1.9</title>
+    <title>Sagrada Delicia — Líneas de Negocio V1.10</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
 
     <!-- ╔══════════════════════════════════════════════════════════════╗
@@ -500,15 +500,51 @@
         @media (max-width: 700px) {
             body { padding: 12px 10px; }
             h1 { font-size: 1.1rem; }
-            .nav-ecosistema { display: grid; grid-template-columns: 1fr 1fr 1fr; }
-            .btn-nav { padding: 8px 6px; font-size: 0.72rem; justify-content: center; }
             .form-grid-crear { grid-template-columns: 1fr; }
             .tarjeta-linea { flex-wrap: wrap; }
             .tarjeta-acciones { flex-direction: row; flex-wrap: wrap; min-width: unset; width: 100%; }
         }
         @media (max-width: 480px) {
-            .nav-ecosistema { grid-template-columns: 1fr 1fr; }
             .stats-bar { grid-template-columns: 1fr 1fr; }
+        }
+
+        /* ── Mobile-first: header compacto, nav en tira deslizable, orden táctil ──
+           Misma línea de diseño que PEDIDOS.html, para que el ecosistema se sienta consistente. */
+        @media (max-width: 768px) {
+            .header-top { gap: 8px; }
+            .header-brand h1 { font-size: 0.95rem; }
+            .chip-modulo { font-size: 0.62rem; }
+            #badge-cloud-sync { font-size: 0.65rem; padding: 4px 8px; }
+            .btn-guia { padding: 6px 10px; font-size: 0.7rem; }
+
+            .nav-ecosistema {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                padding-bottom: 4px;
+            }
+            .nav-ecosistema::-webkit-scrollbar { display: none; }
+            .nav-ecosistema .btn-nav { flex-shrink: 0; white-space: nowrap; }
+
+            /* El drag-and-drop nativo no responde a gestos táctiles: se oculta el ícono
+               que lo sugiere y se agrandan las flechas ▲▼, que sí funcionan en cualquier dispositivo. */
+            .drag-handle { display: none; }
+            .btn-orden {
+                font-size: 1rem;
+                padding: 8px 10px;
+                min-width: 36px;
+                border: 1px solid var(--border-color);
+            }
+            .tarjeta-orden-ctrl { flex-direction: row; gap: 4px; }
+
+            /* ── Editor de línea (modal) ── */
+            .modal-overlay { padding: 10px; align-items: flex-start; }
+            .modal-box { padding: 18px 16px; max-height: 94vh; }
+            .modal-grid-2col { grid-template-columns: 1fr !important; }
+            .modal-grid-2col #modal-emoji { max-width: 100% !important; }
+            .escala-fila { grid-template-columns: 0.8fr 1.6fr auto; gap: 6px; }
+            .escala-fila input { padding: 9px 8px; font-size: 0.8rem; }
         }
 
         /* ══ TUTORIAL SYSTEM ══ */
@@ -730,7 +766,7 @@
 
         <input type="hidden" id="modal-linea-id">
 
-        <div style="display:grid;grid-template-columns:1fr auto;gap:14px;margin-bottom:16px;align-items:flex-end;">
+        <div class="modal-grid-2col" style="display:grid;grid-template-columns:1fr auto;gap:14px;margin-bottom:16px;align-items:flex-end;">
             <div class="modal-grupo" style="margin-bottom:0;">
                 <label>📛 Nombre Visible</label>
                 <input type="text" id="modal-nombre-visible" placeholder="Ej. Galletas NY 🍪">
@@ -771,7 +807,7 @@
             <input type="hidden" id="modal-montaje" value="false">
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+        <div class="modal-grid-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
             <div class="modal-grupo" style="margin-bottom:0;">
                 <label>⚙️ Tipo de Cálculo</label>
                 <select id="modal-tipo">
