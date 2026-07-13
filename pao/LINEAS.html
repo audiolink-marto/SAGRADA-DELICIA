@@ -7,7 +7,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
 
     <!-- ╔══════════════════════════════════════════════════════════════╗
-         ║  FIREBASE MODULE — LINEAS V1                               ║
+         ║  FIREBASE MODULE — LINEAS V1.1                              ║
          ║  onSnapshot  → escucha cambios en tiempo real              ║
          ║  updateDoc   → escribe SOLO CATALOGO_ACTIVO (anti-pisado)  ║
          ║  Lee DB_RECETAS (solo lectura) para contar por línea       ║
@@ -508,9 +508,61 @@
             .stats-bar { grid-template-columns: 1fr 1fr; }
         }
 
+        /* ── Pestañas de tipo (barra inferior, solo móvil) — mismo patrón que
+           tabs-estado-mobile en PEDIDOS.html, adaptado a filtro-tipo (Escalas/Cantidades). ── */
+        .tabs-tipo-mobile { display: none; }
+
         /* ── Mobile-first: header compacto, nav en tira deslizable, orden táctil ──
            Misma línea de diseño que PEDIDOS.html, para que el ecosistema se sienta consistente. */
         @media (max-width: 768px) {
+            #filtro-tipo { display: none; } /* la barra inferior lo reemplaza visualmente en móvil */
+
+            .tabs-tipo-mobile {
+                display: flex;
+                position: fixed;
+                left: 0; right: 0; bottom: 0;
+                z-index: 500;
+                background: var(--bg-card);
+                border-top: 1px solid var(--border-color);
+                padding: 6px 4px;
+                padding-bottom: max(6px, env(safe-area-inset-bottom));
+                overflow-x: auto;
+                gap: 4px;
+                box-shadow: 0 -8px 24px rgba(0,0,0,0.35);
+            }
+            .tab-tipo-mobile {
+                flex: 1 0 auto;
+                min-width: 64px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 2px;
+                padding: 7px 6px;
+                border-radius: 10px;
+                cursor: pointer;
+                user-select: none;
+                -webkit-tap-highlight-color: transparent;
+                color: var(--color-subtitulos);
+                border: 1px solid transparent;
+                transition: background 0.12s, border-color 0.12s, transform 0.1s;
+            }
+            .tab-tipo-mobile:active { transform: scale(0.94); }
+            .tab-tipo-mobile.activo {
+                background: rgba(125,211,252,0.1);
+                border-color: var(--accent-primario);
+                color: var(--accent-primario);
+            }
+            .tab-tipo-mobile .tab-icono { font-size: 1.05rem; line-height: 1; }
+            .tab-tipo-mobile .tab-label { font-size: 0.58rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+            .tab-tipo-mobile .tab-count {
+                font-size: 0.62rem; font-weight: 700; min-width: 16px; text-align: center;
+                background: rgba(148,163,184,0.15); border-radius: 20px; padding: 0 5px; margin-top: 1px;
+            }
+            .tab-tipo-mobile.activo .tab-count { background: rgba(125,211,252,0.22); }
+
+            /* Deja espacio para que la barra inferior no tape contenido */
+            body { padding-bottom: 78px; }
+
             .header-top { gap: 8px; }
             .header-brand h1 { font-size: 0.95rem; }
             .chip-modulo { font-size: 0.62rem; }
@@ -607,10 +659,6 @@
         </div>
         <div class="ctrl-sync">
             <button class="btn-guia" onclick="iniciarTutorial(true)" title="Relanzar guía interactiva">🎓 Guía</button>
-            <button class="btn" id="btn-sync-manual"
-                style="border-color:var(--accent-success);color:var(--accent-success);background:rgba(34,197,94,0.07);padding:8px 14px;"
-                onclick="forzarSyncManual()">☁️ Sync</button>
-            <button class="btn" id="btn-toggle-sync" onclick="toggleSync()">🔔 Sync ON</button>
         </div>
     </div>
 
@@ -704,7 +752,7 @@
             <input type="search" class="toolbar-buscador" id="buscador-lineas"
                 placeholder="🔍 Buscar línea..."
                 oninput="renderizarBiblioteca()">
-            <select class="toolbar-select" id="filtro-tipo" onchange="renderizarBiblioteca()" style="min-width:200px;">
+            <select class="toolbar-select" id="filtro-tipo" onchange="renderizarBiblioteca(); sincronizarTabsConSelectTipo();" style="min-width:200px;">
                 <option value="">⚙️ Todos los tipos</option>
                 <option value="escala">⚖️ Por Escalas</option>
                 <option value="cantidad">🔢 Por Cantidades</option>
@@ -716,6 +764,25 @@
                 <option value="recetas-desc">🍳 Más recetas primero</option>
                 <option value="tipo">⚙️ Por tipo de cálculo</option>
             </select>
+        </div>
+
+        <!-- PESTAÑAS DE TIPO — solo móvil, reemplaza visualmente al select de tipo -->
+        <div class="tabs-tipo-mobile" id="tabs-tipo-mobile">
+            <div class="tab-tipo-mobile activo" data-tipo="" onclick="seleccionarTabTipo('')">
+                <span class="tab-icono">⚙️</span>
+                <span class="tab-label">Todos</span>
+                <span class="tab-count" id="tab-count-todos-tipo">0</span>
+            </div>
+            <div class="tab-tipo-mobile" data-tipo="escala" onclick="seleccionarTabTipo('escala')">
+                <span class="tab-icono">⚖️</span>
+                <span class="tab-label">Escalas</span>
+                <span class="tab-count" id="tab-count-escala">0</span>
+            </div>
+            <div class="tab-tipo-mobile" data-tipo="cantidad" onclick="seleccionarTabTipo('cantidad')">
+                <span class="tab-icono">🔢</span>
+                <span class="tab-label">Cantid.</span>
+                <span class="tab-count" id="tab-count-cantidad">0</span>
+            </div>
         </div>
 
         <!-- Grid de tarjetas -->
@@ -863,8 +930,9 @@
 ════════════════════════════════════ -->
 <script>
 /* ══════════════════════════════════════════════════════════
-   SAGRADA DELICIA — LINEAS V1
+   SAGRADA DELICIA — LINEAS V1.1
    Standalone · onSnapshot tiempo real · updateDoc anti-pisado
+   v1.1: barra de pestañas de tipo (móvil) — reemplaza filtro-tipo en pantallas ≤768px
    Solo toca CATALOGO_ACTIVO — no pisa DB_INSUMOS, DB_RECETAS
    Diseñado por: Marto 🧠
    ══════════════════════════════════════════════════════════ */
@@ -1103,6 +1171,41 @@ const _dnd = {
 /* ══════════════════════════════════════
    RENDER BIBLIOTECA
 ══════════════════════════════════════ */
+/* ══════════════════════════════════════
+   PESTAÑAS DE TIPO (barra inferior móvil)
+══════════════════════════════════════ */
+function seleccionarTabTipo(tipo) {
+    const sel = document.getElementById('filtro-tipo');
+    if (sel) sel.value = tipo;
+
+    document.querySelectorAll('.tab-tipo-mobile').forEach(tab => {
+        tab.classList.toggle('activo', tab.dataset.tipo === tipo);
+    });
+
+    renderizarBiblioteca();
+}
+
+function sincronizarTabsConSelectTipo() {
+    const valor = document.getElementById('filtro-tipo')?.value || '';
+    document.querySelectorAll('.tab-tipo-mobile').forEach(tab => {
+        tab.classList.toggle('activo', tab.dataset.tipo === valor);
+    });
+}
+
+function actualizarConteosTabsTipo(listaYaFiltradaPorBusqueda) {
+    const conteos = { escala: 0, cantidad: 0 };
+    listaYaFiltradaPorBusqueda.forEach(l => {
+        conteos[l.usaCantidadInput ? 'cantidad' : 'escala']++;
+    });
+
+    const totalEl = document.getElementById('tab-count-todos-tipo');
+    if (totalEl) totalEl.textContent = listaYaFiltradaPorBusqueda.length;
+    const escalaEl = document.getElementById('tab-count-escala');
+    if (escalaEl) escalaEl.textContent = conteos.escala;
+    const cantidadEl = document.getElementById('tab-count-cantidad');
+    if (cantidadEl) cantidadEl.textContent = conteos.cantidad;
+}
+
 function renderizarBiblioteca() {
     const cont   = document.getElementById('grid-lineas');
     const busq   = (document.getElementById('buscador-lineas')?.value || '').toLowerCase().trim();
@@ -1118,6 +1221,8 @@ function renderizarBiblioteca() {
         (l.descripcion_comercial||'').toLowerCase().includes(busq) ||
         (l.emoji||'').includes(busq)
     );
+    actualizarConteosTabsTipo(lista);
+
     if (tipoF) lista = lista.filter(l =>
         tipoF === 'escala' ? !l.usaCantidadInput : l.usaCantidadInput
     );
@@ -1542,10 +1647,10 @@ const _TUT_PASOS = [
     { target:'#nueva-linea-tipo',            emoji:'⚙️', titulo:'Tipo de Cálculo — Concepto Clave',   texto:'⚖️ Por Escalas: el usuario elige una talla predefinida (1 libra, 2 libras, molde redondo, etc.) — ideal para tortas y pasteles. 🔢 Por Cantidades: el usuario escribe cuántas unidades quiere — ideal para cupcakes, galletas, desayunos.' },
     { target:'#nueva-linea-desc',            emoji:'💬', titulo:'Descripción Comercial',               texto:'Texto breve para el menú público del catálogo. Describe el diferencial de la línea. Puedes dejarlo vacío ahora y editarlo después desde el modal de edición de cada tarjeta.' },
     { target:'section.panel:nth-of-type(2) .toolbar', emoji:'🔧', titulo:'Filtros de la Biblioteca',  texto:'Busca líneas por nombre, filtra por tipo de cálculo (Escalas / Cantidades) y ordénalas. El orden "Arrastrable" es el orden real en que aparecen las líneas en el Cotizador y el Catálogo: lo que ves aquí es lo que ve el cliente.' },
-    { target:'#grid-lineas',                 emoji:'📋', titulo:'Tarjetas de Líneas Activas',          texto:'Cada tarjeta muestra la foto, emoji, nombre, tipo de cálculo y cuántas recetas tiene asociadas. Usa las flechas ▲▼ para reordenar, o arrastra directamente. El ícono ⭐ la destaca como línea estrella en el catálogo. El botón ✏️ abre el editor completo.' },
+    { target:'#grid-lineas',                 emoji:'📋', titulo:'Tarjetas de Líneas Activas',          texto:'Cada tarjeta muestra la foto, emoji, nombre, tipo de cálculo y cuántas recetas tiene asociadas. Usa las flechas ▲▼ para reordenar (funcionan en cualquier dispositivo), o arrastra directamente si estás en computador. El ícono ⭐ la destaca como línea estrella en el catálogo. El botón ✏️ abre el editor completo.' },
     { target: null,                          emoji:'✏️', titulo:'Modal de Edición — Funciones Avanzadas', texto:'Al presionar ✏️ en cualquier tarjeta se abre el editor: cambia nombre visible y emoji sin afectar el ID técnico (recetas y costos enlazados se conservan), marca la línea como ⭐ Estrella (destaque en catálogo) o 🎪 Montaje de Evento (sección separada). Si el tipo es Escalas, puedes configurar las tallas disponibles (ej: "1 lb", "2 lb", "Molde 30cm") con sus valores numéricos.' },
     { target:'section.panel:nth-of-type(3)', emoji:'⚠️', titulo:'Zona de Peligro',                    texto:'Elimina una línea de forma permanente e irreversible. El sistema pide que escribas el nombre exacto en MAYÚSCULAS como confirmación para evitar errores. Las recetas del Recetario no se eliminan, solo pierden su asignación de línea.' },
-    { target:'#badge-cloud-sync',            emoji:'☁️', titulo:'Sincronización Cloud',               texto:'Este módulo escribe exclusivamente el campo CATALOGO_ACTIVO en Firebase. No toca DB_INSUMOS, DB_RECETAS ni DB_SNAPSHOTS. Así garantiza que un cambio en Líneas nunca pise datos de otros módulos. Usa ☁️ Sync para reconectar si pierdes conexión.' },
+    { target:'#badge-cloud-sync',            emoji:'☁️', titulo:'Sincronización Cloud',               texto:'Este módulo escribe exclusivamente el campo CATALOGO_ACTIVO en Firebase. No toca DB_INSUMOS, DB_RECETAS ni DB_SNAPSHOTS. Así garantiza que un cambio en Líneas nunca pise datos de otros módulos. Cada acción se guarda sola en la nube, y si pierdes conexión se reconecta automáticamente al volver — no necesitas hacer nada manual.' },
 ];
 
 function iniciarTutorial(forzar = false) {
