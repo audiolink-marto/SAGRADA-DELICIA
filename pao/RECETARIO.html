@@ -449,7 +449,9 @@
         .ac-input.seleccionado { color: var(--color-titulos); border-color: var(--accent-success); }
         .ac-lista {
             display: none;
-            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            position: fixed; /* V2.0: antes 'absolute' — tabla-wrapper con overflow-x:auto
+                                 recortaba verticalmente el desplegable. 'fixed' + JS de
+                                 posicionamiento (_acPosicionar) lo saca de ese recorte. */
             background: var(--bg-card); border: 1px solid #22c55e;
             border-radius: 9px; z-index: 9000;
             max-height: 220px; overflow-y: auto;
@@ -612,8 +614,6 @@
         @media (max-width: 700px) {
             body { padding: 12px 10px; }
             h1 { font-size: 1.1rem; }
-            .nav-ecosistema { display: grid; grid-template-columns: 1fr 1fr 1fr; }
-            .btn-nav { padding: 8px 6px; font-size: 0.72rem; justify-content: center; }
             .toolbar { flex-direction: column; }
             .toolbar-buscador { width: 100%; }
             .toolbar-acciones { width: 100%; }
@@ -621,10 +621,53 @@
             .form-grid-4 { grid-template-columns: 1fr; }
         }
         @media (max-width: 480px) {
-            .nav-ecosistema { grid-template-columns: 1fr 1fr; }
             .stats-bar { grid-template-columns: 1fr 1fr; }
             .tarjeta-receta { flex-direction: column; }
             .tarjeta-receta-acciones { flex-direction: row; flex-wrap: wrap; min-width: unset; }
+        }
+
+        /* ── Barra inferior fija (móvil) + header compacto + nav deslizable — guía: PEDIDOS ── */
+        .barra-inferior-mobile { display: none; }
+        @media (max-width: 768px) {
+            body { padding-bottom: 78px; }
+
+            /* Header compacto */
+            .header-top { gap: 8px; }
+            .header-brand h1 { font-size: 0.95rem; }
+            #badge-cloud-sync { font-size: 0.65rem; padding: 4px 8px; }
+            .chip-modulo { font-size: 0.62rem; }
+            .btn-guia { padding: 6px 10px; font-size: 0.7rem; }
+
+            /* Nav ecosistema: tira horizontal deslizable */
+            .nav-ecosistema {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                padding-bottom: 4px;
+            }
+            .nav-ecosistema::-webkit-scrollbar { display: none; }
+            .nav-ecosistema .btn-nav { flex-shrink: 0; white-space: nowrap; }
+
+            /* Barra inferior fija de acciones rápidas */
+            .barra-inferior-mobile {
+                display: flex;
+                position: fixed;
+                left: 0; right: 0; bottom: 0;
+                z-index: 500;
+                background: var(--bg-card);
+                border-top: 1px solid var(--border-color);
+                padding: 8px 10px;
+                padding-bottom: max(8px, env(safe-area-inset-bottom));
+                gap: 8px;
+                box-shadow: 0 -8px 24px rgba(0,0,0,0.35);
+            }
+            .barra-inferior-mobile .btn {
+                flex: 1;
+                justify-content: center;
+                padding: 10px 6px;
+                font-size: 0.76rem;
+            }
         }
 
         /* ══ TUTORIAL SYSTEM ══ */
@@ -685,16 +728,12 @@
     <div class="header-top">
         <div class="header-brand">
             <h1>👩‍🍳 SAGRADA DELICIA</h1>
-            <span class="chip-modulo">Recetario V1.9</span>
+            <span class="chip-modulo">Recetario V2.0</span>
             <span id="badge-cloud-sync" class="sync-offline" title="Listener en tiempo real">⚫ Conectando...</span>
             <span class="pill-live" id="pill-live" style="display:none;">EN VIVO</span>
         </div>
         <div class="ctrl-sync">
             <button class="btn-guia" onclick="iniciarTutorial(true)" title="Relanzar guía interactiva">🎓 Guía</button>
-            <button class="btn" id="btn-sync-manual"
-                style="border-color:var(--accent-success);color:var(--accent-success);background:rgba(34,197,94,0.07);padding:8px 14px;"
-                onclick="forzarSyncManual()" title="Reconectar listener">☁️ Sync</button>
-            <button class="btn" id="btn-toggle-sync" onclick="toggleSync()" title="Activar / pausar Firebase">🔔 Sync ON</button>
         </div>
     </div>
 
@@ -710,6 +749,13 @@
         <a class="btn btn-nav" onclick="irA('sobreNosotros')">💌 Sobre Nosotros</a>
     </nav>
 </header>
+
+<!-- BARRA INFERIOR FIJA — solo móvil, acciones rápidas -->
+<div class="barra-inferior-mobile" id="barra-inferior-mobile">
+    <button class="btn btn-primario" onclick="irNuevaRecetaMobile()" title="Nueva ficha técnica">➕ Nueva</button>
+    <button class="btn btn-success" onclick="guardarReceta()" title="Guardar receta actual">💾 Guardar</button>
+    <button class="btn-guia" onclick="iniciarTutorial(true)" title="Relanzar guía interactiva">🎓 Guía</button>
+</div>
 
 <!-- ════════════════════════════════════
      CONTENIDO PRINCIPAL
@@ -1188,6 +1234,38 @@ function vincularCosto(sel) {
 /* ══════════════════════════════════════
    AUTOCOMPLETE — motor interno V1.6
 ══════════════════════════════════════ */
+
+/* V2.0: posiciona la lista (position:fixed) alineada al input,
+   debajo o arriba según el espacio disponible en el viewport. */
+function _acPosicionar(lista, inputEl) {
+    const r = inputEl.getBoundingClientRect();
+    const espacioAbajo = window.innerHeight - r.bottom;
+    const alto = Math.min(220, Math.max(espacioAbajo - 8, 120));
+
+    lista.style.left  = r.left + 'px';
+    lista.style.width = r.width + 'px';
+    lista.style.maxHeight = alto + 'px';
+
+    if (espacioAbajo < 140 && r.top > espacioAbajo) {
+        /* poco espacio abajo → abrir hacia arriba */
+        lista.style.top    = 'auto';
+        lista.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+    } else {
+        lista.style.bottom = 'auto';
+        lista.style.top    = (r.bottom + 4) + 'px';
+    }
+}
+
+function _acRepocisionarSiAbierta() {
+    const lista = document.querySelector('.ac-lista.abierta');
+    if (!lista) return;
+    const input = lista.closest('.ac-wrap')?.querySelector('.ac-input');
+    if (input) _acPosicionar(lista, input);
+    else lista.classList.remove('abierta');
+}
+window.addEventListener('scroll', _acRepocisionarSiAbierta, true);
+window.addEventListener('resize', _acRepocisionarSiAbierta);
+
 function _acFiltrar(inputEl) {
     const q      = inputEl.value.toLowerCase().trim();
     const lista  = inputEl.closest('.ac-wrap').querySelector('.ac-lista');
@@ -1198,6 +1276,7 @@ function _acFiltrar(inputEl) {
     inputEl.classList.remove('seleccionado');
 
     _acRenderLista(lista, q, inputEl);
+    _acPosicionar(lista, inputEl);
     lista.classList.add('abierta');
 }
 
@@ -1205,6 +1284,7 @@ function _acAbrir(inputEl) {
     const q     = inputEl.value.toLowerCase().trim();
     const lista = inputEl.closest('.ac-wrap').querySelector('.ac-lista');
     _acRenderLista(lista, q, inputEl);
+    _acPosicionar(lista, inputEl);
     lista.classList.add('abierta');
     /* Cerrar otras listas abiertas */
     document.querySelectorAll('.ac-lista.abierta').forEach(l => {
@@ -1405,6 +1485,15 @@ function toggleFormReceta(forzarAbrir = false) {
     const arrow = document.getElementById('form-toggle-arrow');
     if (body)  body.classList.toggle('visible', _formAbierto);
     if (arrow) arrow.classList.toggle('abierto', _formAbierto);
+}
+
+/* Barra inferior móvil — botón ➕ Nueva:
+   abre el panel de ficha técnica, limpia el formulario (solo si no hay una edición
+   en curso, para no perder datos por accidente) y hace scroll hasta el panel. */
+function irNuevaRecetaMobile() {
+    if (!_recetaEnEdicionId) limpiarFormulario();
+    toggleFormReceta(true);
+    document.getElementById('form-panel-body')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 /* ══════════════════════════════════════
