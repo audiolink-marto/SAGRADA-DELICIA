@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sagrada Delicia — Pedidos V3.1</title>
+    <title>Sagrada Delicia — Pedidos V3.2</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📋</text></svg>">
 
     <!-- ╔══════════════════════════════════════════════════════════════╗
@@ -316,6 +316,86 @@
         .stats-bar { display: grid; grid-template-columns: repeat(5,1fr); gap: 14px; }
         @media (max-width: 900px) { .stats-bar { grid-template-columns: repeat(3,1fr); } }
         @media (max-width: 480px) { .stats-bar { grid-template-columns: repeat(2,1fr); } }
+
+        /* ── Pestañas de estado (barra inferior, solo móvil) ── */
+        .tabs-estado-mobile { display: none; }
+        @media (max-width: 768px) {
+            #filtro-estado { display: none; } /* la barra inferior lo reemplaza visualmente en móvil */
+
+            .tabs-estado-mobile {
+                display: flex;
+                position: fixed;
+                left: 0; right: 0; bottom: 0;
+                z-index: 500;
+                background: var(--bg-card);
+                border-top: 1px solid var(--border-color);
+                padding: 6px 4px;
+                padding-bottom: max(6px, env(safe-area-inset-bottom));
+                overflow-x: auto;
+                gap: 4px;
+                box-shadow: 0 -8px 24px rgba(0,0,0,0.35);
+            }
+            .tab-estado-mobile {
+                flex: 1 0 auto;
+                min-width: 64px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 2px;
+                padding: 7px 6px;
+                border-radius: 10px;
+                cursor: pointer;
+                user-select: none;
+                -webkit-tap-highlight-color: transparent;
+                color: var(--color-subtitulos);
+                border: 1px solid transparent;
+                transition: background 0.12s, border-color 0.12s, transform 0.1s;
+            }
+            .tab-estado-mobile:active { transform: scale(0.94); }
+            .tab-estado-mobile.activo {
+                background: rgba(125,211,252,0.1);
+                border-color: var(--accent-primario);
+                color: var(--accent-primario);
+            }
+            .tab-estado-mobile .tab-icono { font-size: 1.05rem; line-height: 1; }
+            .tab-estado-mobile .tab-label { font-size: 0.58rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+            .tab-estado-mobile .tab-count {
+                font-size: 0.62rem; font-weight: 700; min-width: 16px; text-align: center;
+                background: rgba(148,163,184,0.15); border-radius: 20px; padding: 0 5px; margin-top: 1px;
+            }
+            .tab-estado-mobile.activo .tab-count { background: rgba(125,211,252,0.22); }
+
+            /* Deja espacio para que la barra inferior no tape contenido */
+            body { padding-bottom: 78px; }
+
+            /* ── Header compacto ── */
+            .header-top { gap: 8px; }
+            .header-brand h1 { font-size: 0.95rem; }
+            #badge-cloud-sync { font-size: 0.65rem; padding: 4px 8px; }
+            .chip-modulo { font-size: 0.62rem; }
+            .btn-guia { padding: 6px 10px; font-size: 0.7rem; }
+            #btn-guardar-pedidos { padding: 6px 12px; }
+
+            /* En pantallas muy angostas, el botón de nube queda solo con el ícono */
+            @media (max-width: 380px) {
+                #btn-guardar-pedidos .txt-guardar-nube { display: none; }
+            }
+
+            /* ── Nav del ecosistema: tira horizontal deslizable ── */
+            .nav-ecosistema {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                padding-bottom: 4px;
+            }
+            .nav-ecosistema::-webkit-scrollbar { display: none; }
+            .nav-ecosistema .btn-nav { flex-shrink: 0; white-space: nowrap; }
+
+            /* La barra pegajosa duplicada de "Guardar en Nube" ya no hace falta:
+               el botón del header cumple la misma función y no compite con las pestañas de abajo */
+            .barra-guardar-sticky { display: none; }
+        }
         .stat-card {
             background: var(--bg-input); border: 1px solid var(--border-color);
             border-radius: 10px; padding: 16px 18px;
@@ -574,7 +654,7 @@
             <button class="btn-guia" onclick="iniciarTutorial(true)" title="Relanzar guía interactiva">🎓 Guía</button>
             <button class="btn" id="btn-guardar-pedidos"
                 style="border-color:var(--accent-secundario);color:var(--accent-secundario);background:rgba(52,211,153,0.08);padding:8px 18px;font-weight:600;"
-                onclick="guardarPedidosManual()" title="Guardar y sincronizar pedidos en la nube">💾 Guardar en Nube</button>
+                onclick="guardarPedidosManual()" title="Guardar y sincronizar pedidos en la nube">💾 <span class="txt-guardar-nube">Guardar en Nube</span></button>
         </div>
     </div>
 
@@ -650,7 +730,7 @@
                 placeholder="🔍 Buscar cliente o nombre..."
                 oninput="renderizarPedidos()">
 
-            <select class="toolbar-select" id="filtro-estado" onchange="renderizarPedidos()">
+            <select class="toolbar-select" id="filtro-estado" onchange="renderizarPedidos(); sincronizarTabsConSelect();">
                 <option value="">— Todos los estados —</option>
                 <option value="cotizacion">📄 Cotización</option>
                 <option value="confirmado">✅ Confirmado</option>
@@ -697,6 +777,40 @@
             </div>
         </div>
 
+        <!-- PESTAÑAS DE ESTADO — solo móvil, reemplaza visualmente al select de estado -->
+        <div class="tabs-estado-mobile" id="tabs-estado-mobile">
+            <div class="tab-estado-mobile activo" data-estado="" onclick="seleccionarTabEstado('')">
+                <span class="tab-icono">📋</span>
+                <span class="tab-label">Todos</span>
+                <span class="tab-count" id="tab-count-todos">0</span>
+            </div>
+            <div class="tab-estado-mobile" data-estado="cotizacion" onclick="seleccionarTabEstado('cotizacion')">
+                <span class="tab-icono">📄</span>
+                <span class="tab-label">Cotiz.</span>
+                <span class="tab-count" id="tab-count-cotizacion">0</span>
+            </div>
+            <div class="tab-estado-mobile" data-estado="confirmado" onclick="seleccionarTabEstado('confirmado')">
+                <span class="tab-icono">✅</span>
+                <span class="tab-label">Confirm.</span>
+                <span class="tab-count" id="tab-count-confirmado">0</span>
+            </div>
+            <div class="tab-estado-mobile" data-estado="produccion" onclick="seleccionarTabEstado('produccion')">
+                <span class="tab-icono">🏭</span>
+                <span class="tab-label">Producc.</span>
+                <span class="tab-count" id="tab-count-produccion">0</span>
+            </div>
+            <div class="tab-estado-mobile" data-estado="entregado" onclick="seleccionarTabEstado('entregado')">
+                <span class="tab-icono">🎯</span>
+                <span class="tab-label">Entreg.</span>
+                <span class="tab-count" id="tab-count-entregado">0</span>
+            </div>
+            <div class="tab-estado-mobile" data-estado="cancelado" onclick="seleccionarTabEstado('cancelado')">
+                <span class="tab-icono">❌</span>
+                <span class="tab-label">Cancel.</span>
+                <span class="tab-count" id="tab-count-cancelado">0</span>
+            </div>
+        </div>
+
         <!-- LISTA -->
         <div class="lista-pedidos" id="pedidos-lista">
             <div class="estado-vacio">⏳ Cargando registros desde la nube…</div>
@@ -709,7 +823,7 @@
 <!-- ════════════════════════════════════
      BARRA INFERIOR — ACCIONES RÁPIDAS
 ════════════════════════════════════ -->
-<div style="position:sticky;bottom:0;z-index:200;border-top:1px solid rgba(52,211,153,0.25);padding:12px 24px;display:flex;justify-content:flex-end;">
+<div class="barra-guardar-sticky" style="position:sticky;bottom:0;z-index:200;border-top:1px solid rgba(52,211,153,0.25);padding:12px 24px;display:flex;justify-content:flex-end;">
     <button class="btn" id="btn-guardar-pedidos-bottom"
         style="border-color:#34d399;color:#34d399;background:rgba(52,211,153,0.08);padding:8px 18px;font-weight:600;"
         onclick="guardarPedidosManual()" title="Guardar y sincronizar pedidos en la nube">💾 Guardar en Nube</button>
@@ -833,7 +947,7 @@ function poblarFiltroLinea() {
 ══════════════════════════════════════ */
 function actualizarStats() {
     const snaps      = cargarSnaps();
-    const filtrados  = filtrarSnaps(snaps);
+    const filtrados  = filtrarSnaps(snaps, true); // ignora el filtro de estado: la barra de stats queda fija
     const enCurso    = filtrados.filter(s => ['confirmado','produccion'].includes(s.estado || 'cotizacion')).length;
     const entregados = filtrados.filter(s => (s.estado || '') === 'entregado').length;
     const monto      = filtrados.reduce((acc, s) => acc + (s.monto_total || 0), 0);
@@ -847,13 +961,52 @@ function actualizarStats() {
     document.getElementById('stat-monto').textContent      = _moneda(monto);
     const pendEl = document.getElementById('stat-monto-pend');
     if (pendEl) pendEl.textContent = _moneda(montoPend);
+
+    actualizarConteosTabsEstado(snaps);
+}
+
+/* ══════════════════════════════════════
+   PESTAÑAS DE ESTADO (barra inferior móvil)
+══════════════════════════════════════ */
+function seleccionarTabEstado(estado) {
+    const sel = document.getElementById('filtro-estado');
+    if (sel) sel.value = estado;
+
+    document.querySelectorAll('.tab-estado-mobile').forEach(tab => {
+        tab.classList.toggle('activo', tab.dataset.estado === estado);
+    });
+
+    renderizarPedidos();
+}
+
+function sincronizarTabsConSelect() {
+    const valor = document.getElementById('filtro-estado')?.value || '';
+    document.querySelectorAll('.tab-estado-mobile').forEach(tab => {
+        tab.classList.toggle('activo', tab.dataset.estado === valor);
+    });
+}
+
+function actualizarConteosTabsEstado(snapsYaCargados) {
+    const snaps = snapsYaCargados || cargarSnaps();
+    const conteos = { cotizacion: 0, confirmado: 0, produccion: 0, entregado: 0, cancelado: 0 };
+    snaps.forEach(s => {
+        const est = s.estado || 'cotizacion';
+        if (conteos[est] !== undefined) conteos[est]++;
+    });
+
+    const totalEl = document.getElementById('tab-count-todos');
+    if (totalEl) totalEl.textContent = snaps.length;
+    Object.keys(conteos).forEach(k => {
+        const el = document.getElementById('tab-count-' + k);
+        if (el) el.textContent = conteos[k];
+    });
 }
 
 /* ══════════════════════════════════════
    FILTRAR
 ══════════════════════════════════════ */
-function filtrarSnaps(snaps) {
-    const filtroEstado      = document.getElementById('filtro-estado')?.value      || '';
+function filtrarSnaps(snaps, ignorarEstado) {
+    const filtroEstado      = ignorarEstado ? '' : (document.getElementById('filtro-estado')?.value || '');
     const filtroBusqueda    = (document.getElementById('buscador-pedidos')?.value  || '').toLowerCase().trim();
     const filtroLinea       = document.getElementById('filtro-linea')?.value       || '';
     const filtroPublicacion = document.getElementById('filtro-publicacion')?.value || '';
